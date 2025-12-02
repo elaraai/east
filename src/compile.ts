@@ -1,0 +1,3098 @@
+/**
+ * Copyright (c) 2025 Elara AI Pty Ltd
+ * Dual-licensed under AGPL-3.0 and commercial license. See LICENSE for details.
+ */
+import { Builtins, type BuiltinName } from "./builtins.js";
+import { type IR, type LocationValue, printLocationValue } from "./ir.js";
+import { compareFor, equalFor, greaterEqualFor, greaterFor, isFor, lessEqualFor, lessFor, notEqualFor } from "./comparison.js";
+import { printFor, parseFor } from "./serialization/east.js";
+import { variant, type option } from "./containers/variant.js";
+import { EastError } from "./error.js";
+import { SortedSet } from "./containers/sortedset.js";
+import { SortedMap } from "./containers/sortedmap.js";
+import { BufferWriter } from "./serialization/binary-utils.js";
+import { decodeBeast2For, decodeBeastFor, encodeBeast2For, encodeBeastFor, fromJSONFor, toJSONFor } from "./serialization/index.js";
+import { formatDateTime } from "./datetime_format/print.js";
+import { parseDateTimeFormatted } from "./datetime_format/parse.js";
+import type { DateTimeFormatToken } from "./datetime_format/types.js";
+import { EastTypeValueType, isTypeValueEqual, isSubtypeValue, toEastTypeValue, type EastTypeValue, expandTypeValue, type VariantTypeValue, type StructTypeValue, type DictTypeValue, type SetTypeValue, type ArrayTypeValue, type RefTypeValue } from "./type_of_type.js";
+import type { AnalyzedIR } from "./analyze.js";
+import { ref } from "./containers/ref.js";
+
+export { isTypeValueEqual };
+export const printTypeValue = printFor(EastTypeValueType) as (type: EastTypeValue) => string;
+
+/** @internal Track iteration locks to prevent concurrent modification */
+const iterationLocks = new WeakMap<any, number>();
+
+/** @internal Lock a collection for iteration (prevents size/keyset modifications) */
+const lockForIteration = (obj: any) => {
+  iterationLocks.set(obj, (iterationLocks.get(obj) || 0) + 1);
+};
+
+/** @internal Unlock a collection after iteration */
+const unlockForIteration = (obj: any) => {
+  const count = iterationLocks.get(obj) || 0;
+  if (count > 1) {
+    iterationLocks.set(obj, count - 1);
+  } else {
+    iterationLocks.delete(obj);
+  }
+};
+
+/** @internal An exception throw for the purpose of early function return */
+export class ReturnException {
+  constructor(public value: any) {}
+}
+
+/** @internal An exception throw for the purpose of early loop continue */
+class ContinueException {
+  constructor(public label: string) {}
+}
+
+/** @internal An exception throw for the purpose of early loop break */
+class BreakException {
+  constructor(public label: string) {}
+}
+
+/** Compile `IR` into a JavaScript function using a closure-compiler technique.
+* This should execute faster than a simple tree-walking interpreter, but slower than hand-written Javascript.
+*
+* A "context" of the current variables in scope is given. For toplevel function IR, provide `{}`.
+* A "platform" is provided with JavaScript functions to perform effects, like logging. If no effects are needed, simply provide `{}`.
+*
+* @internal
+*/
+export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeValue>, platform: Record<string, (...args: any[]) => any>, asyncPlatformFns: Set<string>, fresh_ctx: boolean = true, compilingNodes: Set<IR> = new Set()): (ctx: Record<string, any>) => any {
+  // Detect circular IR
+  if (compilingNodes.has(ir)) {
+    throw new Error(
+      `Circular IR reference detected at ${printLocationValue((ir as any).value?.location || { file: "unknown", line: 0, column: 0 })}. `
+    );
+  }
+
+  // Track this node (exception-safe with try-finally)
+  compilingNodes.add(ir);
+  try {
+    return compileNodeInternal(ir, ctx, platform, asyncPlatformFns, fresh_ctx, compilingNodes);
+  } finally {
+    compilingNodes.delete(ir);
+  }
+}
+
+/** Internal helper that does the actual compilation work */
+function compileNodeInternal(ir: AnalyzedIR, ctx: Record<string, EastTypeValue>, platform: Record<string, (...args: any[]) => any>, asyncPlatformFns: Set<string>, fresh_ctx: boolean, compilingNodes: Set<IR> = new Set()): (ctx: Record<string, any>) => any {
+  if (ir.type === "Value") {
+    if (ir.value.type.type !== ir.value.value.type) {
+      throw new Error(`Value node expected value of type .${ir.value.type.type} but got .${ir.value.value.type} at ${printLocationValue(ir.value.location)}`);
+    }
+    const v = ir.value.value.value;
+    return (_ctx: Record<string, any>) => v;
+  } else if (ir.type === "Error") {
+    const message_compiled = compile_internal(ir.value.message, ctx, platform, asyncPlatformFns, false, compilingNodes);
+    const location = ir.value.location;
+    if (ir.value.isAsync) {
+      return async (ctx: Record<string, any>) => { throw new EastError(await message_compiled(ctx), { location: location }); };
+    } else {
+      return (ctx: Record<string, any>) => { throw new EastError(message_compiled(ctx), { location: location }); };
+    }
+  } else if (ir.type === "TryCatch") {
+    const try_body = compile_internal(ir.value.try_body, Object.create(ctx), platform, asyncPlatformFns, true, compilingNodes);
+    const new_ctx = Object.create(ctx);
+    const message_name = ir.value.message.value.name;
+    const stack_name = ir.value.stack.value.name;
+    new_ctx[message_name] = ir.value.message.value.type;
+    new_ctx[stack_name] = ir.value.stack.value.type;
+    const catch_body = compile_internal(ir.value.catch_body, new_ctx, platform, asyncPlatformFns, true, compilingNodes);
+    // Don't include finally unless necessary (Value nodes are effect free)
+    const finally_body = ir.value.finally_body.type === "Value" ? undefined : compile_internal(ir.value.finally_body, Object.create(ctx), platform, asyncPlatformFns, true, compilingNodes);
+
+    if (ir.value.isAsync) {
+      if (finally_body === undefined) {
+        return async (ctx: Record<string, any>) => {
+          try {
+            return await try_body(Object.create(ctx))
+          } catch (e) {
+            if (e instanceof EastError) {
+              const new_ctx = Object.create(ctx);
+              new_ctx[message_name] = e.message;
+              new_ctx[stack_name] = e.location;
+              return await catch_body(new_ctx);
+            } else {
+              throw(e);
+            }
+          }
+        }
+      } else {
+        return async (ctx: Record<string, any>) => {
+          try {
+            return await try_body(Object.create(ctx))
+          } catch (e) {
+            if (e instanceof EastError) {
+              const new_ctx = Object.create(ctx);
+              new_ctx[message_name] = e.message;
+              new_ctx[stack_name] = e.location;
+              return await catch_body(new_ctx);
+            } else {
+              throw(e);
+            }
+          } finally {
+            await finally_body(Object.create(ctx));
+          }
+        }
+      }
+    } else {
+      if (finally_body === undefined) {
+        return (ctx: Record<string, any>) => {
+          try {
+            return try_body(Object.create(ctx))
+          } catch (e) {
+            if (e instanceof EastError) {
+              const new_ctx = Object.create(ctx);
+              new_ctx[message_name] = e.message;
+              new_ctx[stack_name] = e.location;
+              return catch_body(new_ctx);
+            } else {
+              throw(e);
+            }
+          }
+        }
+      } else {
+        return (ctx: Record<string, any>) => {
+          try {
+            return try_body(Object.create(ctx))
+          } catch (e) {
+            if (e instanceof EastError) {
+              const new_ctx = Object.create(ctx);
+              new_ctx[message_name] = e.message;
+              new_ctx[stack_name] = e.location;
+              return catch_body(new_ctx);
+            } else {
+              throw(e);
+            }
+          } finally {
+            finally_body(Object.create(ctx));
+          }
+        }
+      }
+    }
+  } else if (ir.type === "Variable") {
+    const name = ir.value.name;
+    const ctx_type = ctx[name];
+    if (ctx_type === undefined) {
+      throw new Error(`Variable defined at ${printLocationValue(ir.value.location)} is not in scope at ${printLocationValue(ir.value.location)}`)
+    }
+    if (!isTypeValueEqual(ctx_type, ir.value.type)) {
+      throw new Error(`Variable defined at ${printLocationValue(ir.value.location)} has type ${printTypeValue(ctx_type)} but expected ${printTypeValue(ir.value.type)} at ${printLocationValue(ir.value.location)}`)
+    }
+
+    if (ir.value.mutable && ir.value.captured) {
+      return (ctx: Record<string, any>) => ctx[name].x;
+    } else {
+      return (ctx: Record<string, any>) => ctx[name];
+    }
+  } else if (ir.type === "Let") {
+    if (!isSubtypeValue(ir.value.value.value.type, ir.value.variable.value.type)) {
+      throw new Error(`Cannot initialize a variable defined at ${printLocationValue(ir.value.variable.value.location)} of type ${printTypeValue(ir.value.variable.value.type)} to a value of type ${printTypeValue(ir.value.value.value.type)} at ${printLocationValue(ir.value.location)}`)
+    }
+    const compiled_statement = compile_internal(ir.value.value, ctx, platform, asyncPlatformFns, false, compilingNodes);
+    const name = ir.value.variable.value.name;
+    ctx[name] = ir.value.variable.value.type;
+    if (ir.value.variable.value.mutable && ir.value.variable.value.captured) {
+      if (ir.value.isAsync) {
+        return async (ctx: Record<string, any>) => {
+          ctx[name] = { x: await compiled_statement(ctx) };
+          return null;
+        };
+      } else {
+        return (ctx: Record<string, any>) => {
+          ctx[name] = { x: compiled_statement(ctx) };
+          return null;
+        };
+      }
+    } else {
+      if (ir.value.isAsync) {
+        return async (ctx: Record<string, any>) => {
+          ctx[name] = await compiled_statement(ctx);
+          return null;
+        };
+      } else {
+        return (ctx: Record<string, any>) => {
+          ctx[name] = compiled_statement(ctx);
+          return null;
+        };
+      }
+    }
+  } else if (ir.type === "Assign") {
+    const name = ir.value.variable.value.name;
+    if (ctx[name] === undefined) {
+      throw new Error(`Attempting to reassign to a variable defined at ${printLocationValue(ir.value.variable.value.location)} which is not in scope at ${printLocationValue(ir.value.location)} at ${printLocationValue(ir.value.location)}`)
+    }
+    if (!isSubtypeValue(ir.value.value.value.type, ctx[name])) {
+      throw new Error(`Cannot reassign to a variable defined at ${printLocationValue(ir.value.variable.value.location)} of type ${printTypeValue(ir.value.variable.value.type)} to a value of type ${printTypeValue(ir.value.value.value.type)} at ${printLocationValue(ir.value.location)}`);
+    }
+    if (!ir.value.variable.value.mutable) {
+      throw new Error(`Cannot reassign const variable ${name} at ${printLocationValue(ir.value.location)}`);
+    }
+    const compiled_statement = compile_internal(ir.value.value, ctx, platform, asyncPlatformFns, false, compilingNodes);
+    if (ir.value.variable.value.mutable && ir.value.variable.value.captured) {
+      if (ir.value.isAsync) {
+        return async (ctx: Record<string, any>) => {
+          const value = await compiled_statement(ctx);
+          ctx[name].x = value;
+          return null;
+        };
+      } else {
+        return (ctx: Record<string, any>) => {
+          const value = compiled_statement(ctx);
+          ctx[name].x = value;
+          return null;
+        };
+      }
+    } else {
+      if (ir.value.isAsync) {
+        return async (ctx: Record<string, any>) => {
+          const value = await compiled_statement(ctx);
+          // We need to check in which prototype the variable lives
+          while (!Object.hasOwn(ctx, name)) ctx = Object.getPrototypeOf(ctx);
+          ctx[name] = value;
+          return null;
+        };
+      } else {
+        return (ctx: Record<string, any>) => {
+          const value = compiled_statement(ctx);
+          // We need to check in which prototype the variable lives
+          while (!Object.hasOwn(ctx, name)) ctx = Object.getPrototypeOf(ctx);
+          ctx[name] = value;
+          return null;
+        };
+      }
+    }
+  } else if (ir.type === "As") {
+    if (!isSubtypeValue(ir.value.value.value.type, ir.value.type)) {
+      throw new Error(`Cannot cast value of type ${printTypeValue(ir.value.value.value.type)} to type ${printTypeValue(ir.value.type)} at ${printLocationValue(ir.value.location)}`);
+    }
+
+    // in dynamically typed runtimes like Javascript, this is a no-op
+    // (for statically typed runtimes this assists in unifying types in branches)
+    return compile_internal(ir.value.value, ctx, platform, asyncPlatformFns, fresh_ctx, compilingNodes);
+  } else if (ir.type === "UnwrapRecursive") {
+    // TODO there seems to be cases of Wrap / Unwrap that could be optimized away during compilation
+    if (!isTypeValueEqual(ir.value.value.value.type, ir.value.type)) {
+      throw new Error(`Cannot unwrap recursive value of type ${printTypeValue(ir.value.value.value.type)} to type ${printTypeValue(ir.value.type)} at ${printLocationValue(ir.value.location)}`);
+    }
+
+    // in dynamically typed runtimes like Javascript, this is a no-op
+    // (for statically typed runtimes this assists in e.g. typing a reference or pointer)
+    return compile_internal(ir.value.value, ctx, platform, asyncPlatformFns, fresh_ctx, compilingNodes);
+  } else if (ir.type === "WrapRecursive") {
+    // TODO there seems to be cases of Wrap / Unwrap that could be optimized away during compilation
+    if (!isSubtypeValue(ir.value.value.value.type, ir.value.type)) {
+      throw new Error(`Cannot wrap value of type ${printTypeValue(ir.value.value.value.type)} to recursive type ${printTypeValue(ir.value.type)} at ${printLocationValue(ir.value.location)}`);
+    }
+
+    // in dynamically typed runtimes like Javascript, this is a no-op
+    // (for statically typed runtimes this assists in e.g. typing a heap allocation)
+    return compile_internal(ir.value.value, ctx, platform, asyncPlatformFns, false, compilingNodes);
+  } else if (ir.type === "Function") {
+    if (ir.value.type.type !== "Function") {
+      throw new Error(`Expected Function type, got ${printTypeValue(ir.value.type)} at ${printLocationValue(ir.value.location)}`);
+    }
+
+    const ctx2: Record<string, any> = {};
+    for (const variable of ir.value.captures) {
+      const ctx_type = ctx[variable.value.name];
+      if (ctx_type === undefined) {
+        throw new Error(`Captured variable defined at ${printLocationValue(variable.value.location)} is not in scope at ${printLocationValue(ir.value.location)}`)
+      }
+      if (!isTypeValueEqual(ctx_type, variable.value.type)) {
+        throw new Error(`Captured variable defined at ${printLocationValue(variable.value.location)} has type ${printTypeValue(ctx_type)} but expected ${printTypeValue(variable.value.type)} at ${printLocationValue(ir.value.location)}`)
+      }
+
+      ctx2[variable.value.name] = variable.value.type;
+    }
+    for (const parameter of ir.value.parameters) {
+      const parameter_name = parameter.value.name;
+      ctx2[parameter_name] = parameter.value.type;
+    }
+
+    // Function return values are covariant
+    // TODO what is the semantics here in a static language? Should we use `As` here?
+    // Note: this requires unreachability analysis to be correct, since early terminating programs might have a final statement that produces never
+    if (!isSubtypeValue(ir.value.body.value.type, ir.value.type.value.output)) {
+      throw new Error(`Expected Function to return type ${printTypeValue(ir.value.type.value.output)}, got ${printTypeValue(ir.value.body.value.type)} at ${printLocationValue(ir.value.location)}`)
+    }
+
+    const compiled_body = compile_internal(ir.value.body, ctx2, platform, asyncPlatformFns, true, compilingNodes);
+    const bodyIsAsync = ir.value.type.value.platforms.some(p => asyncPlatformFns.has(p));
+
+    const capture_names = ir.value.captures.map(v => v.value.name);
+    const parameter_names = ir.value.parameters.map(v => v.value.name)
+    return (ctx: Record<string, any>) => {
+      const ctx2: Record<string, any> = {};
+      for (const name of capture_names) {
+        ctx2[name] = ctx[name];
+      }
+
+      // If body is async, create an async function that awaits internally
+      if (bodyIsAsync) {
+        return async (...args: any) => {
+          const ctx3 = { ...ctx2 };
+          parameter_names.forEach((name, i) => ctx3[name] = args[i]);
+          return await compiled_body(ctx3);
+        }
+      } else {
+        return (...args: any) => {
+          const ctx3 = { ...ctx2 };
+          parameter_names.forEach((name, i) => ctx3[name] = args[i]);
+          return compiled_body(ctx3);
+        }
+      }
+    }
+  } else if (ir.type === "Call") {
+    if (ir.value.function.value.type.type !== "Function") {
+      throw new Error(`Call expected Function, got ${printTypeValue(ir.value.function.value.type)} at ${printLocationValue(ir.value.location)}`)
+    }
+    if (ir.value.function.value.type.value.inputs.length !== ir.value.arguments.length) {
+      throw new Error(`Function expected ${ir.value.function.value.type.value.inputs.length} arguments, got ${ir.value.arguments.length} at ${printLocationValue(ir.value.location)}`)
+    }
+    for (const [i, t] of ir.value.function.value.type.value.inputs.entries()) {
+      // TODO what is the semantics here in a static language? Should we use `As` here?
+      if (!isSubtypeValue(t, ir.value.arguments[i]!.value.type)) {
+        throw new Error(`Function expected argument ${i+1} of type ${printTypeValue(t)}, got ${printTypeValue(ir.value.arguments[i]!.value.type)} at ${printLocationValue(ir.value.location)}`)
+      }
+    }
+
+    const compiled_f = compile_internal(ir.value.function, ctx, platform, asyncPlatformFns, false, compilingNodes);
+    const compiled_args = ir.value.arguments.map(argument => compile_internal(argument, ctx, platform, asyncPlatformFns, false, compilingNodes));
+    const location = ir.value.location;
+    if (ir.value.function.value.type.value.isAsync) {
+      return async (ctx: Record<string, any>) => {
+        try {
+          const args: any[] = [];
+          for (const compiled_arg of compiled_args) {
+            args.push(await compiled_arg(ctx));
+          }
+          return (await compiled_f(ctx))(...args);
+        } catch (e: unknown) {
+          if (e instanceof ReturnException) {
+            return e.value;
+          } else if (e instanceof EastError) {
+            e.location.push(location); // The fact that we need to push the call location not the definition location means we need to handle this here
+            throw(e);
+          } else if (e instanceof ContinueException) {
+            throw new Error(`continue failed to find label ${e.label} at ${printLocationValue(ir.value.location)}`)
+          } else if (e instanceof BreakException) {
+            throw new Error(`break failed to find label ${e.label} at ${printLocationValue(ir.value.location)}`)
+          } else {
+            throw(e);
+          }
+        }
+      };
+    } else {
+      return (ctx: Record<string, any>) => {
+        try {
+          return compiled_f(ctx)(...compiled_args.map(arg => arg(ctx)));
+        } catch (e: unknown) {
+          if (e instanceof ReturnException) {
+            return e.value;
+          } else if (e instanceof EastError) {
+            e.location.push(location); // The fact that we need to push the call location not the definition location means we need to handle this here
+            throw(e);
+          } else if (e instanceof ContinueException) {
+            throw new Error(`continue failed to find label ${e.label} at ${printLocationValue(ir.value.location)}`)
+          } else if (e instanceof BreakException) {
+            throw new Error(`break failed to find label ${e.label} at ${printLocationValue(ir.value.location)}`)
+          } else {
+            throw(e);
+          }
+        }
+      }
+    }
+  } else if (ir.type === "IfElse") {
+    const ifs: {
+      predicate: (ctx: any) => boolean,
+      body: (ctx: any) => any
+    }[] = [];
+    for (const { predicate, body } of ir.value.ifs) {
+      ifs.push({
+        predicate: compile_internal(predicate, ctx, platform, asyncPlatformFns, false, compilingNodes),
+        body: compile_internal(body, Object.create(ctx), platform, asyncPlatformFns, true, compilingNodes),
+      });
+    }
+    const else_body = compile_internal(ir.value.else_body, Object.create(ctx), platform, asyncPlatformFns, true, compilingNodes);
+
+    if (ir.value.isAsync) {
+      return async (ctx: Record<string, any>) => {
+        for (const { predicate, body } of ifs) {
+          if (await predicate(ctx)) {
+            return body(Object.create(ctx));
+          }
+        }
+        return else_body(Object.create(ctx));
+      };
+    } else {
+        return (ctx: Record<string, any>) => {
+        for (const { predicate, body } of ifs) {
+          if (predicate(ctx)) {
+            return body(Object.create(ctx));
+          }
+        }
+        return else_body(Object.create(ctx));
+      };
+    }
+  } else if (ir.type === "Match") {
+    const compiled_variant = compile_internal(ir.value.variant, ctx, platform, asyncPlatformFns, false, compilingNodes);
+    const compiled_cases: Record<string, (ctx: Record<string, any>) => any> = {};
+    const data_names: Record<string, string> = {};
+
+    for (const { case: k, variable, body } of ir.value.cases) {
+      const ctx2 = Object.create(ctx);
+      const data_name = variable.value.name;
+      data_names[k] = data_name;
+      ctx2[data_name] = variable.value.type;
+      compiled_cases[k] = compile_internal(body, ctx2, platform, asyncPlatformFns, true, compilingNodes);
+    }
+
+    if (ir.value.isAsync) {
+      return async (ctx: Record<string, any>) => {
+        const v: variant = await compiled_variant(ctx);
+        const ctx2 = Object.create(ctx);
+        ctx2[data_names[v.type]!] = v.value;
+        return compiled_cases[v.type]!(ctx2);
+      };
+    } else {
+      return (ctx: Record<string, any>) => {
+        const v: variant = compiled_variant(ctx);
+        const ctx2 = Object.create(ctx);
+        ctx2[data_names[v.type]!] = v.value;
+        return compiled_cases[v.type]!(ctx2);
+      };
+    }
+  } else if (ir.type === "While") {
+    const compiled_predicate = compile_internal(ir.value.predicate, ctx, platform, asyncPlatformFns, false, compilingNodes);
+    const ctx2 = Object.create(ctx);
+    const compiled_body = compile_internal(ir.value.body, ctx2, platform, asyncPlatformFns, true, compilingNodes);
+    const label = ir.value.label.name;
+
+    if (ir.value.isAsync) {
+      return async (ctx: Record<string, any>) => {
+        while (await compiled_predicate(ctx)) {
+          try {
+            const ctx2 = Object.create(ctx);
+            await compiled_body(ctx2);
+          } catch (e: unknown) {
+            if (e instanceof ContinueException && e.label === label) {
+              continue;
+            } else if (e instanceof BreakException && e.label === label) {
+              break;
+            } else {
+              throw e;
+            }
+          }
+        }
+        return null;
+      };
+    } else {
+      return (ctx: Record<string, any>) => {
+        while (compiled_predicate(ctx)) {
+          try {
+            const ctx2 = Object.create(ctx);
+            compiled_body(ctx2);
+          } catch (e: unknown) {
+            if (e instanceof ContinueException && e.label === label) {
+              continue;
+            } else if (e instanceof BreakException && e.label === label) {
+              break;
+            } else {
+              throw e;
+            }
+          }
+        }
+        return null;
+      };
+    }
+  } else if (ir.type === "ForArray") {
+    const value_type = (expandTypeValue(ir.value.array.value.type) as ArrayTypeValue).value;
+    const compiled_array = compile_internal(ir.value.array, ctx, platform, asyncPlatformFns, false, compilingNodes);
+    const ctx2 = Object.create(ctx);
+    const key_name = ir.value.key.value.name;
+    const value_name = ir.value.value.value.name;
+    ctx2[key_name] = variant("Integer", null);
+    ctx2[value_name] = value_type;
+    const compiled_body = compile_internal(ir.value.body, ctx2, platform, asyncPlatformFns, true, compilingNodes);
+    const label = ir.value.label.name;
+
+    if (ir.value.isAsync) {
+      return async (ctx: Record<string, any>) => {
+        const array = await compiled_array(ctx);
+        lockForIteration(array);
+        try {
+          for (const [key, value] of array.entries()) {
+            const ctx2 = Object.create(ctx);
+            ctx2[key_name] = BigInt(key);
+            ctx2[value_name] = value;
+            try {
+              await compiled_body(ctx2);
+            } catch (e: unknown) {
+              if (e instanceof ContinueException && e.label === label) {
+                continue;
+              } else if (e instanceof BreakException && e.label === label) {
+                break;
+              } else {
+                throw e;
+              }
+            }
+          }
+          return null;
+        } finally {
+          unlockForIteration(array);
+        }
+      };
+    } else {
+        return (ctx: Record<string, any>) => {
+        const array = compiled_array(ctx);
+        lockForIteration(array);
+        try {
+          for (const [key, value] of array.entries()) {
+            const ctx2 = Object.create(ctx);
+            ctx2[key_name] = BigInt(key);
+            ctx2[value_name] = value;
+            try {
+              compiled_body(ctx2);
+            } catch (e: unknown) {
+              if (e instanceof ContinueException && e.label === label) {
+                continue;
+              } else if (e instanceof BreakException && e.label === label) {
+                break;
+              } else {
+                throw e;
+              }
+            }
+          }
+          return null;
+        } finally {
+          unlockForIteration(array);
+        }
+      };
+    }
+  } else if (ir.type === "ForSet") {
+    const key_type = (expandTypeValue(ir.value.set.value.type) as SetTypeValue).value;
+    const compiled_set = compile_internal(ir.value.set, ctx, platform, asyncPlatformFns, false, compilingNodes);
+    const ctx2 = Object.create(ctx);
+    const key_name = ir.value.key.value.name;
+    ctx2[key_name] = key_type;
+    const compiled_body = compile_internal(ir.value.body, ctx2, platform, asyncPlatformFns, true, compilingNodes);
+    const label = ir.value.label.name;
+
+    if (ir.value.isAsync) {
+      return async (ctx: Record<string, any>) => {
+        const set = await compiled_set(ctx);
+        lockForIteration(set);
+        try {
+          for (const key of set) {
+            const ctx2 = Object.create(ctx);
+            ctx2[key_name] = key;
+            try {
+              await compiled_body(ctx2);
+            } catch (e: unknown) {
+              if (e instanceof ContinueException && e.label === label) {
+                continue;
+              } else if (e instanceof BreakException && e.label === label) {
+                break;
+              } else {
+                throw e;
+              }
+            }
+          }
+          return null;
+        } finally {
+          unlockForIteration(set);
+        }
+      };
+    } else {
+        return (ctx: Record<string, any>) => {
+        const set = compiled_set(ctx);
+        lockForIteration(set);
+        try {
+          for (const key of set) {
+            const ctx2 = Object.create(ctx);
+            ctx2[key_name] = key;
+            try {
+              compiled_body(ctx2);
+            } catch (e: unknown) {
+              if (e instanceof ContinueException && e.label === label) {
+                continue;
+              } else if (e instanceof BreakException && e.label === label) {
+                break;
+              } else {
+                throw e;
+              }
+            }
+          }
+          return null;
+        } finally {
+          unlockForIteration(set);
+        }
+      };
+    }
+  } else if (ir.type === "ForDict") {
+    const key_type = (expandTypeValue(ir.value.dict.value.type) as DictTypeValue).value.key;
+    const value_type = (expandTypeValue(ir.value.dict.value.type) as DictTypeValue).value.value;
+    const compiled_dict = compile_internal(ir.value.dict, ctx, platform, asyncPlatformFns, false, compilingNodes);
+    const ctx2 = Object.create(ctx);
+    const key_name = ir.value.key.value.name;
+    const value_name = ir.value.value.value.name;
+    ctx2[key_name] = key_type;
+    ctx2[value_name] = value_type;
+    const compiled_body = compile_internal(ir.value.body, ctx2, platform, asyncPlatformFns, true, compilingNodes);
+    const label = ir.value.label.name;
+
+    if (ir.value.isAsync) {
+      return async (ctx: Record<string, any>) => {
+        const dict = await compiled_dict(ctx);
+        lockForIteration(dict);
+        try {
+          for (const [key, value] of dict) {
+            const ctx2 = Object.create(ctx);
+            ctx2[key_name] = key;
+            ctx2[value_name] = value;
+            try {
+              await compiled_body(ctx2);
+            } catch (e: unknown) {
+              if (e instanceof ContinueException && e.label === label) {
+                continue;
+              } else if (e instanceof BreakException && e.label === label) {
+                break;
+              } else {
+                throw e;
+              }
+            }
+          }
+          return null;
+        } finally {
+          unlockForIteration(dict);
+        }
+      };
+    } else {
+        return (ctx: Record<string, any>) => {
+        const dict = compiled_dict(ctx);
+        lockForIteration(dict);
+        try {
+          for (const [key, value] of dict) {
+            const ctx2 = Object.create(ctx);
+            ctx2[key_name] = key;
+            ctx2[value_name] = value;
+            try {
+              compiled_body(ctx2);
+            } catch (e: unknown) {
+              if (e instanceof ContinueException && e.label === label) {
+                continue;
+              } else if (e instanceof BreakException && e.label === label) {
+                break;
+              } else {
+                throw e;
+              }
+            }
+          }
+          return null;
+        } finally {
+          unlockForIteration(dict);
+        }
+      };
+    }
+  } else if (ir.type === "Block") {
+    // The pattern of creating a new context (e.g. a function) and then immediately invoking a block (e.g. as the function body) is very common.
+    // Here we avoid creating a second context when possible, as an optimization.
+    if (fresh_ctx) {
+      let last_type: EastTypeValue = variant("Null", null);
+      const compiled_statements: ((ctx: Record<string, any>) => any)[] = [];
+      for (const statement of ir.value.statements) {
+        const compiled_statement = compile_internal(statement, ctx, platform, asyncPlatformFns, true, compilingNodes);
+        compiled_statements.push(compiled_statement);
+        last_type = statement.value.type;
+      }
+      if (!isSubtypeValue(last_type, ir.value.type)) {
+        throw new Error(`Block evaluates to type ${printTypeValue(last_type)} but expected ${printTypeValue(ir.value.type)} at ${printLocationValue(ir.value.location)}`)
+      }
+      if (ir.value.isAsync) {
+        return async (ctx: Record<string, any>) => {
+          let ret = null;
+          for (const statement of compiled_statements) {
+            ret = await statement(ctx);
+          }
+          return ret;
+        };
+      } else {
+        return (ctx: Record<string, any>) => {
+          let ret = null;
+          for (const statement of compiled_statements) {
+            ret = statement(ctx);
+          }
+          return ret;
+        };
+      }
+    } else {
+      const ctx2 = Object.create(ctx);
+      let last_type: EastTypeValue = variant("Null", null);
+      const compiled_statements: ((ctx: Record<string, any>) => any)[] = [];
+      for (const statement of ir.value.statements) {
+        const compiled_statement = compile_internal(statement, ctx2, platform, asyncPlatformFns, true, compilingNodes);
+        compiled_statements.push(compiled_statement);
+        last_type = statement.value.type;
+      }
+      if (!isSubtypeValue(last_type, ir.value.type)) {
+        throw new Error(`Block evaluates to type ${printTypeValue(last_type)} but expected ${printTypeValue(ir.value.type)} at ${printLocationValue(ir.value.location)}`)
+      }
+      if (ir.value.isAsync) {
+        return async (ctx: Record<string, any>) => {
+          const ctx2 = Object.create(ctx);
+          let ret = null;
+          for (const statement of compiled_statements) {
+            ret = await statement(ctx2);
+          }
+          return ret;
+        };
+      } else {
+          return (ctx: Record<string, any>) => {
+          const ctx2 = Object.create(ctx);
+          let ret = null;
+          for (const statement of compiled_statements) {
+            ret = statement(ctx2);
+          }
+          return ret;
+        }
+      }
+    }
+  } else if (ir.type === "GetField") {
+    if (ir.value.struct.value.type.type !== "Struct") {
+      throw new Error(`GetField expected Struct, got ${printTypeValue(ir.value.struct.value.type)} at ${printLocationValue(ir.value.location)}`);
+    }
+    const struct_field = (expandTypeValue(ir.value.struct.value.type) as StructTypeValue).value.find(f => f.name === ir.value.field);
+    if (!struct_field) {
+      throw new Error(`GetField field ${ir.value.field} not found in struct ${printTypeValue(ir.value.struct.value.type)} at ${printLocationValue(ir.value.location)}`);
+    }
+    if (!isTypeValueEqual(struct_field.type, ir.value.type)) {
+      throw new Error(`GetField expected to have type ${printTypeValue(ir.value.type)}, got ${printTypeValue(struct_field.type)} at ${printLocationValue(ir.value.location)}`);
+    }
+
+    const struct = compile_internal(ir.value.struct, ctx, platform, asyncPlatformFns, false, compilingNodes);
+    const field = ir.value.field;
+    if (ir.value.isAsync) {
+      return async (ctx: Record<string, any>) => (await struct(ctx))[field];
+    } else {
+      return (ctx: Record<string, any>) => struct(ctx)[field];
+    }
+  } else if (ir.type === "Struct") {
+    if (ir.value.type.type !== "Struct") {
+      throw new Error(`Expected Struct output type, got ${printTypeValue(ir.value.type)} at ${printLocationValue(ir.value.location)}`);
+    }
+
+    const fields = ir.value.fields.map((f, i) => {
+      const struct_field = (expandTypeValue(ir.value.type) as StructTypeValue).value[i];
+      if (!struct_field || struct_field.name !== f.name) {
+        throw new Error(`Struct field ${f.name} not found at position ${i} in struct type ${printTypeValue(ir.value.type)} at ${printLocationValue(ir.value.location)}`);
+      }
+      if (!isSubtypeValue(f.value.value.type, struct_field.type)) {
+        throw new Error(`Struct field ${f.name} expected to have type ${printTypeValue(struct_field.type)}, got ${printTypeValue(f.value.value.type)} at ${printLocationValue(ir.value.location)}`);
+      }
+
+      return compile_internal(f.value, ctx, platform, asyncPlatformFns, false, compilingNodes);
+    });
+    const keys = ir.value.fields.map(f => f.name);
+    if (ir.value.isAsync) {
+      return async (ctx: Record<string, any>) => {
+        const fs: [string, any][] = [];
+        for (const [i, a] of fields.entries()) {
+          fs.push([keys[i]!, await a(ctx)]);
+        }
+        return Object.fromEntries(fs);
+      };
+    } else {
+      return (ctx: Record<string, any>) => Object.fromEntries(fields.map((a, i) => [keys[i]!, a(ctx)]));
+    }
+  } else if (ir.type === "Variant") {
+    if (ir.value.type.type !== "Variant") {
+      throw new Error(`Expected Variant output type, got ${printTypeValue(ir.value.type)} at ${printLocationValue(ir.value.location)}`);
+    }
+
+    const k = ir.value.case;
+    const variant_case = (expandTypeValue(ir.value.type) as VariantTypeValue).value.find(c => c.name === k);
+    if (!variant_case) {
+      throw new Error(`Variant case ${k} not found in variant type ${printTypeValue(ir.value.type)} at ${printLocationValue(ir.value.location)}`);
+    }
+    if (!isSubtypeValue(ir.value.value.value.type, variant_case.type)) {
+      throw new Error(`Variant case ${k} expected to have type ${printTypeValue(variant_case.type)}, got ${printTypeValue(ir.value.value.value.type)} at ${printLocationValue(ir.value.location)}`);
+    }
+
+    const v = compile_internal(ir.value.value, ctx, platform, asyncPlatformFns, false, compilingNodes);
+    if (ir.value.isAsync) {
+      return async (ctx: Record<string, any>) => variant(k, await v(ctx));
+    } else {
+      return (ctx: Record<string, any>) => variant(k, v(ctx));
+    }
+  } else if (ir.type === "NewRef") {
+    if (ir.value.type.type !== "Ref") {
+      throw new Error(`Expected Ref output type, got ${printTypeValue(ir.value.type)} at ${printLocationValue(ir.value.location)}`);
+    }
+    
+    if (!isSubtypeValue(ir.value.value.value.type, (expandTypeValue(ir.value.type) as RefTypeValue).value)) {
+      throw new Error(`NewRef value expected to have type ${printTypeValue(ir.value.type.value)}, got ${printTypeValue(ir.value.value.value.type)} at ${printLocationValue(ir.value.location)}`);
+    }
+    const value = compile_internal(ir.value.value, ctx, platform, asyncPlatformFns, false, compilingNodes);
+    if (ir.value.isAsync) {
+      return async (ctx: Record<string, any>) => ref(await value(ctx));
+    } else {
+      return (ctx: Record<string, any>) => ref(value(ctx));
+    }
+  } else if (ir.type === "NewArray") {
+    if (ir.value.type.type !== "Array") {
+      throw new Error(`Expected Array output type, got ${printTypeValue(ir.value.type)} at ${printLocationValue(ir.value.location)}`);
+    }
+    
+    const values = ir.value.values.map(a => {
+      if (!isSubtypeValue(a.value.type, (expandTypeValue(ir.value.type) as ArrayTypeValue).value)) {
+        throw new Error(`NewArray element expected to have type ${printTypeValue(ir.value.type.value)}, got ${printTypeValue(a.value.type)} at ${printLocationValue(ir.value.location)}`);
+      }
+      return compile_internal(a, ctx, platform, asyncPlatformFns, false, compilingNodes)
+    });
+    if (ir.value.isAsync) {
+      return async (ctx: Record<string, any>) => {
+        let vals: any[] = [];
+        for (const a of values) {
+          vals.push(await a(ctx));
+        }
+        return vals;
+      }
+    } else {
+      return (ctx: Record<string, any>) => values.map(a => a(ctx));
+    }
+  } else if (ir.type === "NewSet") {
+    if (ir.value.type.type !== "Set") {
+      throw new Error(`Expected Set output type, got ${printTypeValue(ir.value.type)} at ${printLocationValue(ir.value.location)}`);
+    }
+
+    const values = ir.value.values.map(a => {
+      if (!isSubtypeValue(a.value.type, (expandTypeValue(ir.value.type) as SetTypeValue).value)) {
+        throw new Error(`NewSet element expected to have type ${printTypeValue(ir.value.type.value)}, got ${printTypeValue(a.value.type)} at ${printLocationValue(ir.value.location)}`);
+      }
+      return compile_internal(a, ctx, platform, asyncPlatformFns, false, compilingNodes)
+    });
+    const keyComparer = compareFor(ir.value.type.value);
+    if (ir.value.isAsync) {
+      return (ctx: Record<string, any>) => {
+        const keys: any[] = [];
+        for (const a of values) {
+          keys.push(a(ctx));
+        }
+        return new SortedSet(keys, keyComparer);
+      }
+    } else {
+      return (ctx: Record<string, any>) => new SortedSet(values.map(a => a(ctx)), keyComparer);
+    }
+  } else if (ir.type === "NewDict") {
+    if (ir.value.type.type !== "Dict") {
+      throw new Error(`Expected Dict output type, got ${printTypeValue(ir.value.type)} at ${printLocationValue(ir.value.location)}`);
+    }
+
+    const values = ir.value.values.map(({key, value}) => {
+      if (!isSubtypeValue(key.value.type, (expandTypeValue(ir.value.type) as DictTypeValue).value.key)) {
+        throw new Error(`NewDict key expected to have type ${printTypeValue(ir.value.type.value.key)}, got ${printTypeValue(key.value.type)} at ${printLocationValue(ir.value.location)}`);
+      }
+      if (!isSubtypeValue(value.value.type, (expandTypeValue(ir.value.type) as DictTypeValue).value.value)) {
+        throw new Error(`NewDict value expected to have type ${printTypeValue(ir.value.type.value.value)}, got ${printTypeValue(value.value.type)} at ${printLocationValue(ir.value.location)}`);
+      }
+      return [compile_internal(key, ctx, platform, asyncPlatformFns, false, compilingNodes), compile_internal(value, ctx, platform, asyncPlatformFns, false, compilingNodes)] as const;
+    });
+    const keyComparer = compareFor(ir.value.type.value.key);
+    if (ir.value.isAsync) {
+      return async (ctx: Record<string, any>) => {
+        const entries: [any, any][] = [];
+        for (const [k, v] of values) {
+          entries.push([await k(ctx), await v(ctx)]);
+        }
+        return new SortedMap(entries, keyComparer);
+      }
+    } else {
+      return (ctx: Record<string, any>) => new SortedMap(values.map(([k, v]) => [k(ctx), v(ctx)]), keyComparer);
+    }
+  } else if (ir.type === "Return") {
+    if (ir.value.type.type !== "Never") {
+      throw new Error(`Return must have Never type, got ${printTypeValue(ir.value.type)} at ${printLocationValue(ir.value.location)}`);
+    }
+    // TODO pipe through return type context so we can check it here
+    const compiled_value = compile_internal(ir.value.value, ctx, platform, asyncPlatformFns, false, compilingNodes);
+    if (ir.value.isAsync) {
+      return async (ctx: Record<string, any>) => {
+        throw new ReturnException(await compiled_value(ctx));
+      };
+    } else {
+      return (ctx: Record<string, any>): any => {
+        throw new ReturnException(compiled_value(ctx));
+      };
+    }
+  } else if (ir.type === "Continue") {
+    if (ir.value.type.type !== "Never") {
+      throw new Error(`Continue must have Never type, got ${printTypeValue(ir.value.type)} at ${printLocationValue(ir.value.location)}`);
+    }
+    const label = ir.value.label;
+    // TODO pipe through local label context so we can check it here
+    return (_ctx: Record<string, any>): any => {
+      throw new ContinueException(label.name);
+    };
+  } else if (ir.type === "Break") {
+    if (ir.value.type.type !== "Never") {
+      throw new Error(`Break must have Never type, got ${printTypeValue(ir.value.type)} at ${printLocationValue(ir.value.location)}`);
+    }
+    const label = ir.value.label;
+    // TODO pipe through local label context so we can check it here
+    return (_ctx: Record<string, any>): any => {
+      throw new BreakException(label.name);
+    };
+  } else if (ir.type === "Builtin") {
+    // TODO - I haven't dealt with builtins implementations yet
+
+    // check types match
+    let b = Builtins[ir.value.builtin];
+    if (b === undefined) {
+      throw new Error(`Builtin ${JSON.stringify(ir.value.builtin)} not found at ${printLocationValue(ir.value.location)}`);
+    }
+    if (b.type_parameters.length !== ir.value.type_parameters.length) {
+      throw new Error(`Builtin ${JSON.stringify(ir.value.builtin)} expected ${b.type_parameters.length} type parameters, got ${ir.value.type_parameters.length} type parameters at ${printLocationValue(ir.value.location)}`)
+    }
+    if (b.inputs.length !== ir.value.arguments.length) {
+      throw new Error(`Builtin ${JSON.stringify(ir.value.builtin)} expected ${b.inputs.length} arguments, got ${ir.value.arguments.length} arguments at ${printLocationValue(ir.value.location)}`)
+    }
+    const type_params = new Map<string, EastTypeValue>(b.type_parameters.map((T: string, i: number) => [T, ir.value.type_parameters[i]!] as const));
+    let argsAsync = false;
+    const args = ir.value.arguments.map((a, _i) => {
+      // TODO these checks seem to fail for some builtins - particularly comparisons with recursive types
+      // The issue appears to be that the type parameters in ir.value.type_parameters have been expanded too much
+      // The Expr machinery and UnionType are possibly places to investigate why the identity of types is getting lost (or else we might need a more structural, not identity-based, approach to toEastTypeValue)
+      
+      // The failures here do not cause faults, but it might make life harder for a static compiler
+
+      // const builtin_arg_type = b.inputs[i]!;
+      // const expected_type = applyTypeParameters(toEastTypeValue(builtin_arg_type), type_params);
+      // TODO what is the semantics here in a static language? Should we use `As` here?
+      // if (!isSubtypeValue(a.value.type, expected_type)) {
+      //   throw new Error(`Argument ${i+1} to builtin ${JSON.stringify(ir.value.builtin)} with type parameters [${ir.value.type_parameters.map(t => printTypeValue(t)).join(", ")}] expected to have type ${printTypeValue(expected_type)}, got ${printTypeValue(a.value.type)} at ${printLocationValue(a.value.location)}`)
+      // }
+
+      if (a.value.isAsync) {
+        argsAsync = true;
+      }
+
+      return compile_internal(a, ctx, platform, asyncPlatformFns, false, compilingNodes)
+    });
+
+    const expected_output_type = applyTypeParameters(typeof b.output === "string" ? b.output : toEastTypeValue(b.output), type_params);
+    // TODO what is the semantics here in a static language? Should we use `As` here? What about variance?
+    if (!isTypeValueEqual(ir.value.type, expected_output_type)) {
+      throw new Error(`Builtin ${JSON.stringify(ir.value.builtin)} output type expected to have type ${printTypeValue(expected_output_type)}, got ${printTypeValue(ir.value.type)} at ${printLocationValue(ir.value.location)}`);
+    }
+
+    // Special optimization for regex builtins with literal pattern/flags
+    if ((ir.value.builtin === "RegexContains" || ir.value.builtin === "RegexIndexOf" || ir.value.builtin === "RegexReplace") &&
+    ir.value.arguments[1]?.type === "Value" &&
+    ir.value.arguments[2]?.type === "Value") {
+      if (ir.value.arguments[1].value.value.type !== "String") {
+        throw new Error(`Regex builtin pattern argument must be String literal at ${printLocationValue(ir.value.arguments[1].value.location)}`);
+      }
+      if (ir.value.arguments[2].value.value.type !== "String") {
+        throw new Error(`Regex builtin flags argument must be String literal at ${printLocationValue(ir.value.arguments[2].value.location)}`);
+      }
+
+      // Compile regex once at closure compilation time
+      const pattern = ir.value.arguments[1].value.value.value as string;
+      const flags = ir.value.arguments[2].value.value.value as string;
+      const textArg = args[0]!; // Already compiled text argument
+
+      if (ir.value.builtin === "RegexContains") {
+        const compiledRegex = new RegExp(pattern, flags);
+        return (ctx: Record<string, any>) => compiledRegex.test(textArg(ctx));
+      } else if (ir.value.builtin === "RegexIndexOf") {
+        const compiledRegex = new RegExp(pattern, flags);
+        return (ctx: Record<string, any>) => {
+          const text = textArg(ctx);
+          const codeUnitIndex = text.search(compiledRegex);
+          if (codeUnitIndex === -1) return -1n;
+
+          // Convert code unit index to codepoint index
+          let codepointIndex = 0;
+          let codeUnitPos = 0;
+          for (const char of text) {
+            if (codeUnitPos === codeUnitIndex) {
+              return BigInt(codepointIndex);
+            }
+            codeUnitPos += char.length;
+            codepointIndex++;
+          }
+          return -1n;
+        };
+      } else { // RegexReplace
+        // Precompile regex with global flag for replaceAll semantics
+        const globalFlags = flags.includes('g') ? flags : flags + 'g';
+        const compiledRegex = new RegExp(pattern, globalFlags);
+
+        // Check if replacement is also constant for full optimization
+        if (ir.value.arguments[3]?.type === "Value") {
+          if (ir.value.arguments[3].value.value.type !== "String") {
+            throw new Error(`RegexReplace builtin replacement argument must be String literal at ${printLocationValue(ir.value.arguments[3].value.location)}`);
+          }
+
+          // FULL OPTIMIZATION: Pattern, flags, and replacement are all constant
+          const replacement = ir.value.arguments[3].value.value.value as string;
+
+          // Validate replacement string: only allow $$, $1-$9, and $<
+          // This is stricter than JavaScript's native behavior but provides clear, consistent semantics
+          // and avoids backend-specific features like $&, $`, $'
+          let i = 0;
+          while (i < replacement.length) {
+            const char = replacement[i]!;
+            if (char === '$') {
+              i += char.length;
+              let char2 = replacement[i];
+              if (char2 === undefined) {
+                return (_ctx: Record<string, any>) => { throw new EastError(`invalid regex replacement string: unescaped $ at end of string`, { location: ir.value.arguments[3].value.location }) };
+              } else if (char2 === '$') {
+                i += 1;
+              } else if (char2 >= '1' && char2 <= '9') {
+                i += 1;
+                char2 = replacement[i];
+                while (char2 !== undefined && char2 >= '0' && char2 <= '9') {
+                  i += 1;
+                  char2 = replacement[i];
+                }
+              } else if (char2 === '<') {
+                // Scan until closing >
+                i += 1;
+                const init_i = i;
+                char2 = replacement[i];
+                while (true) {
+                  if (char2 === undefined) {
+                    return (_ctx: Record<string, any>) => { throw new EastError(`invalid regex replacement string: unterminated group name in $<...>`, { location: ir.value.arguments[3].value.location }) };
+                  }
+                  if (char2 === '>') {
+                    break;
+                  }
+                  if (!((char2 >= '0' && char2 <= '9') || (char2 >= 'a' && char2 <= 'z') || (char2 >= 'A' && char2 <= 'Z') || char2 === '_')) {
+                    return (_ctx: Record<string, any>) => { throw new EastError(`invalid regex replacement string: invalid character ${JSON.stringify(char2)} in group name in $<...>`, { location: ir.value.arguments[3].value.location }) };
+                  }
+                  i += 1;
+                  char2 = replacement[i];
+                }
+                if (i === init_i) {
+                  return (_ctx: Record<string, any>) => { throw new EastError(`invalid regex replacement string: empty group name in $<>`, { location: ir.value.arguments[3].value.location }) };
+                }
+                i += 1; // for closing >
+              } else {
+                return (_ctx: Record<string, any>) => { throw new EastError(`invalid regex replacement string: unescaped $ at $${char2}`, { location: ir.value.arguments[3].value.location }) };
+              }
+            } else {
+              i += char.length;
+            }
+          }
+
+          return (ctx: Record<string, any>) => {
+            const text = textArg(ctx);
+            return text.replaceAll(compiledRegex, replacement);
+          };
+        } else {
+          // PARTIAL OPTIMIZATION: Pattern and flags constant, replacement dynamic
+          const replacementArg = args[3]!;
+          return (ctx: Record<string, any>) => {
+            const text = textArg(ctx);
+            const replacement = replacementArg(ctx);
+
+            // Validate replacement string: only allow $$, $1-$9, and $<
+            // This is stricter than JavaScript's native behavior but provides clear, consistent semantics
+            // and avoids backend-specific features like $&, $`, $'
+            let i = 0;
+            while (i < replacement.length) {
+              const char = replacement[i]!;
+              if (char === '$') {
+                i += char.length;
+                let char2 = replacement[i];
+                if (char2 === undefined) {
+                  throw new EastError(`invalid regex replacement string: unescaped $ at end of string`, { location: ir.value.arguments[3].value.location });
+                } else if (char2 === '$') {
+                  i += 1;
+                } else if (char2 >= '1' && char2 <= '9') {
+                  i += 1;
+                  char2 = replacement[i];
+                  while (char2 !== undefined && char2 >= '0' && char2 <= '9') {
+                    i += 1;
+                    char2 = replacement[i];
+                  }
+                } else if (char2 === '<') {
+                  // Scan until closing >
+                  i += 1;
+                  const init_i = i;
+                  char2 = replacement[i];
+                  while (true) {
+                    if (char2 === undefined) {
+                      throw new EastError(`invalid regex replacement string: unterminated group name in $<...>`, { location: ir.value.arguments[3].value.location });
+                    }
+                    if (char2 === '>') {
+                      break;
+                    }
+                    if (!((char2 >= '0' && char2 <= '9') || (char2 >= 'a' && char2 <= 'z') || (char2 >= 'A' && char2 <= 'Z') || char2 === '_')) {
+                      throw new EastError(`invalid regex replacement string: invalid character ${JSON.stringify(char2)} in group name in $<...>`, { location: ir.value.arguments[3].value.location });
+                    }
+                    i += 1;
+                    char2 = replacement[i];
+                  }
+                  if (i === init_i) {
+                    throw new EastError(`invalid regex replacement string: empty group name in $<>`, { location: ir.value.arguments[3].value.location });
+                  }
+                  i += 1; // for closing >
+                } else {
+                  throw new EastError(`invalid regex replacement string: unescaped $ at $${char2}`, { location: ir.value.arguments[3].value.location });
+                }
+              } else {
+                i += char.length;
+              }
+            }
+            return text.replaceAll(compiledRegex, replacement);
+          };
+        }
+      }
+    }
+
+    const evaluator = builtin_evaluators[ir.value.builtin](ir.value.location, ...ir.value.type_parameters);
+    if (argsAsync) {
+      return async (ctx: Record<string, any>) => {
+        const args_resolved: any[] = [];
+        for (const a of args) {
+          args_resolved.push(await a(ctx));
+        }
+        return evaluator(...args_resolved);
+      }
+    } else {
+      return (ctx: Record<string, any>) => evaluator(...args.map(a => a(ctx)));
+    }
+  } else if (ir.type === "Platform") {
+    // TODO check types match (would require having the platform's expected types here)
+    let argsAsync = false;
+    const args = ir.value.arguments.map(a => {
+      if (a.value.isAsync) {
+        argsAsync = true;
+      }
+
+      return compile_internal(a, ctx, platform, asyncPlatformFns, false, compilingNodes)
+    });
+    const evaluator = platform[ir.value.name];
+    if (evaluator === undefined) {
+      throw new Error(`Evaluator for platform function ${JSON.stringify(ir.value.name)} not found at ${printLocationValue(ir.value.location)}`);
+    }
+    if (argsAsync) {
+      return async (ctx: Record<string, any>) => {
+        const args_resolved: any[] = [];
+        for (const a of args) {
+          args_resolved.push(await a(ctx));
+        }
+        return evaluator(...args_resolved);
+      }
+    } else {
+      return (ctx: Record<string, any>) => evaluator(...args.map(a => a(ctx)));
+    }
+  } else {
+    throw new Error(`Unhandled IR type ${(ir satisfies never as IR).type} at ${printLocationValue((ir as IR).value.location)}`); // The `satisfies never` here ensures that this branch is unreachable if all IR types are handled
+  }
+}
+
+/** Used to call a compiled function with the given arguments and handle errors within builtin functions */
+function call_function(location: LocationValue, compiled_f: (...args: any[]) => any, ...args: any[]): any {
+  try {
+    return compiled_f(...args);
+  } catch (e: unknown) {
+    if (e instanceof ReturnException) {
+      return e.value;
+    } else if (e instanceof EastError) {
+      e.location.push(location); // The fact that we need to push the call location not the definition location means we need to handle this here
+      throw(e);
+    } else if (e instanceof ContinueException) {
+      throw new Error(`continue failed to find label ${e.label} at ${printLocationValue(location)}`)
+    } else if (e instanceof BreakException) {
+      throw new Error(`break failed to find label ${e.label} at ${printLocationValue(location)}`)
+    } else {
+      throw(e);
+    }
+  }
+}
+
+
+/** @internal */
+const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_types: any[]) => (...args: any[]) => any> = {
+  Is: (_location: LocationValue, T: EastTypeValue) => isFor(T),
+  Equal: (_location: LocationValue, T: EastTypeValue) => equalFor(T),
+  NotEqual: (_location: LocationValue, T: EastTypeValue) => notEqualFor(T),
+  Less: (_location: LocationValue, T: EastTypeValue) => lessFor(T),
+  LessEqual: (_location: LocationValue, T: EastTypeValue) => lessEqualFor(T),
+  Greater: (_location: LocationValue, T: EastTypeValue) => greaterFor(T),
+  GreaterEqual: (_location: LocationValue, T: EastTypeValue) => greaterEqualFor(T),
+  BooleanNot: (_location: LocationValue) => (x: boolean) => !x,
+  BooleanOr: (_location: LocationValue) => (x: boolean, y: boolean) => x || y,
+  BooleanAnd: (_location: LocationValue) => (x: boolean, y: boolean) => x && y,
+  BooleanXor: (_location: LocationValue) => (x: boolean, y: boolean) => x !== y,
+  
+  IntegerToFloat: (_location: LocationValue) => (x: bigint) => Number(x),
+  IntegerNegate: (_location: LocationValue) => (x: bigint) => BigInt.asIntN(64, -x),
+  IntegerAdd: (_location: LocationValue) => (x: bigint, y: bigint) => BigInt.asIntN(64, x + y),
+  IntegerSubtract: (_location: LocationValue) => (x: bigint, y: bigint) => BigInt.asIntN(64, x - y),
+  IntegerMultiply: (_location: LocationValue) => (x: bigint, y: bigint) => BigInt.asIntN(64, x * y),
+  IntegerDivide: (_location: LocationValue) => (x: bigint, y: bigint) => x === 0n ? 0n : x / y,
+  IntegerRemainder: (_location: LocationValue) => (x: bigint, y: bigint) => x === 0n ? 0n : x % y,
+  IntegerPow: (_location: LocationValue) => (x: bigint, y: bigint) => y >= 0n ? BigInt.asIntN(64, x ** y) : 0n,
+  IntegerAbs: (_location: LocationValue) => (x: bigint) => BigInt.asIntN(64, x < 0n ? -x : x),
+  IntegerSign: (_location: LocationValue) => (x: bigint) => x > 0n ? 1n : x < 0n ? -1n : 0n,
+  IntegerLog: (_location: LocationValue) => (value: bigint, base: bigint) => {
+    if (value === 0n) return 0n;
+    if (base <= 1n) return 0n; // Invalid base
+    
+    let abs_value = value < 0n ? -value : value;
+    let result = 0n;
+    
+    while (abs_value >= base) {
+      abs_value = abs_value / base;
+      result = result + 1n;
+    }
+    
+    return result;
+  },
+  
+  FloatToInteger: (location: LocationValue) => (x: number) => {
+    if (Number.isNaN(x)) throw new EastError("Cannot convert NaN to integer", { location });
+    if (x >= 9223372036854775808) throw new EastError("Float too high to convert to integer", { location });
+    if (x < -9223372036854775808) throw new EastError("Float too low to convert to integer", { location });
+    if (!Number.isInteger(x)) { throw new EastError("Cannot convert non-integer float to integer", { location }); }
+    return BigInt(x);
+  },
+  FloatNegate: (_location: LocationValue) => (x: bigint) => -x,
+  FloatAdd: (_location: LocationValue) => (x: number, y: number) => x + y,
+  FloatSubtract: (_location: LocationValue) => (x: number, y: number) => x - y,
+  FloatMultiply: (_location: LocationValue) => (x: number, y: number) => x * y,
+  FloatDivide: (_location: LocationValue) => (x: number, y: number) => x / y,
+  FloatRemainder: (_location: LocationValue) => (x: number, y: number) => x % y,
+  FloatPow: (_location: LocationValue) => (x: number, y: number) => x ** y,
+  FloatAbs: (_location: LocationValue) => (x: number) => x < 0 ? -x : x,
+  FloatSign: (_location: LocationValue) => (x: number) => x > 0 ? 1 : x < 0 ? -1 : 0, // What sign is NaN?
+  FloatSqrt: (_location: LocationValue) => (value: number) => Math.sqrt(value),
+  FloatLog: (_location: LocationValue) => (value: number) => Math.log(value),
+  FloatExp: (_location: LocationValue) => (value: number) => Math.exp(value),
+  FloatSin: (_location: LocationValue) => (value: number) => Math.sin(value),
+  FloatCos: (_location: LocationValue) => (value: number) => Math.cos(value),
+  FloatTan: (_location: LocationValue) => (value: number) => Math.tan(value),
+  
+  Print: (_location: LocationValue, T: EastTypeValue) => {
+    return printFor(T);
+  },
+  Parse: (location: LocationValue, T: EastTypeValue) => {
+    const p = parseFor(T);
+    return (x: string) => {
+      const result = p(x);
+      if (result.success) {
+        return result.value;
+      } else {
+        throw new EastError(`Failed to parse ${printTypeValue(T)} at ${result.position}: ${result.error}`, { location });
+      }
+    }
+  },
+  StringConcat: (_location: LocationValue) => (x: string, y: string) => x + y,
+  StringRepeat: (_location: LocationValue) => (x: string, y: bigint) => y > 0n ? x.repeat(Number(y)) : "",
+  StringLength: (_location: LocationValue) => (x: string) => {
+    let len = 0;
+    for (const _ of x) len++;
+    return BigInt(len);
+  },
+  StringSubstring: (_location: LocationValue) => (x: string, from: bigint, to: bigint) => {
+    // Convert bigint indices to numbers, handle forgiving semantics like JavaScript
+    let fromNum = Number(from);
+    let toNum = Number(to);
+    
+    // Handle negative indices and lengths (forgiving semantics)
+    if (fromNum < 0) fromNum = 0;
+    if (toNum < 0) toNum = 0;
+    if (fromNum > toNum) {
+      toNum = fromNum;
+    }
+    
+    // Convert codepoint indices to code unit indices
+    let codeUnitFrom = 0;
+    let codeUnitTo = 0;
+    let codepointIndex = 0;
+    
+    for (const char of x) {
+      if (codepointIndex === fromNum) {
+        codeUnitFrom = codeUnitTo;
+      }
+      if (codepointIndex === toNum) {
+        break;
+      }
+      codeUnitTo += char.length;
+      codepointIndex++;
+    }
+    
+    // If 'from' is beyond string length, return empty string
+    if (fromNum >= codepointIndex) return "";
+    
+    // If 'to' is beyond string length, use string end
+    if (toNum > codepointIndex) {
+      codeUnitTo = x.length;
+    }
+    
+    return x.substring(codeUnitFrom, codeUnitTo);
+  },
+  StringUpperCase: (_location: LocationValue) => (x: string) => x.toUpperCase(),
+  StringLowerCase: (_location: LocationValue) => (x: string) => x.toLowerCase(),
+  StringSplit: (_location: LocationValue) => (x: string, delimiter: string) => {
+    if (delimiter === "") {
+      if (x === "") {
+        // Split always returns at least one element
+        return [""];
+      } else {
+        // Split into individual codepoints
+        return [...x];
+      }
+    }
+    return x.split(delimiter);
+  },
+  StringTrim: (_location: LocationValue) => (x: string) => x.trim(),
+  StringTrimStart: (_location: LocationValue) => (x: string) => x.trimStart(),
+  StringTrimEnd: (_location: LocationValue) => (x: string) => x.trimEnd(),
+  StringStartsWith: (_location: LocationValue) => (x: string, prefix: string) => x.startsWith(prefix),
+  StringEndsWith: (_location: LocationValue) => (x: string, suffix: string) => x.endsWith(suffix),
+  StringContains: (_location: LocationValue) => (x: string, substring: string) => x.includes(substring),
+  StringIndexOf: (_location: LocationValue) => (x: string, substring: string) => {
+    const codeUnitIndex = x.indexOf(substring);
+    if (codeUnitIndex === -1) return -1n;
+    
+    // Special case for empty substring - it's always found at position 0
+    if (substring === "") return BigInt(codeUnitIndex);
+    
+    // Convert code unit index to codepoint index
+    let codepointIndex = 0;
+    let codeUnitPos = 0;
+    for (const char of x) {
+      if (codeUnitPos === codeUnitIndex) {
+        return BigInt(codepointIndex);
+      }
+      codeUnitPos += char.length;
+      codepointIndex++;
+    }
+    return -1n;
+  },
+  StringReplace: (_location: LocationValue) => (x: string, searchValue: string, replaceValue: string) => {
+    // Replace all occurrences (like JavaScript's string.replaceAll with string)
+    return x.replaceAll(searchValue, replaceValue);
+  },
+  RegexContains: (_location: LocationValue) => (text: string, pattern: string, flags: string) => {
+    const regex = new RegExp(pattern, flags);
+    return regex.test(text);
+  },
+  RegexIndexOf: (_location: LocationValue) => (text: string, pattern: string, flags: string) => {
+    const regex = new RegExp(pattern, flags);
+    const codeUnitIndex = text.search(regex);
+    if (codeUnitIndex === -1) return -1n;
+
+    // Convert code unit index to codepoint index
+    let codepointIndex = 0;
+    let codeUnitPos = 0;
+    for (const char of text) {
+      if (codeUnitPos === codeUnitIndex) {
+        return BigInt(codepointIndex);
+      }
+      codeUnitPos += char.length;
+      codepointIndex++;
+    }
+    return -1n;
+  },
+  RegexReplace: (location: LocationValue) => (text: string, pattern: string, flags: string, replacement: string) => {
+    // Ensure global flag is set for replaceAll semantics
+    const globalFlags = flags.includes('g') ? flags : flags + 'g';
+    const regex = new RegExp(pattern, globalFlags);
+
+    // Validate replacement string: only allow $$, $1-$9, and $<
+    // This is stricter than JavaScript's native behavior but provides clear, consistent semantics
+    // and avoids backend-specific features like $&, $`, $'
+    let i = 0;
+    while (i < replacement.length) {
+      const char = replacement[i]!;
+      if (char === '$') {
+        i += char.length;
+        let char2 = replacement[i];
+        if (char2 === undefined) {
+          throw new EastError(`invalid regex replacement string: unescaped $ at end of string`, { location });
+        } else if (char2 === '$') {
+          i += 1;
+        } else if (char2 >= '1' && char2 <= '9') {
+          i += 1;
+          char2 = replacement[i];
+          while (char2 !== undefined && char2 >= '0' && char2 <= '9') {
+            i += 1;
+            char2 = replacement[i];
+          }
+        } else if (char2 === '<') {
+          // Scan until closing >
+          i += 1;
+          const init_i = i;
+          char2 = replacement[i];
+          while (true) {
+            if (char2 === undefined) {
+              throw new EastError(`invalid regex replacement string: unterminated group name in $<...>`, { location });
+            }
+            if (char2 === '>') {
+              break;
+            }
+            if (!((char2 >= '0' && char2 <= '9') || (char2 >= 'a' && char2 <= 'z') || (char2 >= 'A' && char2 <= 'Z') || char2 === '_')) {
+              throw new EastError(`invalid regex replacement string: invalid character ${JSON.stringify(char2)} in group name in $<...>`, { location });
+            }
+            i += 1;
+            char2 = replacement[i];
+          }
+          if (i === init_i) {
+            throw new EastError(`invalid regex replacement string: empty group name in $<>`, { location });
+          }
+          i += 1; // for closing >
+        } else {
+          throw new EastError(`invalid regex replacement string: unescaped $ at $${char2}`, { location });
+        }
+      } else {
+        i += char.length;
+      }
+    }
+    return text.replaceAll(regex, replacement);
+  },
+  StringEncodeUtf8: (_location: LocationValue) => {
+    // do not add BOM for UTF-8
+    const encoder = new TextEncoder();
+    return (x: string) => {
+      return encoder.encode(x);
+    };
+  },
+  StringEncodeUtf16: (_location: LocationValue) => {
+    // always use little-endian with BOM (most common in practice)
+    return (x: string) => {
+      const buffer = new BufferWriter();
+      buffer.writeUint8(0xFF);
+      buffer.writeUint8(0xFE);
+      for (let i = 0; i < x.length; i++) {
+        const codeUnit = x.charCodeAt(i);
+        buffer.writeUint16LE(codeUnit);
+      }
+      return buffer.toUint8Array();
+    };
+  },
+  StringParseJSON: (location: LocationValue, type: EastTypeValue) => {
+    const fromJSON = fromJSONFor(type);
+    return (x: string) => {
+      let parsed: any;
+      try {
+        parsed = JSON.parse(x);
+      } catch (e: unknown) {
+        throw new EastError(`Failed to parse JSON: ${(e as Error).message}`, { location });
+      }
+      try {
+        return fromJSON(parsed);
+      } catch (e: unknown) {
+        throw new EastError(`Failed to convert JSON to ${printTypeValue(type)}: ${(e as Error).message}`, { location });
+      }
+    }
+  },
+  StringPrintJSON: (_location: LocationValue, type: EastTypeValue) => {
+    const toJSON = toJSONFor(type);
+    return (x: any) => JSON.stringify(toJSON(x));
+  },
+  
+  DateTimeGetYear: (_location: LocationValue) => (date: Date) => BigInt(date.getUTCFullYear()),
+  DateTimeGetMonth: (_location: LocationValue) => (date: Date) => BigInt(date.getUTCMonth() + 1), // JavaScript months are 0-based, East uses 1-based
+  DateTimeGetDayOfMonth: (_location: LocationValue) => (date: Date) => BigInt(date.getUTCDate()),
+  DateTimeGetHour: (_location: LocationValue) => (date: Date) => BigInt(date.getUTCHours()),
+  DateTimeGetMinute: (_location: LocationValue) => (date: Date) => BigInt(date.getUTCMinutes()),
+  DateTimeGetSecond: (_location: LocationValue) => (date: Date) => BigInt(date.getUTCSeconds()),
+  DateTimeGetDayOfWeek: (_location: LocationValue) => (date: Date) => {
+    const jsDay = date.getUTCDay(); // JavaScript: 0=Sunday, 1=Monday, ..., 6=Saturday
+    return BigInt(jsDay === 0 ? 7 : jsDay); // ISO 8601: 1=Monday, 2=Tuesday, ..., 7=Sunday
+  },
+  DateTimeGetMillisecond: (_location: LocationValue) => (date: Date) => BigInt(date.getUTCMilliseconds()),
+  DateTimeAddMilliseconds: (_location: LocationValue) => (date: Date, milliseconds: bigint) => new Date(date.getTime() + Number(milliseconds)),
+  DateTimeDurationMilliseconds: (_location: LocationValue) => (date1: Date, date2: Date) => BigInt(date1.getTime() - date2.getTime()),
+  DateTimeToEpochMilliseconds: (_location: LocationValue) => (date: Date) => BigInt(date.getTime()),
+  DateTimeFromEpochMilliseconds: (_location: LocationValue) => (milliseconds: bigint) => new Date(Number(milliseconds)),
+  DateTimeFromComponents: (_location: LocationValue) => (year: bigint, month: bigint, day: bigint, hour: bigint, minute: bigint, second: bigint, millisecond: bigint) =>
+    new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second), Number(millisecond))),
+  DateTimePrintFormat: (_location: LocationValue) => (date: Date, tokens: DateTimeFormatToken[]) => {
+    return formatDateTime(date, tokens);
+  },
+  DateTimeParseFormat: (location: LocationValue) => (str: string, tokens: DateTimeFormatToken[]) => {
+    const result = parseDateTimeFormatted(str, tokens);
+    if (result.success) {
+      return result.value;
+    } else {
+      throw new EastError(`Failed to parse datetime at position ${result.position}: ${result.error}`, { location });
+    }
+  },
+
+  BlobSize: (_location: LocationValue) => (data: Uint8Array) => BigInt(data.length),
+  BlobGetUint8: (location: LocationValue) => (data: Uint8Array, index: bigint) => {
+    const i = Number(index);
+    if (i < 0 || i >= data.length) {
+      throw new EastError(`Blob index ${index} out of bounds`, { location });
+    } else {
+      return BigInt(data[i]!);
+    }
+  },
+  BlobDecodeUtf8: (location: LocationValue) => {
+    const decoder = new TextDecoder('utf-8', { fatal: true });
+    return (data: Uint8Array) => {
+      try {
+        return decoder.decode(data);
+      } catch {
+        throw new EastError("Blob is not valid UTF-8", { location });
+      }
+    };
+  },
+  BlobDecodeUtf16: (location: LocationValue) => {
+    const decoder_be = new TextDecoder('utf-16be', { fatal: true });
+    const decoder_le = new TextDecoder('utf-16le', { fatal: true });
+    return (data: Uint8Array) => {
+      try {
+        if (data.length >= 2) {
+          // Check for BOM
+          if (data[0] === 0xFE && data[1] === 0xFF) {
+            // Big-endian BOM
+            return decoder_be.decode(data.subarray(2));
+          } else if (data[0] === 0xFF && data[1] === 0xFE) {
+            // Little-endian BOM
+            return decoder_le.decode(data.subarray(2));
+          }
+        }
+        // No BOM, default to little-endian (not unicode spec compliant, but more common in practice)
+        return decoder_le.decode(data);
+      } catch {
+        throw new EastError("Blob is not valid UTF-16", { location });
+      }
+    };
+  },
+  BlobEncodeBeast: (_location: LocationValue, type: EastTypeValue) => {
+    const encodeBeast = encodeBeastFor(type);
+    return (value: any) => {
+      return encodeBeast(value);
+    }
+  },
+  BlobDecodeBeast: (location: LocationValue, type: EastTypeValue) => {
+    const decodeBeast = decodeBeastFor(type);
+    return (data: Uint8Array) => {
+      try {
+        return decodeBeast(data);
+      } catch (e: unknown) {
+        throw new EastError(`Failed to decode Beast data: ${(e as Error).message}`, { location });
+      }
+    }
+  },
+  BlobEncodeBeast2: (_location: LocationValue, type: EastTypeValue) => {
+    const encodeBeast2 = encodeBeast2For(type);
+    return (value: any) => {
+      return encodeBeast2(value);
+    }
+  },
+  BlobDecodeBeast2: (location: LocationValue, type: EastTypeValue) => {
+    const decodeBeast2 = decodeBeast2For(type);
+    return (data: Uint8Array) => {
+      try {
+        return decodeBeast2(data);
+      } catch (e: unknown) {
+        throw new EastError(`Failed to decode Beast2 data: ${(e as Error).message}`, { location });
+      }
+    }
+  },
+
+  RefGet: (_location: LocationValue, _T: EastTypeValue) => (ref: ref<any>) => {
+    return ref.value;
+  },
+  RefUpdate: (location: LocationValue, _T: EastTypeValue) => (ref: ref<any>, value: any) => {
+    if (Object.isFrozen(ref)) {
+      throw new EastError("Cannot modify frozen Ref", { location });
+    }
+    ref.value = value;
+    return null;
+  },
+  RefMerge: (location: LocationValue, _T: EastTypeValue) => (ref: ref<any>, value: any, merger: (existing: any, value: any) => any) => {
+    if (Object.isFrozen(ref)) {
+      throw new EastError("Cannot modify frozen Ref", { location });
+    }
+    const new_value = call_function(location, merger, ref.value, value);
+    ref.value = new_value;
+    return null;
+  },
+  
+  ArrayGenerate: (location: LocationValue, _T: EastTypeValue) => (size: bigint, f: (i: bigint) => any) => {
+    const result: any[] = [];
+    for (let i = 0n; i < size; i += 1n) {
+      const v = call_function(location, f, i);
+      result.push(v);
+    }
+    return result;
+  },
+  ArrayRange: (_location: LocationValue) => (start: bigint, end: bigint, step: bigint) => {
+    const result: any[] = [];
+    if (step === 0n) {
+      return result; // empty array
+    } else if (step > 0n) {
+      for (let i = start; i < end; i += step) {
+        result.push(i);
+      }
+    } else { // step < 0
+      for (let i = start; i > end; i += step) {
+        result.push(i);
+      }
+    }
+    return result;
+  },
+  ArrayLinspace: (_location: LocationValue) => (start: number, end: number, size: bigint) => {
+    const result: any[] = [];
+    if (size <= 0n) {
+      return result; // empty array
+    } else if (size === 1n) {
+      return [start];
+    } else {
+      const step = (end - start) / Number(size - 1n);
+      for (let i = 0n; i < size; i += 1n) {
+        result.push(start + Number(i) * step);
+      }
+    }
+    return result;
+  },
+  ArraySize: (_location: LocationValue, _T: EastTypeValue) => (array: any[]) => BigInt(array.length),
+  ArrayHas: (_location: LocationValue, _T: EastTypeValue) => (array: any[], key: bigint) => {
+    const i = Number(key);
+    return i >= 0 && i < array.length;
+  },
+  ArrayGet: (location: LocationValue, _T: EastTypeValue) => (array: any[], key: bigint) => {
+    const i = Number(key);
+    if (i < 0 || i >= array.length) {
+      throw new EastError(`Array index ${key} out of bounds`, { location });
+    } else {
+      return array[i];
+    }
+  },
+  ArrayGetOrDefault: (location: LocationValue, _T: EastTypeValue) => (array: any[], key: bigint, defaultFn: (key: bigint) => any) => {
+    const i = Number(key);
+    if (i < 0 || i >= array.length) {
+      return call_function(location, defaultFn, key);
+    } else {
+      return array[i];
+    }
+  },
+  ArrayTryGet: (_location: LocationValue, _T: EastTypeValue) => (array: any[], key: bigint) => {
+    const i = Number(key);
+    if (i < 0 || i >= array.length) {
+      return variant("none", null);
+    } else {
+      return variant("some", array[i]);
+    }
+  },
+  ArrayUpdate: (location: LocationValue, _T: EastTypeValue) => (array: any[], key: bigint, value: any) => {
+    if (Object.isFrozen(array)) {
+      throw new EastError("Cannot modify frozen Array", { location });
+    }
+    const i = Number(key);
+    if (i < 0 || i >= array.length) {
+      throw new EastError(`Array index ${key} out of bounds`, { location });
+    } else {
+      array[i] = value;
+      return null;
+    }
+  },
+  ArrayMerge: (location: LocationValue, _T: EastTypeValue) => (array: any[], key: bigint, value: any, merger: (existing: any, value: any, key: bigint) => any) => {
+    if (Object.isFrozen(array)) {
+      throw new EastError("Cannot modify frozen Array", { location });
+    }
+    const i = Number(key);
+    if (i < 0 || i >= array.length) {
+      throw new EastError(`Array index ${key} out of bounds`, { location });
+    } else {
+      const new_value = call_function(location, merger, array[i], value, key);
+      array[i] = new_value;
+      return null;
+    }
+  },
+  ArrayPushLast: (location: LocationValue, _T: EastTypeValue) => (array: any[], value: any) => {
+    if (Object.isFrozen(array)) {
+      throw new EastError("Cannot modify frozen Array", { location });
+    }
+    if ((iterationLocks.get(array) || 0) > 0) {
+      throw new EastError("Cannot modify Array during iteration", { location });
+    }
+    array.push(value);
+    return null;
+  },
+  ArrayPopLast: (location: LocationValue, _T: EastTypeValue) => (array: any[]) => {
+    if (Object.isFrozen(array)) {
+      throw new EastError("Cannot modify frozen Array", { location });
+    }
+    if ((iterationLocks.get(array) || 0) > 0) {
+      throw new EastError("Cannot modify Array during iteration", { location });
+    }
+    if (array.length === 0) {
+      throw new EastError("Cannot pop from empty Array", { location });
+    } else {
+      return array.pop();
+    }
+  },
+  ArrayPushFirst: (location: LocationValue, _T: EastTypeValue) => (array: any[], value: any) => {
+    if (Object.isFrozen(array)) {
+      throw new EastError("Cannot modify frozen Array", { location });
+    }
+    if ((iterationLocks.get(array) || 0) > 0) {
+      throw new EastError("Cannot modify Array during iteration", { location });
+    }
+    array.unshift(value);
+    return null;
+  },
+  ArrayPopFirst: (location: LocationValue, _T: EastTypeValue) => (array: any[]) => {
+    if (Object.isFrozen(array)) {
+      throw new EastError("Cannot modify frozen Array", { location });
+    }
+    if ((iterationLocks.get(array) || 0) > 0) {
+      throw new EastError("Cannot modify Array during iteration", { location });
+    }
+    if (array.length === 0) {
+      throw new EastError("Cannot pop from empty Array", { location });
+    } else {
+      return array.shift();
+    }
+  },
+  ArrayAppend: (location: LocationValue, _T: EastTypeValue) => (array: any[], other: any[]) => {
+    if (Object.isFrozen(array)) {
+      throw new EastError("Cannot modify frozen Array", { location });
+    }
+    if ((iterationLocks.get(array) || 0) > 0) {
+      throw new EastError("Cannot modify Array during iteration", { location });
+    }
+    array.push(...other);
+    return null;
+  },
+  ArrayPrepend: (location: LocationValue, _T: EastTypeValue) => (array: any[], other: any[]) => {
+    if (Object.isFrozen(array)) {
+      throw new EastError("Cannot modify frozen Array", { location });
+    }
+    if ((iterationLocks.get(array) || 0) > 0) {
+      throw new EastError("Cannot modify Array during iteration", { location });
+    }
+    array.unshift(...other);
+    return null;
+  },
+  ArrayMergeAll: (location: LocationValue, _T: EastTypeValue, _T2: EastTypeValue) => (array: any[], other: any[], merger: (v1: any, v2: any, key: bigint) => any) => {
+    if (Object.isFrozen(array)) {
+      throw new EastError("Cannot modify frozen Array", { location });
+    }
+    lockForIteration(array);
+    lockForIteration(other);
+    try {
+      for (let i = 0; i < other.length; i++) {
+        const key = BigInt(i);
+        if (i < array.length) {
+          const new_value = call_function(location, merger, array[i], other[i], key);
+          array[i] = new_value;
+        } else {
+          throw new EastError(`Array index ${key} out of bounds`, { location });
+        }
+      }
+    } finally {
+      unlockForIteration(other);
+      unlockForIteration(array);
+    }
+    return null;
+  },
+  ArrayClear: (location: LocationValue, _T: EastTypeValue) => (array: any[]) => {
+    if (Object.isFrozen(array)) {
+      throw new EastError("Cannot modify frozen Array", { location });
+    }
+    if ((iterationLocks.get(array) || 0) > 0) {
+      throw new EastError("Cannot modify Array during iteration", { location });
+    }
+    array.length = 0;
+    return null;
+  },
+  ArraySortInPlace: (location: LocationValue, T: EastTypeValue, T2: EastTypeValue) => (array: any[], by: (a: any) => any) => {
+    if (Object.isFrozen(array)) {
+      throw new EastError("Cannot modify frozen Array", { location });
+    }
+    if ((iterationLocks.get(array) || 0) > 0) {
+      throw new EastError("Cannot modify Array during iteration", { location });
+    }
+    lockForIteration(array);
+    try {
+      const cmp = compareFor(T2);
+      array.sort((a, b) => {
+        const projectedA = call_function(location, by, a);
+        const projectedB = call_function(location, by, b);
+        return cmp(projectedA, projectedB);
+      });
+    } finally {
+      unlockForIteration(array);
+    }
+    return null;
+  },
+  ArrayReverseInPlace: (location: LocationValue, _T: EastTypeValue) => (array: any[]) => {
+    if (Object.isFrozen(array)) {
+      throw new EastError("Cannot modify frozen Array", { location });
+    }
+    if ((iterationLocks.get(array) || 0) > 0) {
+      throw new EastError("Cannot modify Array during iteration", { location });
+    }
+    array.reverse();
+    return null;
+  },
+  ArraySort: (location: LocationValue, T: EastTypeValue, T2: EastTypeValue) => (array: any[], by: (a: any) => any) => {
+    const cmp = compareFor(T2);
+    const newArray = [...array];
+    newArray.sort((a, b) => {
+      const projectedA = call_function(location, by, a);
+      const projectedB = call_function(location, by, b);
+      return cmp(projectedA, projectedB);
+    });
+    return newArray;
+  },
+  ArrayReverse: (_location: LocationValue, _T: EastTypeValue) => (array: any[]) => {
+    const newArray = [...array];
+    newArray.reverse();
+    return newArray;
+  },
+  ArrayIsSorted: (location: LocationValue, T: EastTypeValue, T2: EastTypeValue) => {
+    const cmp = compareFor(T2);
+    return (array: any[], by: (a: any) => any) => {
+      if (array.length < 2) return true;
+
+      lockForIteration(array);
+      try {
+        let projectedPrev = call_function(location, by, array[0]!);
+
+        for (let i = 1; i < array.length; i++) {
+          const projectedCurr = call_function(location, by, array[i]);
+
+          if (cmp(projectedPrev, projectedCurr) > 0) {
+            return false;
+          }
+
+          projectedPrev = projectedCurr;
+        }
+      } finally {
+        unlockForIteration(array);
+      }
+      return true;
+    };
+  },
+  ArrayFindSortedFirst: (location: LocationValue, T: EastTypeValue, T2: EastTypeValue) => {
+    const cmp = compareFor(T2);
+    return (array: any[], key: any, by: (a: any) => any) => {
+      let low = 0;
+      let high = array.length;
+
+      lockForIteration(array);
+      try {
+        while (low < high) {
+          const mid = Math.floor((low + high) / 2);
+          const projectedMid = call_function(location, by, array[mid]!);
+
+          if (cmp(projectedMid, key) < 0) {
+            low = mid + 1;
+          } else {
+            high = mid;
+          }
+        }
+      } finally {
+        unlockForIteration(array);
+      }
+
+      return BigInt(low);
+    };
+  },
+  ArrayFindSortedLast: (location: LocationValue, T: EastTypeValue, T2: EastTypeValue) => {
+    const cmp = compareFor(T2);
+    return (array: any[], key: any, by: (a: any) => any) => {
+      let low = 0;
+      let high = array.length;
+
+      lockForIteration(array);
+      try {
+        while (low < high) {
+          const mid = Math.floor((low + high) / 2);
+          const projectedMid = call_function(location, by, array[mid]!);
+
+          if (cmp(projectedMid, key) <= 0) {
+            low = mid + 1;
+          } else {
+            high = mid;
+          }
+        }
+      } finally {
+        unlockForIteration(array);
+      }
+
+      return BigInt(low);
+    };
+  },
+  ArrayFindSortedRange: (location: LocationValue, T: EastTypeValue, T2: EastTypeValue) => {
+    const cmp = compareFor(T2);
+    return (array: any[], key: any, by: (a: any) => any) => {
+      let lo = -1;
+      let hi = array.length;
+      
+      lockForIteration(array);
+      try {
+        // Main search loop - find any equal element or determine the range doesn't exist
+        while (lo < hi - 1) {
+          const mid = Math.floor((lo + hi) / 2);
+          const projectedMid = call_function(location, by, array[mid]!);
+
+          const cmpResult = cmp(projectedMid, key);
+          if (cmpResult < 0) {
+            lo = mid;
+          } else if (cmpResult > 0) {
+            hi = mid;
+          } else {
+            // Found an equal element! Now find the first and last positions
+            // within the constrained range
+
+            // Find first position in range [max(lo, -1), mid]
+            let firstLo = Math.max(lo, -1);
+            let firstHi = mid + 1;
+
+            while (firstLo < firstHi - 1) {
+              const firstMid = Math.floor((firstLo + firstHi) / 2);
+              const projectedFirst = call_function(location, by, array[firstMid]!);
+
+              if (cmp(projectedFirst, key) < 0) {
+                firstLo = firstMid;
+              } else {
+                firstHi = firstMid;
+              }
+            }
+
+            // Find last position in range [mid, min(hi, array.length)]
+            let lastLo = mid - 1;
+            let lastHi = Math.min(hi, array.length);
+
+            while (lastLo < lastHi - 1) {
+              const lastMid = Math.floor((lastLo + lastHi) / 2);
+              const projectedLast = call_function(location, by, array[lastMid]!);
+
+              if (cmp(projectedLast, key) <= 0) {
+                lastLo = lastMid;
+              } else {
+                lastHi = lastMid;
+              }
+            }
+
+            return { start: BigInt(firstLo + 1), end: BigInt(lastLo + 1) };
+          }
+        }
+      } finally {
+        unlockForIteration(array);
+      }
+
+      // No equal element found - return empty range
+      return { start: BigInt(lo + 1), end: BigInt(lo + 1) };
+    };
+  },
+  ArrayFindFirst: (location: LocationValue, T: EastTypeValue, T2: EastTypeValue) => {
+    const cmp = compareFor(T2);
+    return (array: any[], value: any, by: (a: any) => any) => {
+      lockForIteration(array);
+      try {
+        for (let i = 0; i < array.length; i++) {
+          const projected = call_function(location, by, array[i]);
+          if (cmp(projected, value) === 0) {
+            return variant("some", BigInt(i));
+          }
+        }
+        return variant("none", null);
+      } finally {
+        unlockForIteration(array);
+      }
+    };
+  },
+  ArrayConcat: (_location: LocationValue, _T: EastTypeValue) => (a1: any[], a2: any[]) => {
+    return [...a1, ...a2];
+  },
+  ArraySlice: (_location: LocationValue, _T: EastTypeValue) => (array: any[], start: bigint, end: bigint) => {
+    const startNum = Number(start);
+    const endNum = Number(end);
+    return array.slice(startNum, endNum);
+  },
+  ArrayGetKeys: (location: LocationValue, _T: EastTypeValue) => (array: any[], keys: bigint[], onMissing: (key: bigint) => any) => {
+    return keys.map(k => {
+      const i = Number(k);
+      if (i < 0 || i >= array.length) {
+        return call_function(location, onMissing, k);
+      } else {
+        return array[i];
+      }
+    });
+  },
+  ArrayForEach: (location: LocationValue, _T: EastTypeValue, _T2) => (array: any[], f: (x: any, i: bigint) => any) => {
+    lockForIteration(array);
+    try {
+      array.forEach((x, i) => {
+        return call_function(location, f, x, BigInt(i));
+      });
+      return null;
+    } finally {
+      unlockForIteration(array);
+    }
+  },
+  ArrayCopy: (_location: LocationValue, _T: EastTypeValue) => (array: any[]) => {
+    return [...array];
+  },
+  ArrayMap: (location: LocationValue, _T: EastTypeValue, _T2: EastTypeValue) => (array: any[], f: (x: any, i: bigint) => any) => {
+    lockForIteration(array);
+    try {
+      return array.map((x, i) => {
+        return call_function(location, f, x, BigInt(i));
+      });
+    } finally {
+      unlockForIteration(array);
+    }
+  },
+  ArrayFilter: (location: LocationValue, _T: EastTypeValue, _T2: EastTypeValue) => (array: any[], f: (x: any, i: bigint) => any) => {
+    lockForIteration(array);
+    try {
+      return array.filter((x, i) => {
+        return call_function(location, f, x, BigInt(i));
+      });
+    } finally {
+      unlockForIteration(array);
+    }
+  },
+  ArrayFilterMap: (location: LocationValue, _T: EastTypeValue, _T2: EastTypeValue) => (array: any[], f: (x: any, i: bigint) => any) => {
+    lockForIteration(array);
+    try {
+      const result: any[] = [];
+      for (let i = 0; i < array.length; i++) {
+        const v: option<any> = call_function(location, f, array[i], BigInt(i));
+        if (v.type === "some") {
+          result.push(v.value);
+        }
+      }
+      return result;
+    } finally {
+      unlockForIteration(array);
+    }
+  },
+  ArrayFirstMap: (location: LocationValue, _T: EastTypeValue, _T2: EastTypeValue) => (array: any[], f: (x: any, i: bigint) => any) => {
+    lockForIteration(array);
+    try {
+      for (let i = 0; i < array.length; i++) {
+        const v: option<any> = call_function(location, f, array[i], BigInt(i));
+        if (v.type === "some") {
+          return v;
+        }
+      }
+      return variant("none", null);
+    } finally {
+      unlockForIteration(array);
+    }
+  },
+  ArrayFold: (location: LocationValue, _T: EastTypeValue, _T2: EastTypeValue) => (array: any[], init: any, f: (acc: any, x: any, i: bigint) => any) => {
+    lockForIteration(array);
+    try {
+      return array.reduce((acc, x, i) => {
+        return call_function(location, f, acc, x, BigInt(i));
+      }, init);
+    } finally {
+      unlockForIteration(array);
+    }
+  },
+  ArrayMapReduce: (location: LocationValue, _T: EastTypeValue, _T2: EastTypeValue) => (array: any[], mapFn: (x: any, i: bigint) => any, reduceFn: (x: any, y:any) => any) => {
+    if (array.length === 0) {
+      throw new EastError("Cannot reduce empty array with no initial value", { location });
+    }
+    lockForIteration(array);
+    try {
+      let acc = call_function(location, mapFn, array[0], 0n);
+      for (let i = 1; i < array.length; i++) {
+        const mapped = call_function(location, mapFn, array[i], BigInt(i));
+        acc = call_function(location, reduceFn, acc, mapped);
+      }
+      return acc;
+    } finally {
+      unlockForIteration(array);
+    }
+  },
+  ArrayStringJoin: (_location: LocationValue) => (x: string[], y:string) => x.join(y),
+  ArrayToSet: (location: LocationValue, _T: EastTypeValue, T2: EastTypeValue) => {
+    const compare = compareFor(T2);
+    return (array: any[], f: (x: any, i: bigint) => any) => {
+      lockForIteration(array);
+      try {
+        const result = new SortedSet([], compare);
+        for (let i = 0; i < array.length; i++) {
+          const v = call_function(location, f, array[i], BigInt(i));
+          result.add(v);
+        }
+        return result;
+      } finally {
+        unlockForIteration(array);
+      }
+    }
+  },
+  ArrayToDict: (location: LocationValue, _T: EastTypeValue, K2: EastTypeValue, _T2: EastTypeValue) => {
+    const compare = compareFor(K2);
+    return (array: any[], keyFn: (v: any, i: bigint) => any, valueFn: (v: any, i: bigint) => any, onConflict: (v1: any, v2: any, k: any) => null) => {
+      const result = new SortedMap([], compare);
+      lockForIteration(array);
+      try {
+        for (let i = 0; i < array.length; i++) {
+          const v = array[i];
+          const k = call_function(location, keyFn, v, BigInt(i));
+          let val = call_function(location, valueFn, v, BigInt(i));
+          const existing = result.get(k);
+          if (existing === undefined) {
+            result.set(k, val);
+          } else {
+            val = call_function(location, onConflict, existing, val, k);
+            result.set(k, val);
+          }
+        }
+        return result;
+      } finally {
+        unlockForIteration(array);
+      }
+    }
+  },
+  ArrayFlattenToArray: (location: LocationValue, _T: EastTypeValue) => (array: any[], fn: (value: any) => any[]) => {
+    return array.flatMap(v => {
+      return call_function(location, fn, v);
+    });
+  },
+  ArrayFlattenToSet: (location: LocationValue, _T: EastTypeValue, K2: EastTypeValue) => {
+    const compare = compareFor(K2);
+    return (array: any[], fn: (value: any) => any[]) => {
+      const result = new SortedSet([], compare);
+      lockForIteration(array);
+      try {
+        for (const v of array) {
+          const subset = call_function(location, fn, v);
+          for (const k of subset) {
+            result.add(k);
+          }
+        }
+        return result;
+      } finally {
+        unlockForIteration(array);
+      }
+    }
+  },
+  ArrayFlattenToDict: (location: LocationValue, _T: EastTypeValue, K2: EastTypeValue, _T2: EastTypeValue) => {
+    const compare = compareFor(K2);
+    return (array: any[], fn: (value: any) => any[], onConflict: (v1: any, v2: any, k: any) => null) => {
+      const result = new SortedMap([], compare);
+      lockForIteration(array);
+      try {
+        for (const v of array) {
+          const subdict = call_function(location, fn, v);
+          for (const [k, val] of subdict.entries()) {
+            const existing = result.get(k);
+            if (existing === undefined) {
+              result.set(k, val);
+            } else {
+              const new_val = call_function(location, onConflict, existing, val, k);
+              result.set(k, new_val);
+            }
+          }
+        }
+        return result;
+      } finally {
+        unlockForIteration(array);
+      }
+    }
+  },
+  ArrayGroupFold: (location: LocationValue, _T: EastTypeValue, K2: EastTypeValue, _V2: EastTypeValue) => {
+    const compare = compareFor(K2);
+    return (array: any[], keyFn: (v: any, i: bigint) => any, init: (k: any) => any, folder: (acc: any, v: any, i: bigint) => any) => {
+      const result = new SortedMap([], compare);
+      lockForIteration(array);
+      try {
+        for (let i = 0; i < array.length; i++) {
+          const v = array[i];
+          const k = call_function(location, keyFn, v, BigInt(i));
+          let existing = result.get(k);
+          if (existing === undefined) {
+            existing = call_function(location, init, k);
+          }
+          const new_val = call_function(location, folder, existing, v, BigInt(i));
+          result.set(k, new_val);
+        }
+        return result;
+      } finally {
+        unlockForIteration(array);
+      }
+    }
+  },
+
+  SetGenerate: (location: LocationValue, K: EastTypeValue) => {
+    const keyComparer = compareFor(K);
+    return (size: bigint, keyFn: (i: bigint) => any, onConflict: (key: any) => null) => {
+      const result = new SortedSet([], keyComparer);
+      for (let i = 0n; i < size; i += 1n) {
+        const k = call_function(location, keyFn, i);
+        if (result.has(k)) {
+          call_function(location, onConflict, k);
+        } else {
+          result.add(k);
+        }
+      }
+      return result;
+    }
+  },
+  SetSize: (_location: LocationValue, _K: EastTypeValue) => (s: Set<any>) => BigInt(s.size),
+  SetHas: (_location: LocationValue, _K: EastTypeValue) => (s: Set<any>, key: any) => s.has(key),
+  SetInsert: (location: LocationValue, K: EastTypeValue) => {
+    const print = printFor(K);
+    return (s: Set<any>, key: any) => {
+      if (Object.isFrozen(s)) {
+        throw new EastError("Cannot modify frozen Set", { location });
+      }
+      if ((iterationLocks.get(s) || 0) > 0) {
+        throw new EastError("Cannot modify Set during iteration", { location });
+      }
+      const size_before = s.size;
+      s.add(key);
+      if (s.size === size_before) {
+        throw new EastError(`Set already contains key ${print(key)}`, { location });
+      }
+      return null;
+    }
+  },
+  SetTryInsert: (location: LocationValue, _K: EastTypeValue) => (s: Set<any>, key: any) => {
+    if (Object.isFrozen(s)) {
+      throw new EastError("Cannot modify frozen Set", { location });
+    }
+    if ((iterationLocks.get(s) || 0) > 0) {
+      throw new EastError("Cannot modify Set during iteration", { location });
+    }
+    const size_before = s.size;
+    s.add(key);
+    return s.size > size_before;
+  },
+  SetDelete: (location: LocationValue, K: EastTypeValue) => {
+    const print = printFor(K);
+    return (s: Set<any>, key: any) => {
+      if (Object.isFrozen(s)) {
+        throw new EastError("Cannot modify frozen Set", { location });
+      }
+      if ((iterationLocks.get(s) || 0) > 0) {
+        throw new EastError("Cannot modify Set during iteration", { location });
+      }
+      if (!s.delete(key)) {
+        throw new EastError(`Set does not contain key ${print(key)}`, { location });
+      }
+      return null;
+    }
+  },
+  SetTryDelete: (location: LocationValue, _K: EastTypeValue) => (s: Set<any>, key: any) => {
+    if (Object.isFrozen(s)) {
+      throw new EastError("Cannot modify frozen Set", { location });
+    }
+    if ((iterationLocks.get(s) || 0) > 0) {
+      throw new EastError("Cannot modify Set during iteration", { location });
+    }
+    return s.delete(key);
+  },
+  SetClear: (location: LocationValue, _K: EastTypeValue) => (s: Set<any>) => {
+    if (Object.isFrozen(s)) {
+      throw new EastError("Cannot modify frozen Set", { location });
+    }
+    if ((iterationLocks.get(s) || 0) > 0) {
+      throw new EastError("Cannot modify Set during iteration", { location });
+    }
+    s.clear();
+    return null
+  },
+  SetUnionInPlace: (location: LocationValue, _K: EastTypeValue) => (s1: Set<any>, s2: Set<any>) => {
+    if (Object.isFrozen(s1)) {
+      throw new EastError("Cannot modify frozen Set", { location });
+    }
+    if ((iterationLocks.get(s1) || 0) > 0) {
+      throw new EastError("Cannot modify Set during iteration", { location });
+    }
+    s2.forEach(v => s1.add(v));
+    return null;
+  },
+  SetUnion: (_location: LocationValue, _K: EastTypeValue) => (s1: Set<any>, s2: Set<any>) => s1.union(s2),
+  SetIntersect: (_location: LocationValue, _K: EastTypeValue) => (s1: Set<any>, s2: Set<any>) => s1.intersection(s2),
+  SetDiff: (_location: LocationValue, _K: EastTypeValue) => (s1: Set<any>, s2: Set<any>) => s1.difference(s2),
+  SetSymDiff: (_location: LocationValue, _K: EastTypeValue) => (s1: Set<any>, s2: Set<any>) => s1.symmetricDifference(s2),
+  SetIsSubset: (_location: LocationValue, _K: EastTypeValue) => (s1: Set<any>, s2: Set<any>) => s1.isSubsetOf(s2),
+  SetIsDisjoint: (_location: LocationValue, _K: EastTypeValue) => (s1: Set<any>, s2: Set<any>) => s1.isDisjointFrom(s2),
+  SetCopy: (_location: LocationValue, K: EastTypeValue) => {
+    const compare = compareFor(K);
+    return (s: SortedSet<any>) => {
+      return new SortedSet([...s], compare);
+    }
+  },
+  SetForEach: (location: LocationValue, _K: EastTypeValue, _T2) => (s: Set<any>, f: (x: any) => any) => {
+    lockForIteration(s);
+    try {
+      s.forEach(x => {
+        call_function(location, f, x);
+      });
+      return null;
+    } finally {
+      unlockForIteration(s);
+    }
+  },
+  SetFilter: (location: LocationValue, K: EastTypeValue) => {
+    const compare = compareFor(K);
+    return (s: SortedSet<any>, f: (x: any) => any) => {
+      const result = new SortedSet([], compare);
+      lockForIteration(s);
+      try {
+        s.forEach(x => {
+          const keep = call_function(location, f, x);
+          if (keep) {
+            result.add(x);
+          }
+        });
+        return result;
+      } finally {
+        unlockForIteration(s);
+      }
+    }
+  },
+  SetFilterMap: (location: LocationValue, K: EastTypeValue, _V2: EastTypeValue) => {
+    const compare = compareFor(K);
+    return (s: SortedSet<any>, f: (k: any) => option<any>) => {
+      const result = new SortedMap([], compare);
+      lockForIteration(s);
+      try {
+        s.forEach(k => {
+          const v2: option<any> = call_function(location, f, k);
+          if (v2.type === "some") {
+            result.set(k, v2.value);
+          }
+        });
+        return result;
+      } finally {
+        unlockForIteration(s);
+      }
+    }
+  },
+  SetFirstMap: (location: LocationValue, _K: EastTypeValue, _T2: EastTypeValue) => (s: SortedSet<any>, f: (k: any) => any) => {
+    lockForIteration(s);
+    try {
+      for (const k of s) {
+        const v: option<any> = call_function(location, f, k);
+        if (v.type === "some") {
+          return v;
+        }
+      }
+      return variant("none", null);
+    } finally {
+      unlockForIteration(s);
+    }
+  },
+  SetMapReduce: (location: LocationValue, _K: EastTypeValue, _T2: EastTypeValue) => (s: SortedSet<any>, mapFn: (k: any) => any, reduceFn: (x: any, y: any) => any) => {
+    if (s.size === 0) {
+      throw new EastError("Cannot reduce empty set with no initial value", { location });
+    }
+    lockForIteration(s);
+    try {
+      const iterator = s[Symbol.iterator]();
+      const first = iterator.next().value;
+      let acc = call_function(location, mapFn, first);
+      for (const k of iterator) {
+        const mapped = call_function(location, mapFn, k);
+        acc = call_function(location, reduceFn, acc, mapped);
+      }
+      return acc;
+    } finally {
+      unlockForIteration(s);
+    }
+  },
+  SetMap: (location: LocationValue, K: EastTypeValue, _T2: EastTypeValue) => {
+    const compare = compareFor(K);
+    return (s: SortedSet<any>, f: (x: any) => any) => {
+      const result = new SortedMap([], compare);
+      lockForIteration(s);
+      try {
+        s.forEach(x => {
+          const v = call_function(location, f, x);
+          result.set(x, v);
+        });
+        return result;
+      } finally {
+        unlockForIteration(s);
+      }
+    }
+  },
+  SetReduce: (location: LocationValue, _K: EastTypeValue, _T2: EastTypeValue) => (s: Set<any>, f: (acc: any, x: any) => any, init: any) => {
+    let acc = init;
+    lockForIteration(s);
+    try {
+      for (const x of s) {
+        acc = call_function(location, f, acc, x);
+      }
+      return acc;
+    } finally {
+      unlockForIteration(s);
+    }
+  },
+  SetToArray: (location: LocationValue, _K: EastTypeValue, _T2: EastTypeValue) => (s: Set<any>, valueFn: (key: any) => any) => {
+    const ret = [];
+    lockForIteration(s);
+    try {
+      for (const k of s) {
+        const v = call_function(location, valueFn, k);
+        ret.push(v);
+      }
+      return ret;
+    } finally {
+      unlockForIteration(s);
+    }
+  },
+  SetToSet: (location: LocationValue, K: EastTypeValue, K2: EastTypeValue) => {
+    const compare = compareFor(K2);
+    return (s: SortedSet<any>, f: (x: any) => any) => {
+      const result = new SortedSet([], compare);
+      lockForIteration(s);
+      try {
+        for (const x of s) {
+          const v = call_function(location, f, x);
+          result.add(v);
+        };
+        return result;
+      } finally {
+        unlockForIteration(s);
+      }
+    }
+  },
+  SetToDict: (location: LocationValue, K: EastTypeValue, K2: EastTypeValue, _V2: EastTypeValue) => {
+    const compare = compareFor(K2);
+    return (s: Set<any>, keyFn: (key: any) => any, valueFn: (key: any) => any, onConflict: (v1: any, v2: any, k: any) => null) => {
+      const result = new SortedMap([], compare);
+      lockForIteration(s);
+      try {
+        for (const k of s) {
+          const k2 = call_function(location, keyFn, k);
+          let v2 = call_function(location, valueFn, k);
+          const existing = result.get(k2);
+          if (existing !== undefined) {
+            v2 = call_function(location, onConflict, existing, v2, k2);
+            result.set(k2, v2);
+          } else {
+            result.set(k2, v2);
+          }
+        }
+        return result;
+      } finally {
+        unlockForIteration(s);
+      }
+    }
+  },
+  SetFlattenToArray: (location: LocationValue, _K: EastTypeValue, _T2: EastTypeValue) => (s: Set<any>, fn: (value: any) => any[]) => {
+    const ret = [];
+    lockForIteration(s);
+    try {
+      for (const k of s) {
+        const subarray = call_function(location, fn, k);
+        ret.push(...subarray);
+      }
+      return ret;
+    } finally {
+      unlockForIteration(s);
+    }
+  },
+  SetFlattenToSet: (location: LocationValue, _K: EastTypeValue, K2: EastTypeValue) => {
+    const compare = compareFor(K2);
+    return (s: Set<any>, fn: (value: any) => any[]) => {
+      const result = new SortedSet([], compare);
+      lockForIteration(s);
+      try {
+        for (const k of s) {
+          const subset = call_function(location, fn, k);
+          for (const k2 of subset) {
+            result.add(k2);
+          }
+        }
+        return result;
+      } finally {
+        unlockForIteration(s);
+      }
+    }
+  },
+  SetFlattenToDict: (location: LocationValue, _K: EastTypeValue, K2: EastTypeValue, _V2: EastTypeValue) => {
+    const compare = compareFor(K2);
+    return (s: Set<any>, fn: (value: any) => any[], onConflict: (v1: any, v2: any, k: any) => null) => {
+      const result = new SortedMap([], compare);
+      lockForIteration(s);
+      try {
+        for (const k of s) {
+          const subdict = call_function(location, fn, k);
+          for (const [k2, v2] of subdict.entries()) {
+            const existing = result.get(k2);
+            if (existing === undefined) {
+              result.set(k2, v2);
+            } else {
+              const new_v2 = call_function(location, onConflict, existing, v2, k2);
+              result.set(k2, new_v2);
+            }
+          }
+        }
+        return result;
+      } finally {
+        unlockForIteration(s);
+      }
+    }
+  },
+  SetGroupFold: (location: LocationValue, _K: EastTypeValue, K2: EastTypeValue, _T2: EastTypeValue) => {
+    const compare = compareFor(K2);
+    return (s: Set<any>, keyFn: (k: any) => any, init: (k2: any) => any, folder: (acc: any, k: any) => any) => {
+      const result = new SortedMap([], compare);
+      lockForIteration(s);
+      try {
+        for (const k of s) {
+          const k2 = call_function(location, keyFn, k);
+          let existing = result.get(k2);
+          if (existing === undefined) {
+            existing = call_function(location, init, k2);
+          }
+          const new_val = call_function(location, folder, existing, k);
+          result.set(k2, new_val);
+        }
+        return result;
+      } finally {
+        unlockForIteration(s);
+      }
+    }
+  },
+
+  DictGenerate: (location: LocationValue, K: EastTypeValue, _V: EastTypeValue) => {
+    const keyComparer = compareFor(K);
+    return (size: bigint, keyFn: (i: bigint) => any, valueFn: (i: bigint) => any, onConflict: (v1: any, v2: any, key: any) => any) => {
+      const result = new SortedMap([], keyComparer);
+      for (let i = 0n; i < size; i += 1n) {
+        const k = call_function(location, keyFn, i);
+        const v = call_function(location, valueFn, i);
+        const existing = result.get(k);
+        if (existing !== undefined) {
+          const v2 = call_function(location, onConflict, existing, v, k);
+          result.set(k, v2);
+        } else {
+          result.set(k, v);
+        }
+      }
+      return result;
+    }
+  },
+  DictSize: (_location: LocationValue, _K: EastTypeValue, _V: EastTypeValue) => (d: Map<any, any>) => BigInt(d.size),
+  DictHas: (_location: LocationValue, _K: EastTypeValue, _V: EastTypeValue) => (d: Map<any, any>, key: any) => d.has(key),
+  DictGet: (location: LocationValue, K: EastTypeValue, _V: EastTypeValue) => {
+    const print = printFor(K);
+    return (d: Map<any, any>, key: any) => {
+      const result = d.get(key);
+      if (result === undefined) {
+        throw new EastError(`Dict does not contain key ${print(key)}`, { location });
+      } else {
+        return result;
+      }
+    }
+  },
+  DictGetOrDefault: (location: LocationValue, _K: EastTypeValue, _V: EastTypeValue) => (d: Map<any, any>, key: any, onMissingFn: (key: any) => any) => {
+    const result = d.get(key);
+    if (result === undefined) {
+      return call_function(location, onMissingFn, key);
+    } else {
+      return result;
+    }
+  },
+  DictTryGet: (_location: LocationValue, _K: EastTypeValue, _V: EastTypeValue) => (d: Map<any, any>, key: any) => {
+    const result = d.get(key);
+    if (result === undefined) {
+      return variant("none", null);
+    } else {
+      return variant("some", result);
+    }
+  },
+  DictInsert: (location: LocationValue, K: EastTypeValue, _V: EastTypeValue) => {
+    const print = printFor(K);
+    return (d: Map<any, any>, key: any, value: any) => {
+      if (Object.isFrozen(d)) {
+        throw new EastError("Cannot modify frozen Dict", { location });
+      }
+      if ((iterationLocks.get(d) || 0) > 0) {
+        throw new EastError("Cannot modify Dict during iteration", { location });
+      }
+      const existing = d.get(key);
+      if (existing !== undefined) {
+        throw new EastError(`Dict already contains key ${print(key)}`, { location });
+      } else {
+        d.set(key, value);
+      }
+      return null;
+    }
+  },
+  DictGetOrInsert: (location: LocationValue, _K: EastTypeValue, _V: EastTypeValue) => (d: Map<any, any>, key: any, onMissing: (key: any) => any) => {
+    if (Object.isFrozen(d)) {
+      throw new EastError("Cannot modify frozen Dict", { location });
+    }
+    if ((iterationLocks.get(d) || 0) > 0) {
+      throw new EastError("Cannot modify Dict during iteration", { location });
+    }
+    const existing = d.get(key);
+    if (existing === undefined) {
+      const newValue = call_function(location, onMissing, key);
+      d.set(key, newValue);
+      return newValue;
+    } else {
+      return existing;
+    }
+  },
+  DictInsertOrUpdate: (location: LocationValue, _K: EastTypeValue, _V: EastTypeValue) => (d: Map<any, any>, key: any, value: any, onConflictFn: (existing: any, newValue: any, key: any) => any) => {
+    if (Object.isFrozen(d)) {
+      throw new EastError("Cannot modify frozen Dict", { location });
+    }
+    if ((iterationLocks.get(d) || 0) > 0) {
+      throw new EastError("Cannot modify Dict during iteration", { location });
+    }
+    const existing = d.get(key);
+    if (existing !== undefined) {
+      const result = call_function(location, onConflictFn, existing, value, key);
+      d.set(key, result);
+    } else {
+      d.set(key, value);
+    }
+    return null;
+  },
+  DictUpdate: (location: LocationValue, K: EastTypeValue, _V: EastTypeValue) => {
+    const print = printFor(K);
+    return (d: Map<any, any>, key: any, value: any) => {
+      if (Object.isFrozen(d)) {
+        throw new EastError("Cannot modify frozen Dict", { location });
+      }
+      if (d.has(key)) {
+        d.set(key, value);
+        return null;
+      } else {
+        throw new EastError(`Dict does not contain key ${print(key)}`, { location });
+      }
+    }
+  },
+  DictSwap: (location: LocationValue, K: EastTypeValue, _V: EastTypeValue) => {
+    const print = printFor(K);
+    return (d: Map<any, any>, key: any, value: any) => {
+      if (Object.isFrozen(d)) {
+        throw new EastError("Cannot modify frozen Dict", { location });
+      }
+      let existing = d.get(key);
+      if (existing === undefined) {
+        throw new EastError(`Dict does not contain key ${print(key)}`, { location });
+      }
+      d.set(key, value);
+      return existing;
+    };
+  },
+  DictMerge: (location: LocationValue, _K: EastTypeValue, _V: EastTypeValue) => (d: Map<any, any>, key: any, value: any, mergeFn: (existing: any, value: any, key: any) => any, initialFn: (key: any) => any) => {
+    if (Object.isFrozen(d)) {
+      throw new EastError("Cannot modify frozen Dict", { location });
+    }
+    if ((iterationLocks.get(d) || 0) > 0) {
+      throw new EastError("Cannot modify Dict during iteration", { location });
+    }
+    let existing = d.get(key);
+    if (existing === undefined) {
+      existing = call_function(location, initialFn, key);
+    }
+    const new_value = call_function(location, mergeFn, existing, value, key);
+    d.set(key, new_value);
+    return null;
+  },
+  DictDelete: (location: LocationValue, K: EastTypeValue, _V: EastTypeValue) => {
+    const print = printFor(K);
+    return (d: Map<any, any>, key: any) => {
+      if (Object.isFrozen(d)) {
+        throw new EastError("Cannot modify frozen Dict", { location });
+      }
+      if ((iterationLocks.get(d) || 0) > 0) {
+        throw new EastError("Cannot modify Dict during iteration", { location });
+      }
+      const existed = d.delete(key);
+      if (!existed) {
+        throw new EastError(`Dict does not contain key ${print(key)}`, { location });
+      }
+      return null;
+    }
+  },
+  DictTryDelete: (location: LocationValue, _K: EastTypeValue, _V: EastTypeValue) => (d: Map<any, any>, key: any) => {
+    if (Object.isFrozen(d)) {
+      throw new EastError("Cannot modify frozen Dict", { location });
+    }
+    if ((iterationLocks.get(d) || 0) > 0) {
+      throw new EastError("Cannot modify Dict during iteration", { location });
+    }
+    return d.delete(key);
+  },
+  DictPop: (location: LocationValue, K: EastTypeValue, _V: EastTypeValue) => {
+    const print = printFor(K);
+    return (d: Map<any, any>, key: any) => {
+      if (Object.isFrozen(d)) {
+        throw new EastError("Cannot modify frozen Dict", { location });
+      }
+      if ((iterationLocks.get(d) || 0) > 0) {
+        throw new EastError("Cannot modify Dict during iteration", { location });
+      }
+      const existing = d.get(key);
+      if (existing === undefined) {
+        throw new EastError(`Dict does not contain key ${print(key)}`, { location });
+      } else {
+        d.delete(key);
+        return existing;
+      }
+    };
+  },
+  DictClear: (location: LocationValue, _K: EastTypeValue, _V: EastTypeValue) => (d: Map<any, any>) => {
+    if (Object.isFrozen(d)) {
+      throw new EastError("Cannot modify frozen Dict", { location });
+    }
+    if ((iterationLocks.get(d) || 0) > 0) {
+      throw new EastError("Cannot modify Dict during iteration", { location });
+    }
+    d.clear();
+    return null;
+  },
+  DictUnionInPlace: (location: LocationValue, _K: EastTypeValue, _V: EastTypeValue) => (d1: Map<any, any>, d2: Map<any, any>, onConflict: (v1: any, v2: any, key: any) => any) => {
+    if (Object.isFrozen(d1)) {
+      throw new EastError("Cannot modify frozen Dict", { location });
+    }
+    if ((iterationLocks.get(d1) || 0) > 0) {
+      throw new EastError("Cannot modify Dict during iteration", { location });
+    }
+    d2.forEach((v2, k) => {
+      const v1 = d1.get(k);
+      if (v1 === undefined) {
+        d1.set(k, v2);
+      } else {
+        const new_value = call_function(location, onConflict, v1, v2, k);
+        d1.set(k, new_value);
+      }
+    });
+    return null;
+  },
+  DictMergeAll: (location: LocationValue, _K: EastTypeValue, _V: EastTypeValue) => (d1: SortedMap<any, any>, d2: SortedMap<any, any>, mergeFn: (v1: any, v2: any, key: any) => any, initialFn: (key: any) => any) => {
+    if (Object.isFrozen(d1)) {
+      throw new EastError("Cannot modify frozen Dict", { location });
+    }
+    if ((iterationLocks.get(d1) || 0) > 0) {
+      throw new EastError("Cannot modify Dict during iteration", { location });
+    }
+    d2.forEach((v2, k) => {
+      let v1 = d1.get(k);
+      if (v1 === undefined) {
+        v1 = call_function(location, initialFn, k);
+      }
+      const new_value = call_function(location, mergeFn, v1, v2, k);
+      d1.set(k, new_value);
+    });
+    return null;
+  },
+  DictKeys: (_location: LocationValue, K: EastTypeValue, _V: EastTypeValue) => {
+    const compare = compareFor(K);
+    return (d: Map<any, any>) => {
+      return new SortedSet([...d.keys()], compare);
+    }
+  },
+  DictGetKeys: (location: LocationValue, K: EastTypeValue, _V: EastTypeValue) => {
+    const compare = compareFor(K);
+    return (d: SortedMap<any, any>, keys: SortedSet<any>, onMissing: (key: any) => any) => {
+      const result = new SortedMap([], compare);
+      for (const k of keys) {
+        const v = d.get(k);
+        if (v !== undefined) {
+          result.set(k, v);
+        } else {
+          const new_v = call_function(location, onMissing, k);
+          result.set(k, new_v);
+        }
+      }
+      return result;
+    }
+  },
+  DictForEach: (location: LocationValue, _K: EastTypeValue, _V: EastTypeValue, _T2) => (d: Map<any, any>, f: (k: any, v: any) => any) => {
+    lockForIteration(d);
+    try {
+      d.forEach((v, k) => {
+        call_function(location, f, v, k);
+      });
+      return null;
+    } finally {
+      unlockForIteration(d);
+    }
+  },
+  DictCopy: (_location: LocationValue, K: EastTypeValue, _V: EastTypeValue) => {
+    const compare = compareFor(K);
+    return (d: SortedMap<any, any>) => {
+      return new SortedMap([...d], compare);
+    }
+  },
+  DictMap: (location: LocationValue, K: EastTypeValue, _V: EastTypeValue, _V2: EastTypeValue) => {
+    const compare = compareFor(K);
+    return (d: SortedMap<any, any>, f: (v: any, k: any) => any) => {
+      const result = new SortedMap([], compare);
+      lockForIteration(d);
+      try {
+        for (const [k, v] of d) {
+          const v2 = call_function(location, f, v, k);
+          result.set(k, v2);
+        }
+        return result;
+      } finally {
+        unlockForIteration(d);
+      }
+    }
+  },
+  DictFilter: (location: LocationValue, K: EastTypeValue, _V: EastTypeValue) => {
+    const compare = compareFor(K);
+    return (d: SortedMap<any, any>, f: (v: any, k: any) => any) => {
+      const result = new SortedMap([], compare);
+      lockForIteration(d);
+      try {
+        for (const [k, v] of d) {
+          const keep = call_function(location, f, v, k);
+          if (keep) {
+            result.set(k, v);
+          }
+        }
+        return result;
+      } finally {
+        unlockForIteration(d);
+      }
+    }
+  },
+  DictFilterMap: (location: LocationValue, K: EastTypeValue, _V: EastTypeValue, _V2: EastTypeValue) => {
+    const compare = compareFor(K);
+    return (d: SortedMap<any, any>, f: (v: any, k: any) => option<any>) => {
+      const result = new SortedMap([], compare);
+      lockForIteration(d);
+      try {
+        for (const [k, v] of d) {
+          const v2: option<any> = call_function(location, f, v, k);
+          if (v2.type === "some") {
+            result.set(k, v2.value);
+          }
+        }
+        return result;
+      } finally {
+        unlockForIteration(d);
+      }
+    }
+  },
+  DictFirstMap: (location: LocationValue, _K: EastTypeValue, _V: EastTypeValue, _T2: EastTypeValue) => (d: Map<any, any>, f: (v: any, k: any) => option<any>) => {
+    lockForIteration(d);
+    try {
+      for (const [k, v] of d) {
+        const result: option<any> = call_function(location, f, v, k);
+        if (result.type === "some") {
+          return result;
+        }
+      }
+      return variant("none", null);
+    } finally {
+      unlockForIteration(d);
+    }
+  },
+  DictMapReduce: (location: LocationValue, _K: EastTypeValue, _V: EastTypeValue, _T2: EastTypeValue) => (d: Map<any, any>, mapFn: (v: any, k: any) => any, reduceFn: (x: any, y: any) => any) => {
+    if (d.size === 0) {
+      throw new EastError("Cannot reduce empty dictionary with no initial value", { location });
+    }
+    lockForIteration(d);
+    try {
+      const iterator = d[Symbol.iterator]();
+      const first = iterator.next().value!;
+      let acc = call_function(location, mapFn, first[1], first[0]);
+      for (const [k, v] of iterator) {
+        const mapped = call_function(location, mapFn, v, k);
+        acc = call_function(location, reduceFn, acc, mapped);
+      }
+      return acc;
+    } finally {
+      unlockForIteration(d);
+    }
+  },
+  DictReduce: (location: LocationValue, _K: EastTypeValue, _V: EastTypeValue, _T2: EastTypeValue) => (d: Map<any, any>, f: (acc: any, v: any, k: any) => any, init: any) => {
+    let acc = init;
+    lockForIteration(d);
+    try {
+      for (const [k, v] of d) {
+        acc = call_function(location, f, acc, v, k);
+      }
+      return acc;
+    } finally {
+      unlockForIteration(d);
+    }
+  },
+  DictToArray: (location: LocationValue, _K: EastTypeValue, _V: EastTypeValue, _T2: EastTypeValue) => (d: Map<any, any>, valueFn: (v: any, k: any) => any) => {
+    const ret = [];
+    lockForIteration(d);
+    try {
+      for (const [k, v] of d) {
+        const v2 = call_function(location, valueFn, v, k);
+        ret.push(v2);
+      }
+      return ret;
+    } finally {
+      unlockForIteration(d);
+    }
+  },
+  DictToSet: (location: LocationValue, _K: EastTypeValue, _V: EastTypeValue, K2: EastTypeValue) => {
+    const compare = compareFor(K2);
+    return (d: SortedMap<any, any>, fn: (v: any, k: any) => any) => {
+      const result = new SortedSet([], compare);
+      lockForIteration(d);
+      try {
+        for (const [k, v] of d) {
+          const k2 = call_function(location, fn, v, k);
+          result.add(k2);
+        }
+        return result;
+      } finally {
+        unlockForIteration(d);
+      }
+    }
+  },
+  DictToDict: (location: LocationValue, K: EastTypeValue, _V: EastTypeValue, K2: EastTypeValue, _V2: EastTypeValue) => {
+    const compare = compareFor(K2);
+    return (d: Map<any, any>, keyFn: (v: any, k: any) => any, valueFn: (v: any, k: any) => any, onConflict: (v1: any, v2: any, k: any) => any) => {
+      const result = new SortedMap([], compare);
+      lockForIteration(d);
+      try {
+        for (const [k, v] of d) {
+          const k2 = call_function(location, keyFn, v, k);
+          const v2 = call_function(location, valueFn, v, k);
+          const existing = result.get(k2);
+          if (existing !== undefined) {
+            const v3 = call_function(location, onConflict, existing, v2, k2);
+            result.set(k2, v3);
+          } else {
+            result.set(k2, v2);
+          }
+        }
+        return result;
+      } finally {
+        unlockForIteration(d);
+      }
+    }
+  },
+  DictFlattenToArray: (location: LocationValue, _K: EastTypeValue, _V: EastTypeValue, _T2: EastTypeValue) => (d: Map<any, any>, fn: (key: any, value: any) => any[]) => {
+    const ret = [];
+    lockForIteration(d);
+    try {
+      for (const [k, v] of d.entries()) {
+        const subarray = call_function(location, fn, v, k);
+        for (const item of subarray) {
+          ret.push(item);
+        }
+      }
+      return ret;
+    } finally {
+      unlockForIteration(d);
+    }
+  },
+  DictFlattenToSet: (location: LocationValue, _K: EastTypeValue, _V: EastTypeValue, K2: EastTypeValue) => {
+    const compare = compareFor(K2);
+    return (d: Map<any, any>, fn: (key: any, value: any) => any[]) => {
+      const result = new SortedSet([], compare);
+      lockForIteration(d);
+      try {
+        for (const [k, v] of d.entries()) {
+          const subset = call_function(location, fn, v, k);
+          for (const k2 of subset) {
+            result.add(k2);
+          }
+        }
+        return result;
+      } finally {
+        unlockForIteration(d);
+      }
+    }
+  },
+  DictFlattenToDict: (location: LocationValue, _K: EastTypeValue, _V: EastTypeValue, K2: EastTypeValue, _V2: EastTypeValue) => {
+    const compare = compareFor(K2);
+    return (d: Map<any, any>, fn: (key: any, value: any) => any[], onConflict: (v1: any, v2: any, k: any) => null) => {
+      const result = new SortedMap([], compare);
+      lockForIteration(d);
+      try {
+        for (const [k, v] of d.entries()) {
+          const subdict = call_function(location, fn, v, k);
+          for (const [k2, v2] of subdict.entries()) {
+            const existing = result.get(k2);
+            if (existing === undefined) {
+              result.set(k2, v2);
+            } else {
+              const new_v2 = call_function(location, onConflict, existing, v2, k2);
+              result.set(k2, new_v2);
+            }
+          }
+        }
+        return result;
+      } finally {
+        unlockForIteration(d);
+      }
+    }
+  },
+  DictGroupFold: (location: LocationValue, _K: EastTypeValue, _V: EastTypeValue, K2: EastTypeValue, _T2: EastTypeValue) => {
+    const compare = compareFor(K2);
+    return (d: Map<any, any>, keyFn: (v: any, k: any) => any, init: (k2: any) => any, folder: (acc: any, v: any, k: any) => any) => {
+      const result = new SortedMap([], compare);
+      lockForIteration(d);
+      try {
+        for (const [k, v] of d.entries()) {
+          const k2 = call_function(location, keyFn, v, k);
+          let existing = result.get(k2);
+          if (existing === undefined) {
+            existing = call_function(location, init, k2);
+          }
+          const new_val = call_function(location, folder, existing, v, k);
+          result.set(k2, new_val);
+        }
+        return result;
+      } finally {
+        unlockForIteration(d);
+      }
+    }
+  },
+}
+
+/** @internal */
+export function applyTypeParameters(t: EastTypeValue | string, params: Map<string, EastTypeValue>): EastTypeValue {
+  if (typeof(t) === "string") {
+    let ret = params.get(t);
+    if (ret === undefined) {
+      throw new Error(`Unable to find type parameter ${JSON.stringify(t)}`);
+    }
+    return ret;
+  } else if (t.type === "Null" || t.type === "Boolean" || t.type === "Integer" || t.type === "Float" || t.type === "String" || t.type === "DateTime" || t.type ==="Blob" || t.type === "Never") {
+    return t;
+  } else if (t.type === "Ref") {
+    return variant("Ref", applyTypeParameters(t.value, params));
+  } else if (t.type === "Array") {
+    return variant("Array", applyTypeParameters(t.value, params));
+  } else if (t.type === "Set") {
+    return variant("Set", applyTypeParameters(t.value, params));
+  } else if (t.type === "Dict") {
+    return variant("Dict", { key: applyTypeParameters(t.value.key, params), value: applyTypeParameters(t.value.value, params) });
+  } else if (t.type === "Struct") {
+    return variant("Struct", t.value.map(({ name, type }) => ({ name, type: applyTypeParameters(type, params) })));
+  } else if (t.type === "Variant") {
+    return variant("Variant", t.value.map(({ name, type }) => ({ name, type: applyTypeParameters(type, params) })));
+  } else if (t.type === "Recursive") {
+    return t;
+  } else if (t.type === "Function") {
+    // TODO platforms?
+    return variant("Function", { inputs: t.value.inputs.map(i => applyTypeParameters(i, params)), output: applyTypeParameters(t.value.output, params), platforms: [] } );
+  } else {
+    throw new Error(`Unhandled type ${((t satisfies never) as EastTypeValue).type}`)
+  }
+}
