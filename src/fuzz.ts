@@ -28,6 +28,9 @@ import { printFor } from "./serialization/east.js";
 import { toEastTypeValue, type EastTypeValue } from "./type_of_type.js";
 import { ref } from "./containers/ref.js";
 
+// TODO generate RefType
+// TODO generate RecursiveType
+
 /**
  * Generates a random East type for fuzz testing.
  *
@@ -215,6 +218,8 @@ export function randomValueFor(type: EastTypeValue | EastType): () => any {
     throw new Error("Cannot generate values for Recursive type");
   } else if (type.type === "Function") {
     throw new Error("Cannot generate values for Function type");
+  } else if (type.type === "AsyncFunction") {
+    throw new Error("Cannot generate values for AsyncFunction type");
   } else {
     throw new Error(`Unhandled type: ${printType(type)}`);
   }

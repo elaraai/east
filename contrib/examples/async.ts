@@ -2,10 +2,10 @@ import { East, IntegerType, IRType, NullType, StringType, toJSONFor } from "../.
 const { str } = East;
 
 const log = East.platform("log", [StringType], NullType);
-const fetch_status = East.platform("fetch_status", [StringType], StringType);
+const fetch_status = East.asyncPlatform("fetch_status", [StringType], StringType);
 const time_ns = East.platform("time_ns", [], IntegerType);
 
-const fetchStatus = East.function([StringType], NullType, ($, url) => {
+const fetchStatus = East.asyncFunction([StringType], NullType, ($, url) => {
     $(log(str`Fetching URL: ${url}`));
     const t1 = $.let(time_ns());
     const response = $(fetch_status(url));
@@ -15,14 +15,14 @@ const fetchStatus = East.function([StringType], NullType, ($, url) => {
 
 const platform = [
     log.implement(console.log),
-    fetch_status.implementAsync(async (url: string) => {
+    fetch_status.implement(async (url: string) => {
         const response = await fetch(url);
         return `${response.status} (${response.statusText})`;
     }),
     time_ns.implement(() => process.hrtime.bigint()),
 ];
 
-const fetchStatusCompiled = fetchStatus.toIR().compileAsync(platform);
+const fetchStatusCompiled = fetchStatus.toIR().compile(platform);
 const increment_ir = fetchStatus.toIR().ir;  // Extract raw IR from wrapper
 
 // Serialize IR to JSON using East's serialization

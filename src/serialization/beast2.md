@@ -68,9 +68,11 @@ All lengths/counts use **varint unsigned** encoding (LEB128).
 | **Array** | Varint length + N values (each encoded per element type) | `array` |
 | **Set** | Varint length + N keys (sorted order) | `array` with `"east": "set"` metadata |
 | **Dict** | Varint length + N × (key, value) pairs (sorted by key) | `array` of records with `"east": "dict"` metadata |
+| **Ref** | Contained value | |
 | **Struct** | Fields in declaration order *(no length - known from type)* | `record` |
 | **Variant** | Varint tag index + value (encoded per case type) | Avro union of records |
 | **Function** | *(not serializable - error)* | *(not supported)* |
+| **AsyncFunction** | *(not serializable - error)* | *(not supported)* |
 
 ### Type Encoding
 

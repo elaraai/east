@@ -115,6 +115,7 @@ East supports a rich type system optimized for business logic and data processin
 | `RecursiveType<T>` | `ValueTypeOf<T>` | Immutable | Recursive references for trees, DAGs, and circular structures |
 | **Function Type** | | | |
 | `FunctionType<I, O>` | Function | Immutable | First-class functions/closures |
+| `AsyncFunctionType<I, O>` | Function returning `Promise` | Immutable | Asynchronous functions/closures |
 
 ## Documentation
 
@@ -143,6 +144,9 @@ const platform = {
 // Compile with platform
 const compiled = East.compile(myFunction, platform);
 ```
+
+East also supports `asyncPlatform` functions (which may be called by `AsyncFunctionType` user-defined functions), inserting `await` automatically as required.
+In the above, `readFile` could have be implented using `fs.promises.readFile` to take advantage of concurrency.
 
 ### Fluent Interface
 

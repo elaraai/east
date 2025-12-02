@@ -138,7 +138,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     const keyAst = valueOrExprToAstTyped(key, IntegerType);
 
     if (defaultFn !== undefined) {
-      const defaultFnAst = valueOrExprToAstTyped(defaultFn, FunctionType([IntegerType], this.value_type as EastType, null));
+      const defaultFnAst = valueOrExprToAstTyped(defaultFn, FunctionType([IntegerType], this.value_type as EastType));
       return this[FactorySymbol]({
         ast_type: "Builtin",
         type: this.value_type as EastType,
@@ -232,7 +232,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     const keyAst = valueOrExprToAstTyped(key, IntegerType);
     const value2Type = value[TypeSymbol];
 
-    const updateFnExpr = Expr.from(updateFn as any, FunctionType([value2Type, this.value_type, IntegerType], this.value_type, null));
+    const updateFnExpr = Expr.from(updateFn as any, FunctionType([value2Type, this.value_type, IntegerType], this.value_type));
 
     return this[FactorySymbol]({
       ast_type: "Builtin",
@@ -453,7 +453,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
       throw new Error(`Expected array type for mergeAll, got ${array_type ? printType(array_type) : "unknown"}`);
     }
     const value2Type = array_type.value;
-    const mergeFnExpr = Expr.from(mergeFn as any, FunctionType([this.value_type as EastType, value2Type, IntegerType], this.value_type as EastType, null));
+    const mergeFnExpr = Expr.from(mergeFn as any, FunctionType([this.value_type as EastType, value2Type, IntegerType], this.value_type as EastType));
 
     return this[FactorySymbol]({
       ast_type: "Builtin",
@@ -966,7 +966,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
       const default_function = Expr.function([IntegerType], this.value_type as EastType, ($, key) => $.error(Expr.str`Cannot get key ${key} from array`, location));
       default_function_ast = Expr.ast(default_function);
     } else {
-      const default_function_expr = Expr.from(onMissing, FunctionType([IntegerType], this.value_type, null));
+      const default_function_expr = Expr.from(onMissing, FunctionType([IntegerType], this.value_type));
 
       default_function_ast = Expr.ast(default_function_expr);
     }
@@ -1237,7 +1237,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
   filterMap<T2>(fn: Expr<FunctionType<[T, IntegerType], OptionType<T2>>>): ArrayExpr<T2>;
   filterMap<F extends (($: BlockBuilder<NeverType>, v: ExprType<T>, k: ExprType<IntegerType>) => any)>(fn: F): ArrayExpr<TypeOf<ReturnType<F>> extends VariantType<infer U> ? "some" extends keyof U ? U["some"] : NeverType : NeverType>;
   filterMap(fn: any): ArrayExpr<any> {
-    const fnAst = valueOrExprToAstTyped(fn, FunctionType([this.value_type, IntegerType], undefined, null));
+    const fnAst = valueOrExprToAstTyped(fn, FunctionType([this.value_type, IntegerType], undefined));
 
     const returnType = fnAst.type.output as EastType;
 
@@ -1275,7 +1275,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
   firstMap<T2>(fn: Expr<FunctionType<[T, IntegerType], OptionType<T2>>>): ExprType<OptionType<T2>>;
   firstMap<F extends (($: BlockBuilder<NeverType>, v: ExprType<T>, k: ExprType<IntegerType>) => any)>(fn: F): ExprType<TypeOf<ReturnType<F>>>;
   firstMap(fn: any): Expr {
-    const fnAst = valueOrExprToAstTyped(fn, FunctionType([this.value_type, IntegerType], undefined, null));
+    const fnAst = valueOrExprToAstTyped(fn, FunctionType([this.value_type, IntegerType], undefined));
 
     const returnType = fnAst.type.output as EastType;
 
@@ -1455,7 +1455,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     const initAst = valueOrExprToAst(init);
     const returnType = initAst.type;
 
-    const combineAst = valueOrExprToAstTyped(combineFn, FunctionType([returnType, this.value_type, IntegerType], returnType, null));
+    const combineAst = valueOrExprToAstTyped(combineFn, FunctionType([returnType, this.value_type, IntegerType], returnType));
 
     return this[FactorySymbol]({
       ast_type: "Builtin",
@@ -1478,9 +1478,9 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
   mapReduce<T2>(mapFn: Expr<FunctionType<[value: T, key: IntegerType], T2>>, combineFn: SubtypeExprOrValue<FunctionType<[previous: NoInfer<T2>, value: NoInfer<T2>], NoInfer<T2>>>): ExprType<T2>
   mapReduce<F extends ($: BlockBuilder<NeverType>, value: ExprType<T>, key: IntegerExpr) => any>(mapFn: F, combineFn: SubtypeExprOrValue<FunctionType<[previous: NoInfer<TypeOf<ReturnType<F>>>, value: NoInfer<TypeOf<ReturnType<F>>>], NoInfer<TypeOf<ReturnType<F>>>>>): ExprType<TypeOf<ReturnType<F>>>
   mapReduce<T2>(mapFn:any, combineFn: any): Expr {
-    const mapAst = valueOrExprToAstTyped(mapFn, FunctionType([this.value_type, IntegerType], undefined, null));
+    const mapAst = valueOrExprToAstTyped(mapFn, FunctionType([this.value_type, IntegerType], undefined));
     const mapType = mapAst.type.output as EastType;
-    const combineAst = valueOrExprToAstTyped(combineFn, FunctionType([mapType, mapType], mapType, null));
+    const combineAst = valueOrExprToAstTyped(combineFn, FunctionType([mapType, mapType], mapType));
 
     return this[FactorySymbol]({
       ast_type: "Builtin",
@@ -1537,7 +1537,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
       return Expr.match(result, { some: () => false, none: () => true });
     }
 
-    const fnAst = valueOrExprToAstTyped(fn, FunctionType([this.value_type, IntegerType], BooleanType, null));
+    const fnAst = valueOrExprToAstTyped(fn, FunctionType([this.value_type, IntegerType], BooleanType));
 
     // Short-circuit on first false value
     const result = this.firstMap(($, v, k) => {
@@ -1590,7 +1590,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
       return Expr.match(result, { some: () => true, none: () => false });
     }
 
-    const fnAst = valueOrExprToAstTyped(fn, FunctionType([this.value_type, IntegerType], BooleanType, null));
+    const fnAst = valueOrExprToAstTyped(fn, FunctionType([this.value_type, IntegerType], BooleanType));
 
     // Short-circuit on first true value
     const result = this.firstMap(($, v, k) => {
@@ -1639,7 +1639,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
       const zero = isTypeEqual(this.value_type as EastType, IntegerType) ? 0n : 0.0;
       return this.reduce(($, previous, value) => previous.add(value as any) as any, zero) as any;
     } else {
-      const fnAst = valueOrExprToAstTyped(fn, FunctionType([this.value_type, IntegerType], undefined, null));
+      const fnAst = valueOrExprToAstTyped(fn, FunctionType([this.value_type, IntegerType], undefined));
       const returnType = fnAst.type.output as EastType;
       if (!(isTypeEqual(returnType, IntegerType) || isTypeEqual(returnType, FloatType))) {
         throw new Error(`Can only perform sum on array of numbers (Integer or Float), got ${printType(returnType)}`);
@@ -1693,7 +1693,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
         throw new Error(`Can only perform sum on array of numbers (Integer or Float), got ${printType(this.value_type as EastType)}`);
       }
     } else {
-      const fnAst = valueOrExprToAstTyped(fn, FunctionType([this.value_type, IntegerType], undefined, null));
+      const fnAst = valueOrExprToAstTyped(fn, FunctionType([this.value_type, IntegerType], undefined));
       const returnType = fnAst.type.output as EastType;
       if (isTypeEqual(returnType, IntegerType)) {
         return this.reduce(($, previous: any, value, key) => previous.add((Expr.fromAst(fnAst)(value as any, key) as IntegerExpr).toFloat()) as FloatExpr, 0.0).divide(this.size().toFloat());
@@ -2072,7 +2072,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
   toSet<KeyFn extends (($: BlockBuilder<NeverType>, v: ExprType<T>, k: ExprType<IntegerType>) => any)>(keyFn: KeyFn): SetExpr<TypeOf<ReturnType<KeyFn>>>;
   toSet(): SetExpr<T>
   toSet(keyFn?: any): SetExpr<any> {
-    const keyFnAst = valueOrExprToAstTyped(keyFn ?? ((_$: any, x: any) => x), FunctionType([this.value_type, IntegerType], undefined, null));
+    const keyFnAst = valueOrExprToAstTyped(keyFn ?? ((_$: any, x: any) => x), FunctionType([this.value_type, IntegerType], undefined));
 
     const keyType = keyFnAst.type.output as EastType;
 
@@ -2134,10 +2134,10 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
   toDict<KeyFn extends (($: BlockBuilder<NeverType>, v: ExprType<T>, k: ExprType<IntegerType>) => any)>(keyFn: KeyFn): DictExpr<TypeOf<ReturnType<KeyFn>>, T>;
   toDict(): DictExpr<IntegerType, T>
   toDict(keyFn?: any, valueFn?: any, onConflictFn?: any): DictExpr<any, any> {
-    const keyFnAst = valueOrExprToAstTyped(keyFn ?? ((_$: any, x: any, i: any) => i), FunctionType([this.value_type, IntegerType], undefined, null));
+    const keyFnAst = valueOrExprToAstTyped(keyFn ?? ((_$: any, x: any, i: any) => i), FunctionType([this.value_type, IntegerType], undefined));
     const keyType = keyFnAst.type.output as EastType;
 
-    const valueFnAst = valueOrExprToAstTyped(valueFn ?? ((_$: any, x: any) => x), FunctionType([this.value_type, IntegerType], undefined, null));
+    const valueFnAst = valueOrExprToAstTyped(valueFn ?? ((_$: any, x: any) => x), FunctionType([this.value_type, IntegerType], undefined));
     const valueType = valueFnAst.type.output as EastType;
 
     let onConflictAst;
@@ -2146,7 +2146,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
       const onConflictFunction = Expr.function([valueType, valueType, keyType], valueType, ($, existing, value, key) => $.error(Expr.str`Cannot insert duplicate key ${key} into dict`, location));
       onConflictAst = Expr.ast(onConflictFunction);
     } else {
-      onConflictAst = valueOrExprToAstTyped(onConflictFn as any, FunctionType([valueType, valueType, keyType], valueType, null));
+      onConflictAst = valueOrExprToAstTyped(onConflictFn as any, FunctionType([valueType, valueType, keyType], valueType));
     }
 
     return this[FactorySymbol]({
@@ -2198,7 +2198,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
   flatMap<F extends (($: BlockBuilder<NeverType>, v: ExprType<T>, k: ExprType<IntegerType>) => any)>(fn: F): TypeOf<ReturnType<F>> extends ArrayType<infer U> ? ArrayExpr<U> : never;
   flatMap(): T extends ArrayType<infer U> ? ArrayExpr<U> : never;
   flatMap(fn?: any): ArrayExpr<any> {
-    const fnAst = valueOrExprToAstTyped(fn ?? ((_$: any, x: any) => x), FunctionType([this.value_type, IntegerType], undefined, null));
+    const fnAst = valueOrExprToAstTyped(fn ?? ((_$: any, x: any) => x), FunctionType([this.value_type, IntegerType], undefined));
 
     const returnType = fnAst.type.output as EastType;
     if (returnType.type !== "Array") {
@@ -2241,7 +2241,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
   flattenToSet<F extends (($: BlockBuilder<NeverType>, v: ExprType<T>, k: ExprType<IntegerType>) => any)>(fn: F): TypeOf<ReturnType<F>> extends SetType<infer U> ? SetExpr<U> : never;
   flattenToSet(): T extends SetType<infer U> ? SetExpr<U> : never;
   flattenToSet(fn?: any): SetExpr<any> {
-    const fnAst = valueOrExprToAstTyped(fn ?? ((_$: any, x: any) => x), FunctionType([this.value_type, IntegerType], undefined, null));
+    const fnAst = valueOrExprToAstTyped(fn ?? ((_$: any, x: any) => x), FunctionType([this.value_type, IntegerType], undefined));
     
     const returnType = fnAst.type.output as EastType;
     if (returnType.type !== "Set") {
@@ -2287,7 +2287,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
   flattenToDict<F extends (($: BlockBuilder<NeverType>, v: ExprType<T>, k: ExprType<IntegerType>) => any)>(fn: F, onConflict?: SubtypeExprOrValue<FunctionType<[TypeOf<ReturnType<NoInfer<F>>> extends DictType<any, infer V2> ? V2 : never, TypeOf<ReturnType<NoInfer<F>>> extends DictType<any, infer V2> ? V2 : never, TypeOf<ReturnType<NoInfer<F>>> extends DictType<infer K2, any> ? K2 : never], TypeOf<ReturnType<NoInfer<F>>> extends DictType<any, infer V2> ? V2 : never>>): TypeOf<ReturnType<F>> extends DictType<infer K2, infer V2> ? DictExpr<K2, V2> : never;
   flattenToDict(): T extends DictType<infer K2, infer V2> ? DictExpr<K2, V2> : never;
   flattenToDict(fn?: any, onConflictFn?: any): DictExpr<any, any> {
-    const fnAst = valueOrExprToAstTyped(fn ?? ((_$: any, x: any) => x), FunctionType([this.value_type, IntegerType], undefined, null));
+    const fnAst = valueOrExprToAstTyped(fn ?? ((_$: any, x: any) => x), FunctionType([this.value_type, IntegerType], undefined));
     
     const returnType = fnAst.type.output as EastType;
     if (returnType.type !== "Dict") {
@@ -2302,7 +2302,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
       const onConflictFunction = Expr.function([valueType, valueType, keyType], valueType, ($, existing, value, key) => $.error(Expr.str`Cannot insert duplicate key ${key} into dict`, location));
       onConflictAst = Expr.ast(onConflictFunction);
     } else {
-      onConflictAst = valueOrExprToAstTyped(onConflictFn as any, FunctionType([valueType, valueType, keyType], valueType, null));
+      onConflictAst = valueOrExprToAstTyped(onConflictFn as any, FunctionType([valueType, valueType, keyType], valueType));
     }
 
     return this[FactorySymbol]({
@@ -2365,13 +2365,13 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
   groupReduce(keyFn: any, initFn: any, reduceFn: any): Expr {
     // Note - initFn has to be before reduceFn, otherwise the TypeScript type inference doesn't work properly
 
-    const keyFnAst = valueOrExprToAstTyped(keyFn, FunctionType([this.value_type, IntegerType], undefined, null));
+    const keyFnAst = valueOrExprToAstTyped(keyFn, FunctionType([this.value_type, IntegerType], undefined));
     const keyType = keyFnAst.type.output as EastType;
     
-    const initFnAst = valueOrExprToAstTyped(initFn, FunctionType([keyType], undefined, null));
+    const initFnAst = valueOrExprToAstTyped(initFn, FunctionType([keyType], undefined));
     const initType = initFnAst.type.output as EastType;
 
-    const reduceFnAst = valueOrExprToAstTyped(reduceFn, FunctionType([initType, this.value_type, IntegerType], initType, null));
+    const reduceFnAst = valueOrExprToAstTyped(reduceFn, FunctionType([initType, this.value_type, IntegerType], initType));
 
     return this[FactorySymbol]({
       ast_type: "Builtin",
@@ -2409,7 +2409,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
   groupSize<KeyFn extends (($: BlockBuilder<NeverType>, x: ExprType<T>, i: IntegerExpr) => any)>(keyFn: KeyFn): DictExpr<TypeOf<ReturnType<KeyFn>>, IntegerType>
   groupSize(): DictExpr<T, IntegerType>
   groupSize(keyFn?: any): DictExpr<any, IntegerType> {
-    const keyFnAst = valueOrExprToAstTyped(keyFn ?? ((_$: any, x: any) => x), FunctionType([this.value_type, IntegerType], undefined, null));
+    const keyFnAst = valueOrExprToAstTyped(keyFn ?? ((_$: any, x: any) => x), FunctionType([this.value_type, IntegerType], undefined));
     return this.toDict(
       ((_$: any, elem: any, idx: any) => Expr.fromAst(keyFnAst)(elem, idx)) as any,
       ((_$: any) => 1n) as any,
@@ -2436,8 +2436,8 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
   groupEvery<K2>(keyFn: Expr<FunctionType<[T, IntegerType], K2>>, predFn: SubtypeExprOrValue<FunctionType<[T, IntegerType], BooleanType>>): DictExpr<K2, BooleanType>
   groupEvery<KeyFn extends (($: BlockBuilder<NeverType>, x: ExprType<T>, i: IntegerExpr) => any)>(keyFn: KeyFn, predFn: SubtypeExprOrValue<FunctionType<[T, IntegerType], BooleanType>>): DictExpr<TypeOf<ReturnType<KeyFn>>, BooleanType>
   groupEvery(keyFn: any, predFn: any): DictExpr<any, BooleanType> {
-    const keyFnAst = valueOrExprToAstTyped(keyFn, FunctionType([this.value_type, IntegerType], undefined, null));
-    const predFnAst = valueOrExprToAstTyped(predFn, FunctionType([this.value_type, IntegerType], BooleanType, null));
+    const keyFnAst = valueOrExprToAstTyped(keyFn, FunctionType([this.value_type, IntegerType], undefined));
+    const predFnAst = valueOrExprToAstTyped(predFn, FunctionType([this.value_type, IntegerType], BooleanType));
     return this.groupReduce(
       ((_$: any, elem: any, idx: any) => Expr.fromAst(keyFnAst)(elem, idx)) as any,
       (() => true) as any,
@@ -2467,8 +2467,8 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
   groupSome<K2>(keyFn: Expr<FunctionType<[T, IntegerType], K2>>, predFn: SubtypeExprOrValue<FunctionType<[T, IntegerType], BooleanType>>): DictExpr<K2, BooleanType>
   groupSome<KeyFn extends (($: BlockBuilder<NeverType>, x: ExprType<T>, i: IntegerExpr) => any)>(keyFn: KeyFn, predFn: SubtypeExprOrValue<FunctionType<[T, IntegerType], BooleanType>>): DictExpr<TypeOf<ReturnType<KeyFn>>, BooleanType>
   groupSome(keyFn: any, predFn: any): DictExpr<any, BooleanType> {
-    const keyFnAst = valueOrExprToAstTyped(keyFn, FunctionType([this.value_type, IntegerType], undefined, null));
-    const predFnAst = valueOrExprToAstTyped(predFn, FunctionType([this.value_type, IntegerType], BooleanType, null));
+    const keyFnAst = valueOrExprToAstTyped(keyFn, FunctionType([this.value_type, IntegerType], undefined));
+    const predFnAst = valueOrExprToAstTyped(predFn, FunctionType([this.value_type, IntegerType], BooleanType));
     return this.groupReduce(
       ((_$: any, elem: any, idx: any) => Expr.fromAst(keyFnAst)(elem, idx)) as any,
       (() => false) as any,
@@ -2513,7 +2513,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
   groupFindAll<K2>(keyFn: Expr<FunctionType<[T, IntegerType], K2>>, value: SubtypeExprOrValue<T>): DictExpr<K2, ArrayType<IntegerType>>
   groupFindAll<KeyFn extends (($: BlockBuilder<NeverType>, x: ExprType<T>, i: IntegerExpr) => any)>(keyFn: KeyFn, value: SubtypeExprOrValue<T>): DictExpr<TypeOf<ReturnType<KeyFn>>, ArrayType<IntegerType>>
   groupFindAll(keyFn: any, value: any, projFn?: any): DictExpr<any, ArrayType<IntegerType>> {
-    const keyFnAst = valueOrExprToAstTyped(keyFn, FunctionType([this.value_type, IntegerType], undefined, null));
+    const keyFnAst = valueOrExprToAstTyped(keyFn, FunctionType([this.value_type, IntegerType], undefined));
     const keyFnExpr = Expr.fromAst(keyFnAst);
 
     if (projFn === undefined) {
@@ -2577,7 +2577,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
   groupFindFirst<K2>(keyFn: Expr<FunctionType<[T, IntegerType], K2>>, value: SubtypeExprOrValue<T>): DictExpr<K2, OptionType<IntegerType>>
   groupFindFirst<KeyFn extends (($: BlockBuilder<NeverType>, x: ExprType<T>, i: IntegerExpr) => any)>(keyFn: KeyFn, value: SubtypeExprOrValue<T>): DictExpr<TypeOf<ReturnType<KeyFn>>, OptionType<IntegerType>>
   groupFindFirst(keyFn: any, value: any, projFn?: any): DictExpr<any, OptionType<IntegerType>> {
-    const keyFnAst = valueOrExprToAstTyped(keyFn, FunctionType([this.value_type, IntegerType], undefined, null));
+    const keyFnAst = valueOrExprToAstTyped(keyFn, FunctionType([this.value_type, IntegerType], undefined));
     const keyFnExpr = Expr.fromAst(keyFnAst);
 
     if (projFn === undefined) {
@@ -2635,8 +2635,8 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
   groupFindMinimum<K2>(keyFn: Expr<FunctionType<[T, IntegerType], K2>>, byFn?: SubtypeExprOrValue<FunctionType<[T, IntegerType], any>>): DictExpr<K2, IntegerType>
   groupFindMinimum<KeyFn extends (($: BlockBuilder<NeverType>, x: ExprType<T>, i: IntegerExpr) => any)>(keyFn: KeyFn, byFn?: SubtypeExprOrValue<FunctionType<[T, IntegerType], any>>): DictExpr<TypeOf<ReturnType<KeyFn>>, IntegerType>
   groupFindMinimum(keyFn: any, byFn?: any): DictExpr<any, IntegerType> {
-    const keyFnAst = valueOrExprToAstTyped(keyFn, FunctionType([this.value_type, IntegerType], undefined, null));
-    const byFnAst = valueOrExprToAstTyped(byFn ?? ((_$: any, x: any) => x), FunctionType([this.value_type, IntegerType], undefined, null));
+    const keyFnAst = valueOrExprToAstTyped(keyFn, FunctionType([this.value_type, IntegerType], undefined));
+    const byFnAst = valueOrExprToAstTyped(byFn ?? ((_$: any, x: any) => x), FunctionType([this.value_type, IntegerType], undefined));
     return this.toDict(
       ((_$: any, elem: any, idx: any) => Expr.fromAst(keyFnAst)(elem, idx)) as any,
       ((_$: any, elem: any, idx: any) => ({ by: Expr.fromAst(byFnAst)(elem, idx), index: idx })) as any,
@@ -2660,8 +2660,8 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
   groupFindMaximum<K2>(keyFn: Expr<FunctionType<[T, IntegerType], K2>>, byFn?: SubtypeExprOrValue<FunctionType<[T, IntegerType], any>>): DictExpr<K2, IntegerType>
   groupFindMaximum<KeyFn extends (($: BlockBuilder<NeverType>, x: ExprType<T>, i: IntegerExpr) => any)>(keyFn: KeyFn, byFn?: SubtypeExprOrValue<FunctionType<[T, IntegerType], any>>): DictExpr<TypeOf<ReturnType<KeyFn>>, IntegerType>
   groupFindMaximum(keyFn: any, byFn?: any): DictExpr<any, IntegerType> {
-    const keyFnAst = valueOrExprToAstTyped(keyFn, FunctionType([this.value_type, IntegerType], undefined, null));
-    const byFnAst = valueOrExprToAstTyped(byFn ?? ((_$: any, x: any) => x), FunctionType([this.value_type, IntegerType], undefined, null));
+    const keyFnAst = valueOrExprToAstTyped(keyFn, FunctionType([this.value_type, IntegerType], undefined));
+    const byFnAst = valueOrExprToAstTyped(byFn ?? ((_$: any, x: any) => x), FunctionType([this.value_type, IntegerType], undefined));
     return this.toDict(
       ((_$: any, elem: any, idx: any) => Expr.fromAst(keyFnAst)(elem, idx)) as any,
       ((_$: any, elem: any, idx: any) => ({ by: Expr.fromAst(byFnAst)(elem, idx), index: idx })) as any,
@@ -2691,8 +2691,8 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
   groupSum<K2>(keyFn: Expr<FunctionType<[T, IntegerType], K2>>): T extends IntegerType | FloatType ? DictExpr<K2, T> : never
   groupSum<KeyFn extends (($: BlockBuilder<NeverType>, x: ExprType<T>, i: IntegerExpr) => any)>(keyFn: KeyFn): T extends IntegerType | FloatType ? DictExpr<TypeOf<ReturnType<KeyFn>>, T> : never
   groupSum(keyFn: any, valueFn?: any): DictExpr<any, any> {
-    const keyFnAst = valueOrExprToAstTyped(keyFn, FunctionType([this.value_type, IntegerType], undefined, null));
-    const valueFnAst = valueOrExprToAstTyped(valueFn ?? ((_$: any, x: any) => x), FunctionType([this.value_type, IntegerType], undefined, null));
+    const keyFnAst = valueOrExprToAstTyped(keyFn, FunctionType([this.value_type, IntegerType], undefined));
+    const valueFnAst = valueOrExprToAstTyped(valueFn ?? ((_$: any, x: any) => x), FunctionType([this.value_type, IntegerType], undefined));
     const valueType = valueFnAst.type.output as EastType;
     const isInteger = isTypeEqual(valueType, IntegerType);
     const isFloat = isTypeEqual(valueType, FloatType);
@@ -2726,8 +2726,8 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
   groupMean<K2>(keyFn: Expr<FunctionType<[T, IntegerType], K2>>): T extends IntegerType | FloatType ? DictExpr<K2, FloatType> : never
   groupMean<KeyFn extends (($: BlockBuilder<NeverType>, x: ExprType<T>, i: IntegerExpr) => any)>(keyFn: KeyFn): T extends IntegerType | FloatType ? DictExpr<TypeOf<ReturnType<KeyFn>>, FloatType> : never
   groupMean(keyFn: any, valueFn?: any): DictExpr<any, FloatType> {
-    const keyFnAst = valueOrExprToAstTyped(keyFn, FunctionType([this.value_type, IntegerType], undefined, null));
-    const valueFnAst = valueOrExprToAstTyped(valueFn ?? ((_$: any, x: any) => x), FunctionType([this.value_type, IntegerType], undefined, null));
+    const keyFnAst = valueOrExprToAstTyped(keyFn, FunctionType([this.value_type, IntegerType], undefined));
+    const valueFnAst = valueOrExprToAstTyped(valueFn ?? ((_$: any, x: any) => x), FunctionType([this.value_type, IntegerType], undefined));
     const valueType = valueFnAst.type.output as EastType;
     const isInteger = isTypeEqual(valueType, IntegerType);
     const isFloat = isTypeEqual(valueType, FloatType);
@@ -2764,8 +2764,8 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
   groupToArrays<K2>(keyFn: Expr<FunctionType<[T, IntegerType], K2>>): DictExpr<K2, ArrayType<T>>
   groupToArrays<KeyFn extends (($: BlockBuilder<NeverType>, x: ExprType<T>, i: IntegerExpr) => any)>(keyFn: KeyFn): DictExpr<TypeOf<ReturnType<KeyFn>>, ArrayType<T>>
   groupToArrays(keyFn: any, valueFn?: any): DictExpr<any, ArrayType<any>> {
-    const keyFnAst = valueOrExprToAstTyped(keyFn, FunctionType([this.value_type, IntegerType], undefined, null));
-    const valueFnAst = valueOrExprToAstTyped(valueFn ?? ((_$: any, x: any) => x), FunctionType([this.value_type, IntegerType], undefined, null));
+    const keyFnAst = valueOrExprToAstTyped(keyFn, FunctionType([this.value_type, IntegerType], undefined));
+    const valueFnAst = valueOrExprToAstTyped(valueFn ?? ((_$: any, x: any) => x), FunctionType([this.value_type, IntegerType], undefined));
     const keyFnExpr = Expr.fromAst(keyFnAst);
     const valueFnExpr = Expr.fromAst(valueFnAst);
     const valueType = valueFnAst.type.output as EastType;
@@ -2800,8 +2800,8 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
   groupToSets<K2>(keyFn: Expr<FunctionType<[T, IntegerType], K2>>): DictExpr<K2, SetType<T>>
   groupToSets<KeyFn extends (($: BlockBuilder<NeverType>, x: ExprType<T>, i: IntegerExpr) => any)>(keyFn: KeyFn): DictExpr<TypeOf<ReturnType<KeyFn>>, SetType<T>>
   groupToSets(keyFn: any, valueFn?: any): DictExpr<any, SetType<any>> {
-    const keyFnAst = valueOrExprToAstTyped(keyFn, FunctionType([this.value_type, IntegerType], undefined, null));
-    const valueFnAst = valueOrExprToAstTyped(valueFn ?? ((_$: any, x: any) => x), FunctionType([this.value_type, IntegerType], undefined, null));
+    const keyFnAst = valueOrExprToAstTyped(keyFn, FunctionType([this.value_type, IntegerType], undefined));
+    const valueFnAst = valueOrExprToAstTyped(valueFn ?? ((_$: any, x: any) => x), FunctionType([this.value_type, IntegerType], undefined));
     const keyFnExpr = Expr.fromAst(keyFnAst);
     const valueFnExpr = Expr.fromAst(valueFnAst);
     const valueType = valueFnAst.type.output as EastType;
@@ -2836,8 +2836,8 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
   groupMinimum<K2>(keyFn: Expr<FunctionType<[T, IntegerType], K2>>): DictExpr<K2, T>
   groupMinimum<KeyFn extends (($: BlockBuilder<NeverType>, x: ExprType<T>, i: IntegerExpr) => any)>(keyFn: KeyFn): DictExpr<TypeOf<ReturnType<KeyFn>>, T>
   groupMinimum(keyFn: any, byFn?: any): DictExpr<any, T> {
-    const keyFnAst = valueOrExprToAstTyped(keyFn, FunctionType([this.value_type, IntegerType], undefined, null));
-    const byFnAst = valueOrExprToAstTyped(byFn ?? ((_$: any, x: any) => x), FunctionType([this.value_type, IntegerType], undefined, null));
+    const keyFnAst = valueOrExprToAstTyped(keyFn, FunctionType([this.value_type, IntegerType], undefined));
+    const byFnAst = valueOrExprToAstTyped(byFn ?? ((_$: any, x: any) => x), FunctionType([this.value_type, IntegerType], undefined));
     return this.toDict(
       ((_$: any, elem: any, idx: any) => Expr.fromAst(keyFnAst)(elem, idx)) as any,
       ((_$: any, elem: any, idx: any) => ({ by: Expr.fromAst(byFnAst)(elem, idx), elem })) as any,
@@ -2865,8 +2865,8 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
   groupMaximum<K2>(keyFn: Expr<FunctionType<[T, IntegerType], K2>>): DictExpr<K2, T>
   groupMaximum<KeyFn extends (($: BlockBuilder<NeverType>, x: ExprType<T>, i: IntegerExpr) => any)>(keyFn: KeyFn): DictExpr<TypeOf<ReturnType<KeyFn>>, T>
   groupMaximum(keyFn: any, byFn?: any): DictExpr<any, T> {
-    const keyFnAst = valueOrExprToAstTyped(keyFn, FunctionType([this.value_type, IntegerType], undefined, null));
-    const byFnAst = valueOrExprToAstTyped(byFn ?? ((_$: any, x: any) => x), FunctionType([this.value_type, IntegerType], undefined, null));
+    const keyFnAst = valueOrExprToAstTyped(keyFn, FunctionType([this.value_type, IntegerType], undefined));
+    const byFnAst = valueOrExprToAstTyped(byFn ?? ((_$: any, x: any) => x), FunctionType([this.value_type, IntegerType], undefined));
     return this.toDict(
       ((_$: any, elem: any, idx: any) => Expr.fromAst(keyFnAst)(elem, idx)) as any,
       ((_$: any, elem: any, idx: any) => ({ by: Expr.fromAst(byFnAst)(elem, idx), elem })) as any,
@@ -2917,9 +2917,9 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
   groupToDicts<KeyFn extends (($: BlockBuilder<NeverType>, v: ExprType<T>, i: IntegerExpr) => any), KeyFn2 extends (($: BlockBuilder<NeverType>, v: ExprType<T>, i: IntegerExpr) => any)>(keyFn: KeyFn, keyFn2: KeyFn2): DictExpr<TypeOf<ReturnType<KeyFn>>, DictType<TypeOf<ReturnType<KeyFn2>>, T>>
   
   groupToDicts(keyFn: any, keyFn2: any, valueFn?: any, combineFn?: any): DictExpr<any, DictType<any, any>> {
-    const keyFnAst = valueOrExprToAstTyped(keyFn, FunctionType([this.value_type, IntegerType], undefined, null));
-    const keyFn2Ast = valueOrExprToAstTyped(keyFn2, FunctionType([this.value_type, IntegerType], undefined, null));
-    const valueFnAst = valueOrExprToAstTyped(valueFn ?? ((_$: any, x: any) => x), FunctionType([this.value_type, IntegerType], undefined, null));
+    const keyFnAst = valueOrExprToAstTyped(keyFn, FunctionType([this.value_type, IntegerType], undefined));
+    const keyFn2Ast = valueOrExprToAstTyped(keyFn2, FunctionType([this.value_type, IntegerType], undefined));
+    const valueFnAst = valueOrExprToAstTyped(valueFn ?? ((_$: any, x: any) => x), FunctionType([this.value_type, IntegerType], undefined));
     const keyFnExpr = Expr.fromAst(keyFnAst);
     const keyFn2Expr = Expr.fromAst(keyFn2Ast);
     const valueFnExpr = Expr.fromAst(valueFnAst);
@@ -2928,7 +2928,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
 
     if (combineFn !== undefined) {
       // With conflict resolution - use tryGet + match to check existence, then insert or combine
-      const combineFnAst = valueOrExprToAstTyped(combineFn, FunctionType([valueType, valueType], valueType, null));
+      const combineFnAst = valueOrExprToAstTyped(combineFn, FunctionType([valueType, valueType], valueType));
       const combineFnExpr = Expr.fromAst(combineFnAst);
 
       return this.groupReduce(

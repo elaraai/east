@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Elara AI Pty Ltd
  * Dual-licensed under AGPL-3.0 and commercial license. See LICENSE for details.
  */
-import { Builtins, type BuiltinName } from "./builtins.js";
+import { type BuiltinName } from "./builtins.js";
 import { type IR, type LocationValue, printLocationValue } from "./ir.js";
 import { compareFor, equalFor, greaterEqualFor, greaterFor, isFor, lessEqualFor, lessFor, notEqualFor } from "./comparison.js";
 import { printFor, parseFor } from "./serialization/east.js";
@@ -15,7 +15,7 @@ import { decodeBeast2For, decodeBeastFor, encodeBeast2For, encodeBeastFor, fromJ
 import { formatDateTime } from "./datetime_format/print.js";
 import { parseDateTimeFormatted } from "./datetime_format/parse.js";
 import type { DateTimeFormatToken } from "./datetime_format/types.js";
-import { EastTypeValueType, isTypeValueEqual, isSubtypeValue, toEastTypeValue, type EastTypeValue, expandTypeValue, type VariantTypeValue, type StructTypeValue, type DictTypeValue, type SetTypeValue, type ArrayTypeValue, type RefTypeValue } from "./type_of_type.js";
+import { EastTypeValueType, isTypeValueEqual, type EastTypeValue, expandTypeValue, type DictTypeValue, type SetTypeValue, type ArrayTypeValue } from "./type_of_type.js";
 import type { AnalyzedIR } from "./analyze.js";
 import { ref } from "./containers/ref.js";
 
@@ -64,28 +64,13 @@ class BreakException {
 * @internal
 */
 export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeValue>, platform: Record<string, (...args: any[]) => any>, asyncPlatformFns: Set<string>, fresh_ctx: boolean = true, compilingNodes: Set<IR> = new Set()): (ctx: Record<string, any>) => any {
-  // Detect circular IR
-  if (compilingNodes.has(ir)) {
-    throw new Error(
-      `Circular IR reference detected at ${printLocationValue((ir as any).value?.location || { file: "unknown", line: 0, column: 0 })}. `
-    );
-  }
+  // The IR is checked prior to compilation, so we can assume it's valid here.
+  // The compiler needs to take care that Promises are properly awaited, so most IR nodes need both sync and async implementations.
+  // We assume unnecessary `async` functions degrade performance but unnecessary `await`s are not too bad, so while we could be more "specific" in our awaits we do not bother
 
-  // Track this node (exception-safe with try-finally)
-  compilingNodes.add(ir);
-  try {
-    return compileNodeInternal(ir, ctx, platform, asyncPlatformFns, fresh_ctx, compilingNodes);
-  } finally {
-    compilingNodes.delete(ir);
-  }
-}
+  // TODO if function calls accepted the call Location, we could probably simplify the call site code generation
 
-/** Internal helper that does the actual compilation work */
-function compileNodeInternal(ir: AnalyzedIR, ctx: Record<string, EastTypeValue>, platform: Record<string, (...args: any[]) => any>, asyncPlatformFns: Set<string>, fresh_ctx: boolean, compilingNodes: Set<IR> = new Set()): (ctx: Record<string, any>) => any {
   if (ir.type === "Value") {
-    if (ir.value.type.type !== ir.value.value.type) {
-      throw new Error(`Value node expected value of type .${ir.value.type.type} but got .${ir.value.value.type} at ${printLocationValue(ir.value.location)}`);
-    }
     const v = ir.value.value.value;
     return (_ctx: Record<string, any>) => v;
   } else if (ir.type === "Error") {
@@ -98,12 +83,14 @@ function compileNodeInternal(ir: AnalyzedIR, ctx: Record<string, EastTypeValue>,
     }
   } else if (ir.type === "TryCatch") {
     const try_body = compile_internal(ir.value.try_body, Object.create(ctx), platform, asyncPlatformFns, true, compilingNodes);
+
     const new_ctx = Object.create(ctx);
     const message_name = ir.value.message.value.name;
     const stack_name = ir.value.stack.value.name;
     new_ctx[message_name] = ir.value.message.value.type;
     new_ctx[stack_name] = ir.value.stack.value.type;
     const catch_body = compile_internal(ir.value.catch_body, new_ctx, platform, asyncPlatformFns, true, compilingNodes);
+
     // Don't include finally unless necessary (Value nodes are effect free)
     const finally_body = ir.value.finally_body.type === "Value" ? undefined : compile_internal(ir.value.finally_body, Object.create(ctx), platform, asyncPlatformFns, true, compilingNodes);
 
@@ -178,13 +165,6 @@ function compileNodeInternal(ir: AnalyzedIR, ctx: Record<string, EastTypeValue>,
     }
   } else if (ir.type === "Variable") {
     const name = ir.value.name;
-    const ctx_type = ctx[name];
-    if (ctx_type === undefined) {
-      throw new Error(`Variable defined at ${printLocationValue(ir.value.location)} is not in scope at ${printLocationValue(ir.value.location)}`)
-    }
-    if (!isTypeValueEqual(ctx_type, ir.value.type)) {
-      throw new Error(`Variable defined at ${printLocationValue(ir.value.location)} has type ${printTypeValue(ctx_type)} but expected ${printTypeValue(ir.value.type)} at ${printLocationValue(ir.value.location)}`)
-    }
 
     if (ir.value.mutable && ir.value.captured) {
       return (ctx: Record<string, any>) => ctx[name].x;
@@ -192,9 +172,6 @@ function compileNodeInternal(ir: AnalyzedIR, ctx: Record<string, EastTypeValue>,
       return (ctx: Record<string, any>) => ctx[name];
     }
   } else if (ir.type === "Let") {
-    if (!isSubtypeValue(ir.value.value.value.type, ir.value.variable.value.type)) {
-      throw new Error(`Cannot initialize a variable defined at ${printLocationValue(ir.value.variable.value.location)} of type ${printTypeValue(ir.value.variable.value.type)} to a value of type ${printTypeValue(ir.value.value.value.type)} at ${printLocationValue(ir.value.location)}`)
-    }
     const compiled_statement = compile_internal(ir.value.value, ctx, platform, asyncPlatformFns, false, compilingNodes);
     const name = ir.value.variable.value.name;
     ctx[name] = ir.value.variable.value.type;
@@ -225,15 +202,6 @@ function compileNodeInternal(ir: AnalyzedIR, ctx: Record<string, EastTypeValue>,
     }
   } else if (ir.type === "Assign") {
     const name = ir.value.variable.value.name;
-    if (ctx[name] === undefined) {
-      throw new Error(`Attempting to reassign to a variable defined at ${printLocationValue(ir.value.variable.value.location)} which is not in scope at ${printLocationValue(ir.value.location)} at ${printLocationValue(ir.value.location)}`)
-    }
-    if (!isSubtypeValue(ir.value.value.value.type, ctx[name])) {
-      throw new Error(`Cannot reassign to a variable defined at ${printLocationValue(ir.value.variable.value.location)} of type ${printTypeValue(ir.value.variable.value.type)} to a value of type ${printTypeValue(ir.value.value.value.type)} at ${printLocationValue(ir.value.location)}`);
-    }
-    if (!ir.value.variable.value.mutable) {
-      throw new Error(`Cannot reassign const variable ${name} at ${printLocationValue(ir.value.location)}`);
-    }
     const compiled_statement = compile_internal(ir.value.value, ctx, platform, asyncPlatformFns, false, compilingNodes);
     if (ir.value.variable.value.mutable && ir.value.variable.value.captured) {
       if (ir.value.isAsync) {
@@ -269,46 +237,20 @@ function compileNodeInternal(ir: AnalyzedIR, ctx: Record<string, EastTypeValue>,
       }
     }
   } else if (ir.type === "As") {
-    if (!isSubtypeValue(ir.value.value.value.type, ir.value.type)) {
-      throw new Error(`Cannot cast value of type ${printTypeValue(ir.value.value.value.type)} to type ${printTypeValue(ir.value.type)} at ${printLocationValue(ir.value.location)}`);
-    }
-
     // in dynamically typed runtimes like Javascript, this is a no-op
     // (for statically typed runtimes this assists in unifying types in branches)
     return compile_internal(ir.value.value, ctx, platform, asyncPlatformFns, fresh_ctx, compilingNodes);
   } else if (ir.type === "UnwrapRecursive") {
-    // TODO there seems to be cases of Wrap / Unwrap that could be optimized away during compilation
-    if (!isTypeValueEqual(ir.value.value.value.type, ir.value.type)) {
-      throw new Error(`Cannot unwrap recursive value of type ${printTypeValue(ir.value.value.value.type)} to type ${printTypeValue(ir.value.type)} at ${printLocationValue(ir.value.location)}`);
-    }
-
     // in dynamically typed runtimes like Javascript, this is a no-op
     // (for statically typed runtimes this assists in e.g. typing a reference or pointer)
     return compile_internal(ir.value.value, ctx, platform, asyncPlatformFns, fresh_ctx, compilingNodes);
   } else if (ir.type === "WrapRecursive") {
-    // TODO there seems to be cases of Wrap / Unwrap that could be optimized away during compilation
-    if (!isSubtypeValue(ir.value.value.value.type, ir.value.type)) {
-      throw new Error(`Cannot wrap value of type ${printTypeValue(ir.value.value.value.type)} to recursive type ${printTypeValue(ir.value.type)} at ${printLocationValue(ir.value.location)}`);
-    }
-
     // in dynamically typed runtimes like Javascript, this is a no-op
     // (for statically typed runtimes this assists in e.g. typing a heap allocation)
     return compile_internal(ir.value.value, ctx, platform, asyncPlatformFns, false, compilingNodes);
   } else if (ir.type === "Function") {
-    if (ir.value.type.type !== "Function") {
-      throw new Error(`Expected Function type, got ${printTypeValue(ir.value.type)} at ${printLocationValue(ir.value.location)}`);
-    }
-
     const ctx2: Record<string, any> = {};
     for (const variable of ir.value.captures) {
-      const ctx_type = ctx[variable.value.name];
-      if (ctx_type === undefined) {
-        throw new Error(`Captured variable defined at ${printLocationValue(variable.value.location)} is not in scope at ${printLocationValue(ir.value.location)}`)
-      }
-      if (!isTypeValueEqual(ctx_type, variable.value.type)) {
-        throw new Error(`Captured variable defined at ${printLocationValue(variable.value.location)} has type ${printTypeValue(ctx_type)} but expected ${printTypeValue(variable.value.type)} at ${printLocationValue(ir.value.location)}`)
-      }
-
       ctx2[variable.value.name] = variable.value.type;
     }
     for (const parameter of ir.value.parameters) {
@@ -316,15 +258,7 @@ function compileNodeInternal(ir: AnalyzedIR, ctx: Record<string, EastTypeValue>,
       ctx2[parameter_name] = parameter.value.type;
     }
 
-    // Function return values are covariant
-    // TODO what is the semantics here in a static language? Should we use `As` here?
-    // Note: this requires unreachability analysis to be correct, since early terminating programs might have a final statement that produces never
-    if (!isSubtypeValue(ir.value.body.value.type, ir.value.type.value.output)) {
-      throw new Error(`Expected Function to return type ${printTypeValue(ir.value.type.value.output)}, got ${printTypeValue(ir.value.body.value.type)} at ${printLocationValue(ir.value.location)}`)
-    }
-
     const compiled_body = compile_internal(ir.value.body, ctx2, platform, asyncPlatformFns, true, compilingNodes);
-    const bodyIsAsync = ir.value.type.value.platforms.some(p => asyncPlatformFns.has(p));
 
     const capture_names = ir.value.captures.map(v => v.value.name);
     const parameter_names = ir.value.parameters.map(v => v.value.name)
@@ -334,46 +268,52 @@ function compileNodeInternal(ir: AnalyzedIR, ctx: Record<string, EastTypeValue>,
         ctx2[name] = ctx[name];
       }
 
-      // If body is async, create an async function that awaits internally
-      if (bodyIsAsync) {
-        return async (...args: any) => {
-          const ctx3 = { ...ctx2 };
-          parameter_names.forEach((name, i) => ctx3[name] = args[i]);
-          return await compiled_body(ctx3);
-        }
-      } else {
-        return (...args: any) => {
-          const ctx3 = { ...ctx2 };
-          parameter_names.forEach((name, i) => ctx3[name] = args[i]);
-          return compiled_body(ctx3);
-        }
+      return (...args: any) => {
+        const ctx3 = { ...ctx2 };
+        parameter_names.forEach((name, i) => ctx3[name] = args[i]);
+        return compiled_body(ctx3);
+      }
+    }
+  } else if (ir.type === "AsyncFunction") {
+    const ctx2: Record<string, any> = {};
+    for (const variable of ir.value.captures) {
+      ctx2[variable.value.name] = variable.value.type;
+    }
+    for (const parameter of ir.value.parameters) {
+      const parameter_name = parameter.value.name;
+      ctx2[parameter_name] = parameter.value.type;
+    }
+
+    const compiled_body = compile_internal(ir.value.body, ctx2, platform, asyncPlatformFns, true, compilingNodes);
+
+    const capture_names = ir.value.captures.map(v => v.value.name);
+    const parameter_names = ir.value.parameters.map(v => v.value.name)
+    return (ctx: Record<string, any>) => {
+      const ctx2: Record<string, any> = {};
+      for (const name of capture_names) {
+        ctx2[name] = ctx[name];
+      }
+
+      return (...args: any) => {
+        const ctx3 = { ...ctx2 };
+        parameter_names.forEach((name, i) => ctx3[name] = args[i]);
+        return compiled_body(ctx3); // Promise can pass through in tail position
       }
     }
   } else if (ir.type === "Call") {
-    if (ir.value.function.value.type.type !== "Function") {
-      throw new Error(`Call expected Function, got ${printTypeValue(ir.value.function.value.type)} at ${printLocationValue(ir.value.location)}`)
-    }
-    if (ir.value.function.value.type.value.inputs.length !== ir.value.arguments.length) {
-      throw new Error(`Function expected ${ir.value.function.value.type.value.inputs.length} arguments, got ${ir.value.arguments.length} at ${printLocationValue(ir.value.location)}`)
-    }
-    for (const [i, t] of ir.value.function.value.type.value.inputs.entries()) {
-      // TODO what is the semantics here in a static language? Should we use `As` here?
-      if (!isSubtypeValue(t, ir.value.arguments[i]!.value.type)) {
-        throw new Error(`Function expected argument ${i+1} of type ${printTypeValue(t)}, got ${printTypeValue(ir.value.arguments[i]!.value.type)} at ${printLocationValue(ir.value.location)}`)
-      }
-    }
-
     const compiled_f = compile_internal(ir.value.function, ctx, platform, asyncPlatformFns, false, compilingNodes);
     const compiled_args = ir.value.arguments.map(argument => compile_internal(argument, ctx, platform, asyncPlatformFns, false, compilingNodes));
     const location = ir.value.location;
-    if (ir.value.function.value.type.value.isAsync) {
+
+    if (ir.value.isAsync) {
+      // need to await the arguments
       return async (ctx: Record<string, any>) => {
         try {
           const args: any[] = [];
           for (const compiled_arg of compiled_args) {
             args.push(await compiled_arg(ctx));
           }
-          return (await compiled_f(ctx))(...args);
+          return compiled_f(ctx)(...args);
         } catch (e: unknown) {
           if (e instanceof ReturnException) {
             return e.value;
@@ -409,12 +349,43 @@ function compileNodeInternal(ir: AnalyzedIR, ctx: Record<string, EastTypeValue>,
         }
       }
     }
+  } else if (ir.type === "CallAsync") {
+    const compiled_f = compile_internal(ir.value.function, ctx, platform, asyncPlatformFns, false, compilingNodes);
+    const compiled_args = ir.value.arguments.map(argument => compile_internal(argument, ctx, platform, asyncPlatformFns, false, compilingNodes));
+    const location = ir.value.location;
+
+    return async (ctx: Record<string, any>) => {
+      try {
+        const args: any[] = [];
+        for (const compiled_arg of compiled_args) {
+          args.push(await compiled_arg(ctx));
+        }
+        return await compiled_f(ctx)(...args);
+      } catch (e: unknown) {
+        if (e instanceof ReturnException) {
+          return e.value;
+        } else if (e instanceof EastError) {
+          e.location.push(location); // The fact that we need to push the call location not the definition location means we need to handle this here
+          throw(e);
+        } else if (e instanceof ContinueException) {
+          throw new Error(`continue failed to find label ${e.label} at ${printLocationValue(ir.value.location)}`)
+        } else if (e instanceof BreakException) {
+          throw new Error(`break failed to find label ${e.label} at ${printLocationValue(ir.value.location)}`)
+        } else {
+          throw(e);
+        }
+      }
+    };
   } else if (ir.type === "IfElse") {
     const ifs: {
-      predicate: (ctx: any) => boolean,
+      predicate: (ctx: any) => boolean | Promise<boolean>,
       body: (ctx: any) => any
     }[] = [];
+    let asyncPredicate = false;
     for (const { predicate, body } of ir.value.ifs) {
+      if (predicate.value.isAsync) {
+        asyncPredicate = true;
+      }
       ifs.push({
         predicate: compile_internal(predicate, ctx, platform, asyncPlatformFns, false, compilingNodes),
         body: compile_internal(body, Object.create(ctx), platform, asyncPlatformFns, true, compilingNodes),
@@ -422,7 +393,7 @@ function compileNodeInternal(ir: AnalyzedIR, ctx: Record<string, EastTypeValue>,
     }
     const else_body = compile_internal(ir.value.else_body, Object.create(ctx), platform, asyncPlatformFns, true, compilingNodes);
 
-    if (ir.value.isAsync) {
+    if (asyncPredicate) {
       return async (ctx: Record<string, any>) => {
         for (const { predicate, body } of ifs) {
           if (await predicate(ctx)) {
@@ -434,7 +405,7 @@ function compileNodeInternal(ir: AnalyzedIR, ctx: Record<string, EastTypeValue>,
     } else {
         return (ctx: Record<string, any>) => {
         for (const { predicate, body } of ifs) {
-          if (predicate(ctx)) {
+          if (predicate(ctx) as boolean) {
             return body(Object.create(ctx));
           }
         }
@@ -454,7 +425,7 @@ function compileNodeInternal(ir: AnalyzedIR, ctx: Record<string, EastTypeValue>,
       compiled_cases[k] = compile_internal(body, ctx2, platform, asyncPlatformFns, true, compilingNodes);
     }
 
-    if (ir.value.isAsync) {
+    if (ir.value.variant.value.isAsync) {
       return async (ctx: Record<string, any>) => {
         const v: variant = await compiled_variant(ctx);
         const ctx2 = Object.create(ctx);
@@ -705,15 +676,10 @@ function compileNodeInternal(ir: AnalyzedIR, ctx: Record<string, EastTypeValue>,
     // The pattern of creating a new context (e.g. a function) and then immediately invoking a block (e.g. as the function body) is very common.
     // Here we avoid creating a second context when possible, as an optimization.
     if (fresh_ctx) {
-      let last_type: EastTypeValue = variant("Null", null);
       const compiled_statements: ((ctx: Record<string, any>) => any)[] = [];
       for (const statement of ir.value.statements) {
         const compiled_statement = compile_internal(statement, ctx, platform, asyncPlatformFns, true, compilingNodes);
         compiled_statements.push(compiled_statement);
-        last_type = statement.value.type;
-      }
-      if (!isSubtypeValue(last_type, ir.value.type)) {
-        throw new Error(`Block evaluates to type ${printTypeValue(last_type)} but expected ${printTypeValue(ir.value.type)} at ${printLocationValue(ir.value.location)}`)
       }
       if (ir.value.isAsync) {
         return async (ctx: Record<string, any>) => {
@@ -734,15 +700,10 @@ function compileNodeInternal(ir: AnalyzedIR, ctx: Record<string, EastTypeValue>,
       }
     } else {
       const ctx2 = Object.create(ctx);
-      let last_type: EastTypeValue = variant("Null", null);
       const compiled_statements: ((ctx: Record<string, any>) => any)[] = [];
       for (const statement of ir.value.statements) {
         const compiled_statement = compile_internal(statement, ctx2, platform, asyncPlatformFns, true, compilingNodes);
         compiled_statements.push(compiled_statement);
-        last_type = statement.value.type;
-      }
-      if (!isSubtypeValue(last_type, ir.value.type)) {
-        throw new Error(`Block evaluates to type ${printTypeValue(last_type)} but expected ${printTypeValue(ir.value.type)} at ${printLocationValue(ir.value.location)}`)
       }
       if (ir.value.isAsync) {
         return async (ctx: Record<string, any>) => {
@@ -765,17 +726,6 @@ function compileNodeInternal(ir: AnalyzedIR, ctx: Record<string, EastTypeValue>,
       }
     }
   } else if (ir.type === "GetField") {
-    if (ir.value.struct.value.type.type !== "Struct") {
-      throw new Error(`GetField expected Struct, got ${printTypeValue(ir.value.struct.value.type)} at ${printLocationValue(ir.value.location)}`);
-    }
-    const struct_field = (expandTypeValue(ir.value.struct.value.type) as StructTypeValue).value.find(f => f.name === ir.value.field);
-    if (!struct_field) {
-      throw new Error(`GetField field ${ir.value.field} not found in struct ${printTypeValue(ir.value.struct.value.type)} at ${printLocationValue(ir.value.location)}`);
-    }
-    if (!isTypeValueEqual(struct_field.type, ir.value.type)) {
-      throw new Error(`GetField expected to have type ${printTypeValue(ir.value.type)}, got ${printTypeValue(struct_field.type)} at ${printLocationValue(ir.value.location)}`);
-    }
-
     const struct = compile_internal(ir.value.struct, ctx, platform, asyncPlatformFns, false, compilingNodes);
     const field = ir.value.field;
     if (ir.value.isAsync) {
@@ -784,19 +734,7 @@ function compileNodeInternal(ir: AnalyzedIR, ctx: Record<string, EastTypeValue>,
       return (ctx: Record<string, any>) => struct(ctx)[field];
     }
   } else if (ir.type === "Struct") {
-    if (ir.value.type.type !== "Struct") {
-      throw new Error(`Expected Struct output type, got ${printTypeValue(ir.value.type)} at ${printLocationValue(ir.value.location)}`);
-    }
-
-    const fields = ir.value.fields.map((f, i) => {
-      const struct_field = (expandTypeValue(ir.value.type) as StructTypeValue).value[i];
-      if (!struct_field || struct_field.name !== f.name) {
-        throw new Error(`Struct field ${f.name} not found at position ${i} in struct type ${printTypeValue(ir.value.type)} at ${printLocationValue(ir.value.location)}`);
-      }
-      if (!isSubtypeValue(f.value.value.type, struct_field.type)) {
-        throw new Error(`Struct field ${f.name} expected to have type ${printTypeValue(struct_field.type)}, got ${printTypeValue(f.value.value.type)} at ${printLocationValue(ir.value.location)}`);
-      }
-
+    const fields = ir.value.fields.map(f => {
       return compile_internal(f.value, ctx, platform, asyncPlatformFns, false, compilingNodes);
     });
     const keys = ir.value.fields.map(f => f.name);
@@ -812,19 +750,7 @@ function compileNodeInternal(ir: AnalyzedIR, ctx: Record<string, EastTypeValue>,
       return (ctx: Record<string, any>) => Object.fromEntries(fields.map((a, i) => [keys[i]!, a(ctx)]));
     }
   } else if (ir.type === "Variant") {
-    if (ir.value.type.type !== "Variant") {
-      throw new Error(`Expected Variant output type, got ${printTypeValue(ir.value.type)} at ${printLocationValue(ir.value.location)}`);
-    }
-
     const k = ir.value.case;
-    const variant_case = (expandTypeValue(ir.value.type) as VariantTypeValue).value.find(c => c.name === k);
-    if (!variant_case) {
-      throw new Error(`Variant case ${k} not found in variant type ${printTypeValue(ir.value.type)} at ${printLocationValue(ir.value.location)}`);
-    }
-    if (!isSubtypeValue(ir.value.value.value.type, variant_case.type)) {
-      throw new Error(`Variant case ${k} expected to have type ${printTypeValue(variant_case.type)}, got ${printTypeValue(ir.value.value.value.type)} at ${printLocationValue(ir.value.location)}`);
-    }
-
     const v = compile_internal(ir.value.value, ctx, platform, asyncPlatformFns, false, compilingNodes);
     if (ir.value.isAsync) {
       return async (ctx: Record<string, any>) => variant(k, await v(ctx));
@@ -832,13 +758,6 @@ function compileNodeInternal(ir: AnalyzedIR, ctx: Record<string, EastTypeValue>,
       return (ctx: Record<string, any>) => variant(k, v(ctx));
     }
   } else if (ir.type === "NewRef") {
-    if (ir.value.type.type !== "Ref") {
-      throw new Error(`Expected Ref output type, got ${printTypeValue(ir.value.type)} at ${printLocationValue(ir.value.location)}`);
-    }
-    
-    if (!isSubtypeValue(ir.value.value.value.type, (expandTypeValue(ir.value.type) as RefTypeValue).value)) {
-      throw new Error(`NewRef value expected to have type ${printTypeValue(ir.value.type.value)}, got ${printTypeValue(ir.value.value.value.type)} at ${printLocationValue(ir.value.location)}`);
-    }
     const value = compile_internal(ir.value.value, ctx, platform, asyncPlatformFns, false, compilingNodes);
     if (ir.value.isAsync) {
       return async (ctx: Record<string, any>) => ref(await value(ctx));
@@ -846,14 +765,7 @@ function compileNodeInternal(ir: AnalyzedIR, ctx: Record<string, EastTypeValue>,
       return (ctx: Record<string, any>) => ref(value(ctx));
     }
   } else if (ir.type === "NewArray") {
-    if (ir.value.type.type !== "Array") {
-      throw new Error(`Expected Array output type, got ${printTypeValue(ir.value.type)} at ${printLocationValue(ir.value.location)}`);
-    }
-    
     const values = ir.value.values.map(a => {
-      if (!isSubtypeValue(a.value.type, (expandTypeValue(ir.value.type) as ArrayTypeValue).value)) {
-        throw new Error(`NewArray element expected to have type ${printTypeValue(ir.value.type.value)}, got ${printTypeValue(a.value.type)} at ${printLocationValue(ir.value.location)}`);
-      }
       return compile_internal(a, ctx, platform, asyncPlatformFns, false, compilingNodes)
     });
     if (ir.value.isAsync) {
@@ -868,14 +780,7 @@ function compileNodeInternal(ir: AnalyzedIR, ctx: Record<string, EastTypeValue>,
       return (ctx: Record<string, any>) => values.map(a => a(ctx));
     }
   } else if (ir.type === "NewSet") {
-    if (ir.value.type.type !== "Set") {
-      throw new Error(`Expected Set output type, got ${printTypeValue(ir.value.type)} at ${printLocationValue(ir.value.location)}`);
-    }
-
     const values = ir.value.values.map(a => {
-      if (!isSubtypeValue(a.value.type, (expandTypeValue(ir.value.type) as SetTypeValue).value)) {
-        throw new Error(`NewSet element expected to have type ${printTypeValue(ir.value.type.value)}, got ${printTypeValue(a.value.type)} at ${printLocationValue(ir.value.location)}`);
-      }
       return compile_internal(a, ctx, platform, asyncPlatformFns, false, compilingNodes)
     });
     const keyComparer = compareFor(ir.value.type.value);
@@ -891,17 +796,7 @@ function compileNodeInternal(ir: AnalyzedIR, ctx: Record<string, EastTypeValue>,
       return (ctx: Record<string, any>) => new SortedSet(values.map(a => a(ctx)), keyComparer);
     }
   } else if (ir.type === "NewDict") {
-    if (ir.value.type.type !== "Dict") {
-      throw new Error(`Expected Dict output type, got ${printTypeValue(ir.value.type)} at ${printLocationValue(ir.value.location)}`);
-    }
-
     const values = ir.value.values.map(({key, value}) => {
-      if (!isSubtypeValue(key.value.type, (expandTypeValue(ir.value.type) as DictTypeValue).value.key)) {
-        throw new Error(`NewDict key expected to have type ${printTypeValue(ir.value.type.value.key)}, got ${printTypeValue(key.value.type)} at ${printLocationValue(ir.value.location)}`);
-      }
-      if (!isSubtypeValue(value.value.type, (expandTypeValue(ir.value.type) as DictTypeValue).value.value)) {
-        throw new Error(`NewDict value expected to have type ${printTypeValue(ir.value.type.value.value)}, got ${printTypeValue(value.value.type)} at ${printLocationValue(ir.value.location)}`);
-      }
       return [compile_internal(key, ctx, platform, asyncPlatformFns, false, compilingNodes), compile_internal(value, ctx, platform, asyncPlatformFns, false, compilingNodes)] as const;
     });
     const keyComparer = compareFor(ir.value.type.value.key);
@@ -917,10 +812,6 @@ function compileNodeInternal(ir: AnalyzedIR, ctx: Record<string, EastTypeValue>,
       return (ctx: Record<string, any>) => new SortedMap(values.map(([k, v]) => [k(ctx), v(ctx)]), keyComparer);
     }
   } else if (ir.type === "Return") {
-    if (ir.value.type.type !== "Never") {
-      throw new Error(`Return must have Never type, got ${printTypeValue(ir.value.type)} at ${printLocationValue(ir.value.location)}`);
-    }
-    // TODO pipe through return type context so we can check it here
     const compiled_value = compile_internal(ir.value.value, ctx, platform, asyncPlatformFns, false, compilingNodes);
     if (ir.value.isAsync) {
       return async (ctx: Record<string, any>) => {
@@ -932,65 +823,24 @@ function compileNodeInternal(ir: AnalyzedIR, ctx: Record<string, EastTypeValue>,
       };
     }
   } else if (ir.type === "Continue") {
-    if (ir.value.type.type !== "Never") {
-      throw new Error(`Continue must have Never type, got ${printTypeValue(ir.value.type)} at ${printLocationValue(ir.value.location)}`);
-    }
     const label = ir.value.label;
-    // TODO pipe through local label context so we can check it here
     return (_ctx: Record<string, any>): any => {
       throw new ContinueException(label.name);
     };
   } else if (ir.type === "Break") {
-    if (ir.value.type.type !== "Never") {
-      throw new Error(`Break must have Never type, got ${printTypeValue(ir.value.type)} at ${printLocationValue(ir.value.location)}`);
-    }
     const label = ir.value.label;
-    // TODO pipe through local label context so we can check it here
     return (_ctx: Record<string, any>): any => {
       throw new BreakException(label.name);
     };
   } else if (ir.type === "Builtin") {
-    // TODO - I haven't dealt with builtins implementations yet
-
-    // check types match
-    let b = Builtins[ir.value.builtin];
-    if (b === undefined) {
-      throw new Error(`Builtin ${JSON.stringify(ir.value.builtin)} not found at ${printLocationValue(ir.value.location)}`);
-    }
-    if (b.type_parameters.length !== ir.value.type_parameters.length) {
-      throw new Error(`Builtin ${JSON.stringify(ir.value.builtin)} expected ${b.type_parameters.length} type parameters, got ${ir.value.type_parameters.length} type parameters at ${printLocationValue(ir.value.location)}`)
-    }
-    if (b.inputs.length !== ir.value.arguments.length) {
-      throw new Error(`Builtin ${JSON.stringify(ir.value.builtin)} expected ${b.inputs.length} arguments, got ${ir.value.arguments.length} arguments at ${printLocationValue(ir.value.location)}`)
-    }
-    const type_params = new Map<string, EastTypeValue>(b.type_parameters.map((T: string, i: number) => [T, ir.value.type_parameters[i]!] as const));
     let argsAsync = false;
     const args = ir.value.arguments.map((a, _i) => {
-      // TODO these checks seem to fail for some builtins - particularly comparisons with recursive types
-      // The issue appears to be that the type parameters in ir.value.type_parameters have been expanded too much
-      // The Expr machinery and UnionType are possibly places to investigate why the identity of types is getting lost (or else we might need a more structural, not identity-based, approach to toEastTypeValue)
-      
-      // The failures here do not cause faults, but it might make life harder for a static compiler
-
-      // const builtin_arg_type = b.inputs[i]!;
-      // const expected_type = applyTypeParameters(toEastTypeValue(builtin_arg_type), type_params);
-      // TODO what is the semantics here in a static language? Should we use `As` here?
-      // if (!isSubtypeValue(a.value.type, expected_type)) {
-      //   throw new Error(`Argument ${i+1} to builtin ${JSON.stringify(ir.value.builtin)} with type parameters [${ir.value.type_parameters.map(t => printTypeValue(t)).join(", ")}] expected to have type ${printTypeValue(expected_type)}, got ${printTypeValue(a.value.type)} at ${printLocationValue(a.value.location)}`)
-      // }
-
       if (a.value.isAsync) {
         argsAsync = true;
       }
 
       return compile_internal(a, ctx, platform, asyncPlatformFns, false, compilingNodes)
     });
-
-    const expected_output_type = applyTypeParameters(typeof b.output === "string" ? b.output : toEastTypeValue(b.output), type_params);
-    // TODO what is the semantics here in a static language? Should we use `As` here? What about variance?
-    if (!isTypeValueEqual(ir.value.type, expected_output_type)) {
-      throw new Error(`Builtin ${JSON.stringify(ir.value.builtin)} output type expected to have type ${printTypeValue(expected_output_type)}, got ${printTypeValue(ir.value.type)} at ${printLocationValue(ir.value.location)}`);
-    }
 
     // Special optimization for regex builtins with literal pattern/flags
     if ((ir.value.builtin === "RegexContains" || ir.value.builtin === "RegexIndexOf" || ir.value.builtin === "RegexReplace") &&
@@ -1173,7 +1023,6 @@ function compileNodeInternal(ir: AnalyzedIR, ctx: Record<string, EastTypeValue>,
       return (ctx: Record<string, any>) => evaluator(...args.map(a => a(ctx)));
     }
   } else if (ir.type === "Platform") {
-    // TODO check types match (would require having the platform's expected types here)
     let argsAsync = false;
     const args = ir.value.arguments.map(a => {
       if (a.value.isAsync) {
@@ -1192,10 +1041,10 @@ function compileNodeInternal(ir: AnalyzedIR, ctx: Record<string, EastTypeValue>,
         for (const a of args) {
           args_resolved.push(await a(ctx));
         }
-        return evaluator(...args_resolved);
+        return evaluator(...args_resolved); // evaluator can return Promise unconditionally in tail position if the platform function is async
       }
     } else {
-      return (ctx: Record<string, any>) => evaluator(...args.map(a => a(ctx)));
+      return (ctx: Record<string, any>) => evaluator(...args.map(a => a(ctx))); // evaluator can return Promise unconditionally in tail position if the platform function is async
     }
   } else {
     throw new Error(`Unhandled IR type ${(ir satisfies never as IR).type} at ${printLocationValue((ir as IR).value.location)}`); // The `satisfies never` here ensures that this branch is unreachable if all IR types are handled
@@ -3090,8 +2939,9 @@ export function applyTypeParameters(t: EastTypeValue | string, params: Map<strin
   } else if (t.type === "Recursive") {
     return t;
   } else if (t.type === "Function") {
-    // TODO platforms?
-    return variant("Function", { inputs: t.value.inputs.map(i => applyTypeParameters(i, params)), output: applyTypeParameters(t.value.output, params), platforms: [] } );
+    return variant("Function", { inputs: t.value.inputs.map(i => applyTypeParameters(i, params)), output: applyTypeParameters(t.value.output, params) } );
+  } else if (t.type === "AsyncFunction") {
+    return variant("AsyncFunction", { inputs: t.value.inputs.map(i => applyTypeParameters(i, params)), output: applyTypeParameters(t.value.output, params) } );
   } else {
     throw new Error(`Unhandled type ${((t satisfies never) as EastTypeValue).type}`)
   }

@@ -63,9 +63,9 @@ export default {
    */
   generate<K extends EastType, V extends EastType>(size: Expr<IntegerType> | bigint, keyType: K, valueType: V, keyFn: SubtypeExprOrValue<FunctionType<[IntegerType], NoInfer<K>>>, valueFn: SubtypeExprOrValue<FunctionType<[IntegerType], NoInfer<V>>>, onConflict?: SubtypeExprOrValue<FunctionType<[NoInfer<V>, NoInfer<V>, NoInfer<K>], NoInfer<V>>>): ExprType<DictType<K, V>> {
     const length_expr = Expr.from(size, IntegerType);
-    const key_expr = Expr.from(keyFn, FunctionType([IntegerType], keyType, []));
-    const value_expr = Expr.from(valueFn, FunctionType([IntegerType], valueType, []));
-    const on_conflict_expr = onConflict ? Expr.from(onConflict, FunctionType([valueType, valueType, keyType], valueType, [])) : Expr.function([valueType, valueType, keyType], valueType as any, ($, _v1, _v2, key) => $.error(Expr.str`Duplicate key ${key} in dict`));
+    const key_expr = Expr.from(keyFn, FunctionType([IntegerType], keyType));
+    const value_expr = Expr.from(valueFn, FunctionType([IntegerType], valueType));
+    const on_conflict_expr = onConflict ? Expr.from(onConflict, FunctionType([valueType, valueType, keyType], valueType)) : Expr.function([valueType, valueType, keyType], valueType as any, ($, _v1, _v2, key) => $.error(Expr.str`Duplicate key ${key} in dict`));
 
     return Expr.fromAst({
       ast_type: "Builtin",

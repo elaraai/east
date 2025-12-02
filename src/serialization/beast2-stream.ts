@@ -67,6 +67,9 @@ function isSyncType(type: EastTypeValue): boolean {
     case "Function":
       return true; // Will throw, but no need to yield
 
+    case "AsyncFunction":
+      return true; // Will throw, but no need to yield
+
     default:
       return false;
   }
@@ -658,6 +661,8 @@ function decodeBeast2ValueFromStreamFor(type: EastTypeValue, typeCtx: Beast2Stre
     return targetDecoder;
   } else if (type.type === "Function") {
     return (_reader: StreamBufferReader, _ctx?: Beast2DecodeContext) => { throw new Error(`Functions cannot be deserialized`); };
+  } else if (type.type === "AsyncFunction") {
+    return (_reader: StreamBufferReader, _ctx?: Beast2DecodeContext) => { throw new Error(`AsyncFunctions cannot be deserialized`); };
   } else {
     throw new Error(`Unhandled type ${(type satisfies never as EastTypeValue).type}`);
   }

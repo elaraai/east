@@ -11,6 +11,7 @@ import { fuzzerTest } from '../fuzz.js';
 
 import {
     ArrayType,
+    AsyncFunctionType,
     BlobType,
     BooleanType,
     DateTimeType,
@@ -919,18 +920,33 @@ describe('Json encoding/decoding of EAST values', () => {
     });
 
     test('should throw when encoding Function type', () => {
-        const funcType = FunctionType([], IntegerType, []);
-        assert.throws(() => toJSONFor(funcType), /Cannot encode function type to JSON/);
+        const funcType = FunctionType([], IntegerType);
+        assert.throws(() => toJSONFor(funcType), /Cannot encode Function type to JSON/);
     });
 
     test('should throw when decoding Function type with fromJSONFor', () => {
-        const funcType = FunctionType([], IntegerType, []);
-        assert.throws(() => fromJSONFor(funcType), /Cannot decode function type from JSON/);
+        const funcType = FunctionType([], IntegerType);
+        assert.throws(() => fromJSONFor(funcType), /Cannot decode Function type from JSON/);
     });
 
     test('should throw when creating decoder for Function type with decodeJSONFor', () => {
-        const funcType = FunctionType([], IntegerType, []);
-        assert.throws(() => decodeJSONFor(funcType), /Cannot decode function type from JSON/);
+        const funcType = FunctionType([], IntegerType);
+        assert.throws(() => decodeJSONFor(funcType), /Cannot decode Function type from JSON/);
+    });
+
+    test('should throw when encoding AsyncFunction type', () => {
+        const funcType = AsyncFunctionType([], IntegerType);
+        assert.throws(() => toJSONFor(funcType), /Cannot encode AsyncFunction type to JSON/);
+    });
+
+    test('should throw when decoding AsyncFunction type with fromJSONFor', () => {
+        const funcType = AsyncFunctionType([], IntegerType);
+        assert.throws(() => fromJSONFor(funcType), /Cannot decode AsyncFunction type from JSON/);
+    });
+
+    test('should throw when creating decoder for AsyncFunction type with decodeJSONFor', () => {
+        const funcType = AsyncFunctionType([], IntegerType);
+        assert.throws(() => decodeJSONFor(funcType), /Cannot decode AsyncFunction type from JSON/);
     });
 
     test('should freeze decoded Date when frozen=true', () => {

@@ -47,7 +47,7 @@ const testFail = East.platform("testFail", [StringType], NullType);
  * @param name - The name of the test
  * @param body - The test body function
  */
-const test = East.platform("test", [StringType, FunctionType([], NullType, ["testPass", "testFail"])], NullType);
+const test = East.platform("test", [StringType, FunctionType([], NullType)], NullType);
 
 /**
  * Platform function that defines a test suite.
@@ -58,7 +58,7 @@ const test = East.platform("test", [StringType, FunctionType([], NullType, ["tes
  * @param name - The name of the test suite
  * @param body - A function that calls test() to define tests
  */
-const describe = East.platform("describe", [StringType, FunctionType([], NullType, ["test"])], NullType);
+const describe = East.platform("describe", [StringType, FunctionType([], NullType)], NullType);
 
 /**
  * Creates a test platform that uses Node.js assertions.

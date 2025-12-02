@@ -914,7 +914,7 @@ describe("Blob", (test) => {
     // Exact byte verification
     const expected = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
-      9 // Null type tag
+      10 // Null type tag
     ]), BlobType));
     $(assert.equal(encoded, expected));
 
@@ -931,7 +931,7 @@ describe("Blob", (test) => {
     // Exact byte verification
     const expectedFalse = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
-      2,  // Boolean type tag
+      3,  // Boolean type tag
       0   // false
     ]), BlobType));
     $(assert.equal(encodedFalse, expectedFalse));
@@ -947,7 +947,7 @@ describe("Blob", (test) => {
     // Exact byte verification
     const expectedTrue = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
-      2,  // Boolean type tag
+      3,  // Boolean type tag
       1   // true
     ]), BlobType));
     $(assert.equal(encodedTrue, expectedTrue));
@@ -965,7 +965,7 @@ describe("Blob", (test) => {
     // Exact byte verification
     const expectedZero = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
-      7, // Integer type tag
+      8, // Integer type tag
       0  // zigzag(0) = 0
     ]), BlobType));
     $(assert.equal(encodedZero, expectedZero));
@@ -981,7 +981,7 @@ describe("Blob", (test) => {
     // Exact byte verification
     const expectedNeg1 = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
-      7, // Integer type tag
+      8, // Integer type tag
       1  // zigzag(-1) = 1
     ]), BlobType));
     $(assert.equal(encodedNeg1, expectedNeg1));
@@ -997,7 +997,7 @@ describe("Blob", (test) => {
     // Exact byte verification
     const expectedPos1 = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
-      7, // Integer type tag
+      8, // Integer type tag
       2  // zigzag(1) = 2
     ]), BlobType));
     $(assert.equal(encodedPos1, expectedPos1));
@@ -1013,7 +1013,7 @@ describe("Blob", (test) => {
     // Exact byte verification
     const expectedPos42 = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
-      7,  // Integer type tag
+      8,  // Integer type tag
       84  // zigzag(42) = 84
     ]), BlobType));
     $(assert.equal(encodedPos42, expectedPos42));
@@ -1031,7 +1031,7 @@ describe("Blob", (test) => {
     // Exact byte verification
     const expectedMax = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
-      7, // Integer type tag
+      8, // Integer type tag
       254, 255, 255, 255, 255, 255, 255, 255, 255, 1 // zigzag(MAX) varint
     ]), BlobType));
     $(assert.equal(encodedMax, expectedMax));
@@ -1047,7 +1047,7 @@ describe("Blob", (test) => {
     // Exact byte verification
     const expectedMin = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
-      7, // Integer type tag
+      8, // Integer type tag
       255, 255, 255, 255, 255, 255, 255, 255, 255, 1 // zigzag(MIN) varint
     ]), BlobType));
     $(assert.equal(encodedMin, expectedMin));
@@ -1065,7 +1065,7 @@ describe("Blob", (test) => {
     // Exact byte verification
     const expectedZero = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
-      5, // Float type tag
+      6, // Float type tag
       0, 0, 0, 0, 0, 0, 0, 0 // 0.0 (little-endian IEEE 754)
     ]), BlobType));
     $(assert.equal(encodedZero, expectedZero));
@@ -1081,7 +1081,7 @@ describe("Blob", (test) => {
     // Exact byte verification
     const expectedPi = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
-      5, // Float type tag
+      6, // Float type tag
       31, 133, 235, 81, 184, 30, 9, 64 // 3.14 (little-endian IEEE 754)
     ]), BlobType));
     $(assert.equal(encodedPi, expectedPi));
@@ -1097,7 +1097,7 @@ describe("Blob", (test) => {
     // Exact byte verification
     const expectedNegInf = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
-      5, // Float type tag
+      6, // Float type tag
       0, 0, 0, 0, 0, 0, 240, 255 // -Infinity (little-endian IEEE 754)
     ]), BlobType));
     $(assert.equal(encodedNegInf, expectedNegInf));
@@ -1113,7 +1113,7 @@ describe("Blob", (test) => {
     // Exact byte verification
     const expectedPosInf = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
-      5, // Float type tag
+      6, // Float type tag
       0, 0, 0, 0, 0, 0, 240, 127 // Infinity (little-endian IEEE 754)
     ]), BlobType));
     $(assert.equal(encodedPosInf, expectedPosInf));
@@ -1129,7 +1129,7 @@ describe("Blob", (test) => {
     // Exact byte verification
     const expectedNaN = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
-      5, // Float type tag
+      6, // Float type tag
       0, 0, 0, 0, 0, 0, 248, 127 // NaN (little-endian IEEE 754)
     ]), BlobType));
     $(assert.equal(encodedNaN, expectedNaN));
@@ -1147,7 +1147,7 @@ describe("Blob", (test) => {
     // Exact byte verification
     const expectedEmpty = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
-      13, // String type tag
+      14, // String type tag
       0   // length varint (0)
     ]), BlobType));
     $(assert.equal(encodedEmpty, expectedEmpty));
@@ -1163,7 +1163,7 @@ describe("Blob", (test) => {
     // Exact byte verification
     const expectedHello = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
-      13, // String type tag
+      14, // String type tag
       5,  // length varint (5)
       104, 101, 108, 108, 111 // 'hello' UTF-8
     ]), BlobType));
@@ -1180,7 +1180,7 @@ describe("Blob", (test) => {
     // Exact byte verification
     const expectedUnicode = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
-      13, // String type tag
+      14, // String type tag
       12, // length varint (12 UTF-8 bytes)
       72, 101, 108, 108, 111, 32, 228, 184, 150, 231, 149, 140 // 'Hello 世界' UTF-8
     ]), BlobType));
@@ -1197,7 +1197,7 @@ describe("Blob", (test) => {
     // Exact byte verification
     const expectedEmoji = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
-      13, // String type tag
+      14, // String type tag
       4,  // length varint (4 UTF-8 bytes)
       240, 159, 152, 128 // '😀' UTF-8
     ]), BlobType));
@@ -1216,7 +1216,7 @@ describe("Blob", (test) => {
     // Exact byte verification
     const expectedEpoch = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
-      3, // DateTime type tag
+      4, // DateTime type tag
       0  // zigzag(0) = 0
     ]), BlobType));
     $(assert.equal(encodedEpoch, expectedEpoch));
@@ -1232,7 +1232,7 @@ describe("Blob", (test) => {
     // Exact byte verification
     const expectedDate = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
-      3, // DateTime type tag
+      4, // DateTime type tag
       128, 144, 162, 128, 188, 102 // zigzag-encoded timestamp varint
     ]), BlobType));
     $(assert.equal(encodedDate, expectedDate));
@@ -1250,7 +1250,7 @@ describe("Blob", (test) => {
     // Exact byte verification
     const expectedEmpty = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
-      1, // Blob type tag
+      2, // Blob type tag
       0  // length varint (0)
     ]), BlobType));
     $(assert.equal(encodedEmpty, expectedEmpty));
@@ -1266,7 +1266,7 @@ describe("Blob", (test) => {
     // Exact byte verification
     const expectedSmall = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
-      1, // Blob type tag
+      2, // Blob type tag
       5, // length varint (5)
       1, 2, 3, 4, 5 // blob data
     ]), BlobType));
@@ -1289,8 +1289,8 @@ describe("Blob", (test) => {
     // Exact byte verification
     const expectedInt = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
-      11, // Ref type tag
-      7, // Integer element type tag
+      12, // Ref type tag
+      8, // Integer element type tag
       0, // inline marker varint(0)
       84, // zigzag(42)=84
     ]), BlobType));
@@ -1307,8 +1307,8 @@ describe("Blob", (test) => {
     // Exact byte verification
     const expectedStr = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
-      11, // Ref type tag
-      13, // String element type tag
+      12, // Ref type tag
+      14, // String element type tag
       0,  // inline marker varint(0)
       3, 102, 111, 111, // length(3) + 'foo'
     ]), BlobType));
@@ -1328,7 +1328,7 @@ describe("Blob", (test) => {
     const expectedEmpty = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
       0, // Array type tag
-      7, // Integer element type tag
+      8, // Integer element type tag
       0, // inline marker varint(0)
       0  // length varint (0)
     ]), BlobType));
@@ -1346,7 +1346,7 @@ describe("Blob", (test) => {
     const expectedInt = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
       0, // Array type tag
-      7, // Integer element type tag
+      8, // Integer element type tag
       0, // inline marker varint(0)
       3, // length varint (3)
       2, 4, 6 // zigzag(1)=2, zigzag(2)=4, zigzag(3)=6
@@ -1365,7 +1365,7 @@ describe("Blob", (test) => {
     const expectedStr = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
       0,  // Array type tag
-      13, // String element type tag
+      14, // String element type tag
       0,  // inline marker varint(0)
       2,  // length varint (2)
       3, 102, 111, 111, // length(3) + 'foo'
@@ -1386,8 +1386,8 @@ describe("Blob", (test) => {
     // Exact byte verification
     const expectedEmpty = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
-      12, // Set type tag
-      7,  // Integer element type tag
+      13, // Set type tag
+      8,  // Integer element type tag
       0,  // inline marker varint(0)
       0   // length varint (0)
     ]), BlobType));
@@ -1404,8 +1404,8 @@ describe("Blob", (test) => {
     // Exact byte verification
     const expectedInt = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
-      12, // Set type tag
-      7,  // Integer element type tag
+      13, // Set type tag
+      8,  // Integer element type tag
       0,  // inline marker varint(0)
       3,  // length varint (3)
       2, 4, 6 // zigzag(1)=2, zigzag(2)=4, zigzag(3)=6
@@ -1423,8 +1423,8 @@ describe("Blob", (test) => {
     // Exact byte verification (sorted order: bar, baz, foo)
     const expectedStr = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
-      12, // Set type tag
-      13, // String element type tag
+      13, // Set type tag
+      14, // String element type tag
       0,  // inline marker varint(0)
       3,  // length varint (3)
       3, 98, 97, 114,   // length(3) + 'bar' (sorted first)
@@ -1446,9 +1446,9 @@ describe("Blob", (test) => {
     // Exact byte verification
     const expectedEmpty = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
-      4,  // Dict type tag
-      13, // String key type tag
-      7,  // Integer value type tag
+      5,  // Dict type tag
+      14, // String key type tag
+      8,  // Integer value type tag
       0,  // inline marker varint(0)
       0   // length varint (0)
     ]), BlobType));
@@ -1468,9 +1468,9 @@ describe("Blob", (test) => {
     // Exact byte verification
     const expectedDict = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
-      4,  // Dict type tag
-      13, // String key type tag
-      7,  // Integer value type tag
+      5,  // Dict type tag
+      14, // String key type tag
+      8,  // Integer value type tag
       0,  // inline marker varint(0)
       2,  // length varint (2 entries)
       1, 97, // key: length(1) + 'a'
@@ -1497,7 +1497,7 @@ describe("Blob", (test) => {
     // Exact byte verification
     const expectedEmpty = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
-      14, // Struct type tag
+      15, // Struct type tag
       0,  // inline marker
       0,  // field count varint (0)
     ]), BlobType));
@@ -1525,12 +1525,12 @@ describe("Blob", (test) => {
     // Exact byte verification (fields sorted: active, age, name)
     const expectedPerson = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
-      14, // Struct type tag
+      15, // Struct type tag
       0,  // inline marker
       3,  // field count varint (3)
-      4, 110, 97, 109, 101, 13, // field: length(4) + 'name' + String type
-      3, 97, 103, 101, 7,       // field: length(3) + 'age' + Integer type
-      6, 97, 99, 116, 105, 118, 101, 2, // field: length(6) + 'active' + Boolean type
+      4, 110, 97, 109, 101, 14, // field: length(4) + 'name' + String type
+      3, 97, 103, 101, 8,       // field: length(3) + 'age' + Integer type
+      6, 97, 99, 116, 105, 118, 101, 3, // field: length(6) + 'active' + Boolean type
       3, 66, 111, 98, // value: name = length(3) + 'Bob'
       50,             // value: age = zigzag(25) = 50
       0               // value: active = false
@@ -1557,17 +1557,14 @@ describe("Blob", (test) => {
     // Exact byte verification
     const expectedNone = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
-      15, // Variant type tag
+      16, // Variant type tag
       0,  // inline marker
       2,  // case count varint (2)
-      4, 110, 111, 110, 101, 9, // case: length(4) + "none" + Null type
-      4, 115, 111, 109, 101, 7, // case: length(4) + "some" + Integer type
+      4, 110, 111, 110, 101, 10, // case: length(4) + "none" + Null type
+      4, 115, 111, 109, 101, 8, // case: length(4) + "some" + Integer type
       0   // tag index (0 = "none")
     ]), BlobType));
     $(assert.equal(encodedNone, expectedNone));
-
-    // 0x89456173740d0a01 0f0002046e6f6e650904736f6d650700
-    // 0x89456173740d0a01 0f0002046e6f6e650a04736f6d650700
 
     // Round-trip
     const decodedNone = $.let(encodedNone.decodeBeast(OptionType, 'v2'));
@@ -1580,11 +1577,11 @@ describe("Blob", (test) => {
     // Exact byte verification
     const expectedSome = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
-      15, // Variant type tag
+      16, // Variant type tag
       0,  // inline marker
       2,  // case count varint (2)
-      4, 110, 111, 110, 101, 9, // case: length(4) + "none" + Null type
-      4, 115, 111, 109, 101, 7,  // case: length(4) + "some" + Integer type
+      4, 110, 111, 110, 101, 10, // case: length(4) + "none" + Null type
+      4, 115, 111, 109, 101, 8,  // case: length(4) + "some" + Integer type
       1,  // tag index (1 = "some")
       84  // value: zigzag(42) = 84
     ]), BlobType));
@@ -1636,17 +1633,17 @@ describe("Blob", (test) => {
     // Exact byte verification
     const expected = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
-      14, // Struct type tag
+      15, // Struct type tag
       0,  // inline marker
       7,  // field count varint (7)
       // Field definitions (sorted: active, count, id, metadata, score, tags, timestamp)
-      2, 105, 100, 13, // "id" + String type
-      6, 97, 99, 116, 105, 118, 101, 2, // "active" + Boolean type
-      9, 116, 105, 109, 101, 115, 116, 97, 109, 112, 3, // "timestamp" + DateTime type
-      5, 115, 99, 111, 114, 101, 5, // "score" + Float type
-      5, 99, 111, 117, 110, 116, 7, // "count" + Integer type
-      4, 116, 97, 103, 115, 0, 13, // "tags" + Array<String> type
-      8, 109, 101, 116, 97, 100, 97, 116, 97, 4, 13, 13, // "metadata" + Dict<String,String> type
+      2, 105, 100, 14, // "id" + String type
+      6, 97, 99, 116, 105, 118, 101, 3, // "active" + Boolean type
+      9, 116, 105, 109, 101, 115, 116, 97, 109, 112, 4, // "timestamp" + DateTime type
+      5, 115, 99, 111, 114, 101, 6, // "score" + Float type
+      5, 99, 111, 117, 110, 116, 8, // "count" + Integer type
+      4, 116, 97, 103, 115, 0, 14, // "tags" + Array<String> type
+      8, 109, 101, 116, 97, 100, 97, 116, 97, 5, 14, 14, // "metadata" + Dict<String,String> type
       // Field values
       9, 114, 101, 99, 45, 54, 55, 56, 57, 48, // "rec-67890"
       0, // false
@@ -1689,7 +1686,7 @@ describe("Blob", (test) => {
     const expected = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
       0, // Array type tag
-      4, 13, 0, 7, // Dict<String, Array<Integer>> type
+      5, 14, 0, 8, // Dict<String, Array<Integer>> type
       0, // inline marker for outer Array value
       2, // array length (2 dicts)
       // First dict: {"x": [10, 20], "y": [30]}
@@ -1743,16 +1740,16 @@ describe("Blob", (test) => {
     const expected0 = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
 
-      15, // Variant type tag
+      16, // Variant type tag
         0, // inline marker
         2, // case count varint (2)
-        4, 99, 111, 110, 115, 14, // case: length(4) + "cons" + Struct type
+        4, 99, 111, 110, 115, 15, // case: length(4) + "cons" + Struct type
           0, // inline marker
           2, // field count varint (2)
-          4, 104, 101, 97, 100, 2,  // field: length(4) + "head" + Boolean type
-          4, 116, 97, 105, 108, 10, // field: length(4) + "tail" + RecursiveType
+          4, 104, 101, 97, 100, 3,  // field: length(4) + "head" + Boolean type
+          4, 116, 97, 105, 108, 11, // field: length(4) + "tail" + RecursiveType
             4, // recursion depth zigzag (2)
-        3, 110, 105, 108, 9, // case: length(4) + "nil" + Null type
+        3, 110, 105, 108, 10, // case: length(4) + "nil" + Null type
 
       1, // tag index (0 = "nil")
     ]), BlobType));
@@ -1760,16 +1757,16 @@ describe("Blob", (test) => {
     const expected1 = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
 
-      15, // Variant type tag
+      16, // Variant type tag
         0, // inline marker
         2, // case count varint (2)
-        4, 99, 111, 110, 115, 14, // case: length(4) + "cons" + Struct type
+        4, 99, 111, 110, 115, 15, // case: length(4) + "cons" + Struct type
           0, // inline marker
           2, // field count varint (2)
-          4, 104, 101, 97, 100, 2,  // field: length(4) + "head" + Boolean type
-          4, 116, 97, 105, 108, 10, // field: length(4) + "tail" + RecursiveType
+          4, 104, 101, 97, 100, 3,  // field: length(4) + "head" + Boolean type
+          4, 116, 97, 105, 108, 11, // field: length(4) + "tail" + RecursiveType
             4, // recursion depth zigzag (2)
-        3, 110, 105, 108, 9, // case: length(4) + "nil" + Null type
+        3, 110, 105, 108, 10, // case: length(4) + "nil" + Null type
 
       0, // tag index (1 = "cons")
         1, // head = true
@@ -1779,16 +1776,16 @@ describe("Blob", (test) => {
     const expected2 = $.let(East.value(new Uint8Array([
       137, 69, 97, 115, 116, 13, 10, 1, // v2 magic bytes
 
-      15, // Variant type tag
+      16, // Variant type tag
         0, // inline marker
         2, // case count varint (2)
-        4, 99, 111, 110, 115, 14, // case: length(4) + "cons" + Struct type
+        4, 99, 111, 110, 115, 15, // case: length(4) + "cons" + Struct type
           0, // inline marker
           2, // field count varint (2)
-          4, 104, 101, 97, 100, 2,  // field: length(4) + "head" + Boolean type
-          4, 116, 97, 105, 108, 10, // field: length(4) + "tail" + RecursiveType
+          4, 104, 101, 97, 100, 3,  // field: length(4) + "head" + Boolean type
+          4, 116, 97, 105, 108, 11, // field: length(4) + "tail" + RecursiveType
             4, // recursion depth zigzag (2)
-        3, 110, 105, 108, 9, // case: length(4) + "nil" + Null type
+        3, 110, 105, 108, 10, // case: length(4) + "nil" + Null type
 
       0, // tag index (1 = "cons")
         0, // head = false

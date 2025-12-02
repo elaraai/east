@@ -56,8 +56,8 @@ export default {
    */
   generate<K extends EastType>(size: Expr<IntegerType> | bigint, keyType: K, keyFn: SubtypeExprOrValue<FunctionType<[IntegerType], NoInfer<K>>>, onConflict?: SubtypeExprOrValue<FunctionType<[NoInfer<K>], NoInfer<K>>>): ExprType<SetType<K>> {
     const length_expr = Expr.from(size, IntegerType);
-    const generator_expr = Expr.from(keyFn as any, FunctionType([IntegerType], keyType, []));
-    const on_conflict_expr = onConflict ? Expr.from(onConflict as any, FunctionType([keyType], NullType, [])) : Expr.function([keyType], NullType, ($, key) => $.error(Expr.str`Duplicate key ${key} in set`));
+    const generator_expr = Expr.from(keyFn as any, FunctionType([IntegerType], keyType));
+    const on_conflict_expr = onConflict ? Expr.from(onConflict as any, FunctionType([keyType], NullType)) : Expr.function([keyType], NullType, ($, key) => $.error(Expr.str`Duplicate key ${key} in set`));
 
     return Expr.fromAst({
       ast_type: "Builtin",

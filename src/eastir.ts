@@ -3,7 +3,7 @@
  * Dual-licensed under AGPL-3.0 and commercial license. See LICENSE for details.
  */
 import { type ValueTypeOf } from "./types.js";
-import type { FunctionIR } from "./ir.js";
+import type { AsyncFunctionIR, FunctionIR } from "./ir.js";
 import { compile_internal, ReturnException } from "./compile.js";
 import type { PlatformFunction } from "./platform.js";
 import { analyzeIR } from "./analyze.js";
@@ -14,7 +14,7 @@ import { analyzeIR } from "./analyze.js";
 export class EastIR<Inputs extends any[], Output extends any> {
   constructor(public ir: FunctionIR) {
     if (ir.type !== "Function") {
-      throw new Error(`Expected function expressions, got a ${ir.type}`)
+      throw new Error(`Expected function expression, got a ${ir.type}`)
     }
     if (ir.value.captures.length !== 0) {
       throw new Error(`Expected free function, without captured variables`)
@@ -23,19 +23,8 @@ export class EastIR<Inputs extends any[], Output extends any> {
 
   /** Compile the function for execution in JavaScript using a closure-compiler technique.
    * Platform functions must be provided for the function to evaluate.
-   *
-   * This method is for synchronous platforms only. Use compileAsync() if any platform function is async.
-   * @throws {Error} if any platform function is async
    */
   compile(platform: PlatformFunction[]): (...inputs: { [K in keyof Inputs]: ValueTypeOf<Inputs[K]> }) => ValueTypeOf<Output> {
-    // Check that no platform functions are async
-    if (platform.some(fn => fn.type === 'async')) {
-      throw new Error(
-        `Cannot use compile() with async platform functions: ${platform.map(f => f.name).join(', ')}. ` +
-        `Use compileAsync() instead.`
-      );
-    }
-
     // Analyse the IR
     const analyzed_ir = analyzeIR(this.ir, platform, {});
 
@@ -61,21 +50,26 @@ export class EastIR<Inputs extends any[], Output extends any> {
       }
     };
   }
+}
 
-  /** Compile the function for execution in JavaScript using a closure-compiler technique.
-   * Platform functions must be provided for the function to evaluate.
-   *
-   * This method is for platforms with async functions. Use compile() if all platform functions are sync.
-   * @throws {Error} if no platform functions are async
-   */
-  compileAsync(platform: PlatformFunction[]): (...inputs: { [K in keyof Inputs]: ValueTypeOf<Inputs[K]> }) => Promise<ValueTypeOf<Output>> {
-    // Check that at least one platform function is async
-    if (!platform.some(fn => fn.type === 'async')) {
-      throw new Error(
-        `No async platform functions found. Use compile() instead of compileAsync() for better performance.`
-      );
+/** A helper class wrapping East's "intermediate representation" (IR) for a free async function.
+ * The IR can be serialized and saved, or compiled so that the function can be executed.
+ */
+export class AsyncEastIR<Inputs extends any[], Output extends any> {
+  constructor(public ir: AsyncFunctionIR) {
+    if (ir.type !== "AsyncFunction") {
+      throw new Error(`Expected async function expression, got a ${ir.type}`)
     }
+    if (ir.value.captures.length !== 0) {
+      throw new Error(`Expected free async function, without captured variables`)
+    }
+  }
 
+  /** Compile the async function for execution in JavaScript using a closure-compiler technique.
+   * Platform functions must be provided for the function to evaluate, which may return `Promise`s.
+   * The compiled function itself returns a `Promise`.
+   */
+  compile(platform: PlatformFunction[]): (...inputs: { [K in keyof Inputs]: ValueTypeOf<Inputs[K]> }) => Promise<ValueTypeOf<Output>> {
     // Analyse the IR
     const analyzed_ir = analyzeIR(this.ir, platform, {});
 
