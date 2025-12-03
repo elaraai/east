@@ -7,7 +7,7 @@ import util from "node:util";
 import { test as testNode, describe as describeNode } from "node:test";
 import { writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { East, Expr, FunctionType, get_location, IRType, NullType, StringType, toJSONFor, type SubtypeExprOrValue } from "../src/index.js";
+import { AsyncFunctionType, East, Expr, get_location, IRType, NullType, StringType, toJSONFor, type SubtypeExprOrValue } from "../src/index.js";
 import { valueOrExprToAstTyped } from "../src/expr/ast.js";
 import type { TypeSymbol } from "../src/expr/expr.js";
 import type { BlockBuilder } from "../src/expr/block.js";
@@ -47,7 +47,7 @@ const testFail = East.platform("testFail", [StringType], NullType);
  * @param name - The name of the test
  * @param body - The test body function
  */
-const test = East.platform("test", [StringType, FunctionType([], NullType)], NullType);
+const test = East.asyncPlatform("test", [StringType, AsyncFunctionType([], NullType)], NullType);
 
 /**
  * Platform function that defines a test suite.
@@ -58,7 +58,7 @@ const test = East.platform("test", [StringType, FunctionType([], NullType)], Nul
  * @param name - The name of the test suite
  * @param body - A function that calls test() to define tests
  */
-const describe = East.platform("describe", [StringType, FunctionType([], NullType)], NullType);
+const describe = East.asyncPlatform("describe", [StringType, AsyncFunctionType([], NullType)], NullType);
 
 /**
  * Creates a test platform that uses Node.js assertions.
@@ -72,12 +72,8 @@ function createTestPlatform() {
             // Assertion failed - throw to fail the test
             assert.fail(message);
         }),
-        test.implement((name: string, body: () => null) => {
-            testNode(name, () => { body(); });
-        }),
-        describe.implement((name: string, body: () => null) => {
-            describeNode(name, () => { body(); });
-        }),
+        test.implement((name: string, body: () => Promise<null>) => testNode(name, async () => { await body(); })),
+        describe.implement((name: string, body: () => Promise<null>) => describeNode(name, async () => { await body(); })),
     ];
 }
 
@@ -126,10 +122,10 @@ export function describeEast(
     });
 
     // Create a single East function that uses describe/test platform functions
-    const suiteFunction = East.function([], NullType, $ => {
-        $(describe.call($, suiteName, East.function([], NullType, $ => {
+    const suiteFunction = East.asyncFunction([], NullType, $ => {
+        $(describe.call($, suiteName, East.asyncFunction([], NullType, $ => {
             for (const { name, body } of tests) {
-                $(test.call($, name, East.function([], NullType, body)));
+                $(test.call($, name, East.asyncFunction([], NullType, body)));
             }
         })));
     });
@@ -155,7 +151,7 @@ export function describeEast(
     // Run the test suite using the Node.js platform implementation
     const platform = createTestPlatform();
     const compiled = suiteFunction.toIR().compile(platform);
-    compiled();
+    return compiled();
 }
 
 /**
@@ -182,7 +178,7 @@ export const assertEast = {
                 const exp = $.let(expected_expr);
                 return East.is(act as any, exp as any).ifElse(
                     _$ => testPass(),
-                    _$ => testFail(str`Expected ${act} to equal ${exp} (${East.value(`${location.filename} ${location.line}:${location.column}`)})`)
+                    _$ => testFail(str`Expected ${act} to be ${exp} (${East.value(`${location.filename} ${location.line}:${location.column}`)})`)
                 );
             }),
             (_$, message, stack) => testFail(East.String.printError(message, stack))

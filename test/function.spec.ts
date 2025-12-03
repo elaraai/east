@@ -17,7 +17,7 @@ import {
 } from "../src/index.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
 
-describe("Function", (test) => {
+await describe("Function", (test) => {
     test("simple function call returns correct result", $ => {
         const addOne = East.function([IntegerType], IntegerType, ($, x) => {
             return x.add(1n);
@@ -239,5 +239,23 @@ describe("Function", (test) => {
 
         // 3 -> 4 (add 1) -> 8 (double) -> 64 (square)
         $(assert.equal(result, 64n));
+    });
+
+    test("simple async function returns resolved promise", $ => {
+        const asyncGreet = East.asyncFunction([], StringType, _$ => {
+            return "Hello, async!";
+        });
+        $(assert.equal(asyncGreet(), "Hello, async!"));
+    });
+
+    test("async function calls another async function", $ => {
+        const asyncDouble = East.asyncFunction([IntegerType], IntegerType, (_$, x) => {
+            return x.multiply(2n);
+        });
+        const asyncQuadruple = East.asyncFunction([IntegerType], IntegerType, ($, x) => {
+            const doubled = $.let(asyncDouble(x));
+            return asyncDouble(doubled);
+        });
+        $(assert.equal(asyncQuadruple(5n), 20n));
     });
 });

@@ -48,7 +48,7 @@ const LinkedListType = RecursiveType(self => VariantType({
     })
 }));
 
-describe("East", (test) => {
+await describe("East", (test) => {
     test("value() with null", $ => {
         $(assert.equal(East.value(null), null));
     });

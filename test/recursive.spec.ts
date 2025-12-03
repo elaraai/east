@@ -5,7 +5,7 @@
 import { East, BooleanType, VariantType, NullType, RecursiveType, variant, StructType, Expr, isTypeEqual } from "../src/index.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
 
-describe("Recursive", (test) => {
+await describe("Recursive", (test) => {
     const LinkedListType = RecursiveType(self => VariantType({
         nil: NullType,
         cons: StructType({

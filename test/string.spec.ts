@@ -6,7 +6,7 @@ import { East, ArrayType, BooleanType, IntegerType, NullType, StringType, Struct
 import { EastTypeType, toEastTypeValue } from "../src/type_of_type.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
 
-describe("String", (test) => {
+await describe("String", (test) => {
     test("Printing values", $ => {
         const MAX_INT64 = 9223372036854775807n;
         const MIN_INT64 = -9223372036854775808n;

@@ -5,7 +5,7 @@
 import { East, FloatType } from "../src/index.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
 
-describe("Float", (test) => {
+await describe("Float", (test) => {
     test("Arithmetic", $ => {
         $(assert.equal(East.value(10).negate(), -10));
         $(assert.equal(East.value(10).add(5), 15));

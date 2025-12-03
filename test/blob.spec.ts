@@ -13,7 +13,7 @@ import {
 } from "../src/index.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
 
-describe("Blob", (test) => {
+await describe("Blob", (test) => {
   test("Array ops", $ => {
     $(assert.equal(East.value(Uint8Array.from([]), BlobType).size(), 0n));
     $(assert.equal(East.value(Uint8Array.from([1, 2, 3])).size(), 3n));

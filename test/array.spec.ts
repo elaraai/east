@@ -6,7 +6,7 @@ import { East, Expr, ArrayType, IntegerType, StringType, BooleanType, some, none
 import type { option } from "../src/index.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
 
-describe("Array", (test) => {
+await describe("Array", (test) => {
     test("Array ops", $ => {
         $(assert.equal(East.value([], ArrayType(IntegerType)).size(), 0n))
         $(assert.equal(East.value([1n, 2n, 3n]).size(), 3n))

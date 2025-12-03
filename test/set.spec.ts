@@ -5,7 +5,7 @@
 import { East, Expr, IntegerType, SetType, StringType, some, none, DictType, BooleanType } from "../src/index.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
 
-describe("Set", (test) => {
+await describe("Set", (test) => {
     test("Set ops", $ => {
         $(assert.equal(East.value(new Set([]), SetType(IntegerType)).size(), 0n))
         $(assert.equal(East.value(new Set([1n, 2n, 3n])).size(), 3n))

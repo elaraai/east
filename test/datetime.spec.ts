@@ -5,7 +5,7 @@
 import { East, DateTimeType } from "../src/index.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
 
-describe("DateTime", (test) => {
+await describe("DateTime", (test) => {
     test("Component extraction", $ => {
         // Create DateTimeExpr directly using const variables
         const date1 = $.const(new Date("2024-03-15T10:30:45.123Z"), DateTimeType);

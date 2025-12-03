@@ -393,17 +393,28 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
     }
     const else_body = compile_internal(ir.value.else_body, Object.create(ctx), platform, asyncPlatformFns, true, compilingNodes);
 
-    if (asyncPredicate) {
-      return async (ctx: Record<string, any>) => {
-        for (const { predicate, body } of ifs) {
-          if (await predicate(ctx)) {
-            return body(Object.create(ctx));
+    if (ir.value.isAsync) {
+      if (asyncPredicate) {
+        return async (ctx: Record<string, any>) => {
+          for (const { predicate, body } of ifs) {
+            if (await predicate(ctx)) {
+              return await body(Object.create(ctx));
+            }
           }
-        }
-        return else_body(Object.create(ctx));
-      };
+          return await else_body(Object.create(ctx));
+        };
+      } else {
+        return async (ctx: Record<string, any>) => {
+          for (const { predicate, body } of ifs) {
+            if (predicate(ctx) as boolean) {
+              return await body(Object.create(ctx));
+            }
+          }
+          return await else_body(Object.create(ctx));
+        };
+      }
     } else {
-        return (ctx: Record<string, any>) => {
+      return (ctx: Record<string, any>) => {
         for (const { predicate, body } of ifs) {
           if (predicate(ctx) as boolean) {
             return body(Object.create(ctx));
@@ -425,13 +436,22 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
       compiled_cases[k] = compile_internal(body, ctx2, platform, asyncPlatformFns, true, compilingNodes);
     }
 
-    if (ir.value.variant.value.isAsync) {
-      return async (ctx: Record<string, any>) => {
-        const v: variant = await compiled_variant(ctx);
-        const ctx2 = Object.create(ctx);
-        ctx2[data_names[v.type]!] = v.value;
-        return compiled_cases[v.type]!(ctx2);
-      };
+    if (ir.value.isAsync) {
+      if (ir.value.variant.value.isAsync) {
+        return async (ctx: Record<string, any>) => {
+          const v: variant = await compiled_variant(ctx);
+          const ctx2 = Object.create(ctx);
+          ctx2[data_names[v.type]!] = v.value;
+          return await compiled_cases[v.type]!(ctx2);
+        };
+      } else {
+        return async (ctx: Record<string, any>) => {
+          const v: variant = compiled_variant(ctx);
+          const ctx2 = Object.create(ctx);
+          ctx2[data_names[v.type]!] = v.value;
+          return await compiled_cases[v.type]!(ctx2);
+        };
+      }
     } else {
       return (ctx: Record<string, any>) => {
         const v: variant = compiled_variant(ctx);

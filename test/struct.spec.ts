@@ -5,7 +5,7 @@
 import { East, IntegerType, StringType, StructType } from "../src/index.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
 
-describe("Struct", (test) => {
+await describe("Struct", (test) => {
     test("Struct operations", $ => {
         // Basic struct creation and field access
         const person = $.let(East.value({ name: "Alice", age: 30n }));

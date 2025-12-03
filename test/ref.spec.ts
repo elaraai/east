@@ -5,7 +5,7 @@
 import { East, IntegerType, ref, RefType } from "../src/index.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
 
-describe("Ref", (test) => {
+await describe("Ref", (test) => {
     test("Construct, get, set", $ => {
         $(assert.equal(East.value(ref(42n)).get(), 42n));
 

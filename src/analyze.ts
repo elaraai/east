@@ -1400,7 +1400,22 @@ export function analyzeIR<T extends IR>(
         );
       }
 
-      isAsync = tryInfo.value.isAsync || catchInfo.value.isAsync;
+      // Visit finally body
+      const finallyInfo = visit(node.value.finally_body, ctx, expectedReturnType);
+
+      isAsync = tryInfo.value.isAsync || catchInfo.value.isAsync || finallyInfo.value.isAsync;
+
+      // Return analyzed TryCatch with analyzed bodies
+      return {
+        ...node,
+        value: {
+          ...node.value,
+          try_body: tryInfo as IR,
+          catch_body: catchInfo as IR,
+          finally_body: finallyInfo as IR,
+          isAsync,
+        }
+      } as AnalyzedIR;
     }
 
     else if (node.type === "Struct") {
