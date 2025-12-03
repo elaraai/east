@@ -213,7 +213,7 @@ export function VariantType<Cases extends { [K in string]: any }>(case_types: Ca
 function validateNotMutuallyRecursive(type: EastType | string, allowedMarker: RecursiveType<undefined>): void {
   const visited = new Set<EastType>();
 
-  function check(t: EastType | string): void {
+  function check(t: EastType | string, allowed: boolean): void {
     // Skip string placeholders (used for generic builtins)
     if (typeof t === "string") return;
 
@@ -227,7 +227,12 @@ function validateNotMutuallyRecursive(type: EastType | string, allowedMarker: Re
     }
 
     // Skip allowedMarker
-    if (t === allowedMarker) return;
+    if (t === allowedMarker) {
+      if (!allowed) {
+        throw new Error("RecursiveType cannot pass into set keys, dictionary keys, or function input/output types");
+      }
+      return;
+    }
 
     // Avoid infinite loops
     if (visited.has(t)) return;
@@ -245,27 +250,32 @@ function validateNotMutuallyRecursive(type: EastType | string, allowedMarker: Re
       }
     } else if (t.type === "Struct") {
       for (const [_, field_type] of Object.entries(t.fields)) {
-        check(field_type);
+        check(field_type, allowed);
       }
     } else if (t.type === "Variant") {
       for (const [_, case_type] of Object.entries(t.cases)) {
-        check(case_type);
+        check(case_type, allowed);
       }
+    } else if (t.type === "Ref") {
+      check(t.value, allowed);
     } else if (t.type === "Array") {
-      check(t.value);
+      check(t.value, allowed);
     } else if (t.type === "Set") {
-      check(t.key);
+      check(t.key, false);
     } else if (t.type === "Dict") {
-      check(t.key);
-      check(t.value);
+      check(t.key, false);
+      check(t.value, allowed);
     } else if (t.type === "Function") {
-      t.inputs.forEach(check);
-      check(t.output);
+      t.inputs.forEach(input => check(input, false));
+      check(t.output, false);
+    } else if (t.type === "AsyncFunction") {
+      t.inputs.forEach(input => check(input, false));
+      check(t.output, false);
     }
     // Primitive types don't need recursion
   }
 
-  check(type);
+  check(type, true);
 }
 
 export type RecursiveTypeMarker = { type: "Recursive" };
@@ -323,10 +333,6 @@ export function RecursiveType<F extends (self: RecursiveTypeMarker) => EastType>
 
   // Validate SCC size 1 (no nested RecursiveTypes with cross-references)
   validateNotMutuallyRecursive(type, ret);
-
-  if (typeof type !== "string" && !isDataType(type as EastType)) {
-    throw new Error(`Recursive node type must be a (non-function) data type, got ${printType(type as EastType)}`);
-  }
 
   return ret as RecursiveType<ReturnType<F>>;
 };
@@ -586,11 +592,11 @@ export type ValueTypeOf<T> =
   T extends NullType ? null :
   T extends BooleanType ? boolean :
   T extends IntegerType ? bigint :
-  T extends RefType<infer U> ? ref<ValueTypeOf<U>> :
   T extends FloatType ? number :
   T extends StringType ? string :
   T extends DateTimeType ? Date :
   T extends BlobType ? Uint8Array :
+  T extends RefType<infer U> ? ref<ValueTypeOf<U>> :
   T extends ArrayType<infer U> ? ValueTypeOf<U>[] :
   T extends SetType<infer U> ? Set<ValueTypeOf<U>> :
   T extends DictType<infer U, infer V> ? Map<ValueTypeOf<U>, ValueTypeOf<V>> :
@@ -599,6 +605,7 @@ export type ValueTypeOf<T> =
   T extends RecursiveType<infer U> ? ValueTypeOf<U> :
   T extends RecursiveTypeMarker ? any : // make TypeScript faster - don't expand further
   T extends FunctionType<infer I, infer O> ? (...inputs: { [K in keyof I]: ValueTypeOf<I[K]> }) => ValueTypeOf<O> :
+  T extends AsyncFunctionType<infer I, infer O> ? (...inputs: { [K in keyof I]: ValueTypeOf<I[K]> }) => Promise<ValueTypeOf<O>> :
   any;
 
 // export type ValueTypeOf<_T> = any;

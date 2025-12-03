@@ -119,6 +119,5 @@ export type TypeOf<T> =
   T extends variant<infer Case, infer U> ? Case extends string ? VariantType<{ [K in Case]: TypeOf<U> }> : never :
   // note the user might do some "interesting" spreads (replace a field, or add a new field - generally we don't support removing fields via spread)
   T extends Expr<StructType<infer Fields>> ? StructType<keyof Fields extends keyof T ? { [K in (string & keyof T)]: TypeOf<T[K]> } : { [K in keyof Fields]: K extends keyof T ? TypeOf<T[K]> : Fields[K] }> :
-  T extends ($: BlockBuilder<any>, ...args: infer I) => infer O ? FunctionType<{ [K in keyof I]: TypeOf<I[K]> }, TypeOf<O>> :
   T extends Expr<infer U> ? U :
   StructType<{ [K in (string & keyof T)]: TypeOf<T[K]> }>;

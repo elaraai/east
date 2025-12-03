@@ -1245,7 +1245,12 @@ export const BlockBuilder = <Ret>(return_type: Ret): BlockBuilder<Ret> => {
       throw new Error(`Unreachable statement detected at ${printLocation(get_location(2))}`);
     }
 
-    const v = Expr.ast(variable);
+    let v: AST = Expr.ast(variable);
+
+    // Handle RecursiveType variables which are auto-unwrapped by fromAst
+    if (v.ast_type === "UnwrapRecursive") {
+      v = v.value;
+    }
 
     if (v.ast_type !== "Variable") {
       throw new Error("Can only assign to a variable");

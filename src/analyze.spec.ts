@@ -7,7 +7,7 @@ import util from "node:util";
 import assert from "node:assert";
 import { analyzeIR, type AnalyzedIR } from "./analyze.js";
 import { East } from "./expr/index.js";
-import type { FunctionIR, ReturnIR, PlatformIR, ValueIR, BlockIR, LetIR, AsyncFunctionIR, CallAsyncIR } from "./ir.js";
+import type { FunctionIR, ReturnIR, PlatformIR, ValueIR, BlockIR, LetIR, AsyncFunctionIR } from "./ir.js";
 import {
     NullType,
     BooleanType,
@@ -80,7 +80,7 @@ describe("analyzeIR - isAsync propagation", () => {
         assert.strictEqual(argNode.value.isAsync, false, "Value arg should be sync");
 
         // Execute the compiled function and verify it works
-        // Use compileAsync for async platform functions
+        // Async functions return a Promise when compiled
         const compiled = fn.toIR().compile(platform);
         const result = await compiled();
         assert.strictEqual(result, "url", "Compiled function should return the correct result");

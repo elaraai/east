@@ -33,11 +33,11 @@ import { Builtins } from "./builtins.js";
  * @example
  * ```ts
  * const log = East.platform("log", [StringType], NullType);
- * const readFile = East.platform("readFile", [StringType], StringType);
+ * const readFile = East.asyncPlatform("readFile", [StringType], StringType);
  *
  * const platform = [
  *   log.implement(console.log),
- *   readFile.implementAsync(fs.promises.readFile),
+ *   readFile.implement(fs.promises.readFile),
  * ];
  * ```
  */
@@ -108,7 +108,7 @@ export type VariableContext = Record<string, VariableMetadata>;
  * const ir = // ... parsed East program
  * const platform = [
  *   log.implement(console.log),
- *   fetch.implementAsync(fetch)
+ *   fetch.implement(fetch)  // async platform uses .implement() too
  * ];
  *
  * const enrichedIR = analyzeIR(ir, platform, {});
