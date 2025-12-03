@@ -49,6 +49,7 @@ export function defaultValue(type: EastType | EastTypeValue): any {
     },
     Recursive: _ => { throw new Error("Cannot create a default value of type .Recursive"); },
     Function: _ => { throw new Error(`Cannot create a default value of type .Function`) },
+    AsyncFunction: _ => { throw new Error(`Cannot create a default value of type .AsyncFunction`) },
   });
 }
 
@@ -96,5 +97,6 @@ export function minimalValue(type: EastType | EastTypeValue): any {
     },
     Recursive: _ => { throw new Error("Cannot create a default value of type .Recursive"); },
     Function: _ => { throw new Error(`Cannot create a default value of type .Function`) },
+    AsyncFunction: _ => { throw new Error(`Cannot create a default value of type .AsyncFunction`) },
   });
 }

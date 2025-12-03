@@ -4,7 +4,7 @@
  */
 
 import type { variant } from "../containers/variant.js";
-import type { ArrayType, BooleanType, FloatType, FunctionType, IntegerType, NeverType, NullType, StructType, StringType, VariantType, SubType, SetType, DictType, DateTimeType, BlobType, RecursiveType, RecursiveTypeMarker, RefType } from "../types.js";
+import type { ArrayType, BooleanType, FloatType, FunctionType, IntegerType, NeverType, NullType, StructType, StringType, VariantType, SubType, SetType, DictType, DateTimeType, BlobType, RecursiveType, RecursiveTypeMarker, RefType, AsyncFunctionType } from "../types.js";
 import type { Expr } from "./expr.js";
 import type { NeverExpr } from "./never.js";
 import type { NullExpr } from "./null.js";
@@ -23,6 +23,7 @@ import type { CallableFunctionExpr } from "./function.js";
 import type { BlockBuilder } from "./block.js";
 import type { ref } from "../containers/ref.js";
 import type { RefExpr } from "./ref.js";
+import type { CallableAsyncFunctionExpr } from "./asyncfunction.js";
 
 /**
  * Type mapping for values that can be passed to expression methods
@@ -48,6 +49,8 @@ export type SubtypeExprOrValue<T> =
   T extends RecursiveTypeMarker ? any : // make TypeScript faster - don't expand further
   T extends FunctionType<infer I, undefined> ? Expr<FunctionType<I, any>> | (($: BlockBuilder<NeverType>, ...input: { [K in keyof I]: ExprType<I[K]> }) => any) :
   T extends FunctionType<infer I, infer O> ? Expr<FunctionType<I, SubType<O>>> | (($: BlockBuilder<O>, ...input: { [K in keyof I]: ExprType<I[K]> }) => void | SubtypeExprOrValue<O>) :
+  T extends AsyncFunctionType<infer I, undefined> ? Expr<AsyncFunctionType<I, any>> | (($: BlockBuilder<NeverType>, ...input: { [K in keyof I]: ExprType<I[K]> }) => any) :
+  T extends AsyncFunctionType<infer I, infer O> ? Expr<AsyncFunctionType<I, SubType<O>>> | (($: BlockBuilder<O>, ...input: { [K in keyof I]: ExprType<I[K]> }) => void | SubtypeExprOrValue<O>) :
   Expr<NeverType> | Expr<T>;
 
 /** Expand a given recursive type one level deeper */
@@ -85,6 +88,7 @@ export type ExprType<T> =
   T extends NeverType | RecursiveType<infer U> ? ExprType<ExpandOnce<U, T>> :
   T extends NeverType | RecursiveTypeMarker ? NeverExpr : // this shouldn't happen
   T extends NeverType | FunctionType<infer I, infer O> ? CallableFunctionExpr<I, O> :
+  T extends NeverType | AsyncFunctionType<infer I, infer O> ? CallableAsyncFunctionExpr<I, O> :
   Expr<T>;
 
 // Note the types below are written such that mixtures of values and expressions are accepted (e.g. Array<string | StringExpr> => StringType)
@@ -115,6 +119,5 @@ export type TypeOf<T> =
   T extends variant<infer Case, infer U> ? Case extends string ? VariantType<{ [K in Case]: TypeOf<U> }> : never :
   // note the user might do some "interesting" spreads (replace a field, or add a new field - generally we don't support removing fields via spread)
   T extends Expr<StructType<infer Fields>> ? StructType<keyof Fields extends keyof T ? { [K in (string & keyof T)]: TypeOf<T[K]> } : { [K in keyof Fields]: K extends keyof T ? TypeOf<T[K]> : Fields[K] }> :
-  T extends ($: BlockBuilder<any>, ...args: infer I) => infer O ? FunctionType<{ [K in keyof I]: TypeOf<I[K]> }, TypeOf<O>> :
   T extends Expr<infer U> ? U :
   StructType<{ [K in (string & keyof T)]: TypeOf<T[K]> }>;

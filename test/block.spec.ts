@@ -20,7 +20,7 @@ import {
 } from "../src/index.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
 
-describe("Block", (test) => {
+await describe("Block", (test) => {
     test("const() with null", $ => {
         const x = $.const(null);
         $(assert.equal(x, null));

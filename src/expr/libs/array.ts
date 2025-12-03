@@ -129,7 +129,7 @@ export default {
    */
   generate<T>(size: Expr<IntegerType> | bigint, valueType: T, valueFn: SubtypeExprOrValue<FunctionType<[IntegerType], NoInfer<T>>>): ExprType<ArrayType<T>> {
     const length_expr = Expr.from(size, IntegerType);
-    const generator_expr = Expr.from(valueFn as any, FunctionType([IntegerType], valueType, []));
+    const generator_expr = Expr.from(valueFn as any, FunctionType([IntegerType], valueType));
     const value_type_deduced = generator_expr[TypeSymbol].output;
     return Expr.fromAst({
       ast_type: "Builtin",

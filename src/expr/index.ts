@@ -10,11 +10,26 @@ export * from './types.js';
 import { Expr } from './expr.js';
 export { Expr } from './expr.js';
 
-// Import factory implementation
-import { from, equal, notEqual, less, lessEqual, print, is, greaterEqual, greater, func, str, platform } from './block.js';
-export { BlockBuilder } from './block.js';
-// import type { FunctionExpr } from './function.js';
+export { NeverExpr } from './never.js';
+export { NullExpr } from './null.js';
+export { BooleanExpr } from './boolean.js';
+export { IntegerExpr } from './integer.js';
+export { FloatExpr } from './float.js';
+export { DateTimeExpr } from './datetime.js';
+export { StringExpr } from './string.js';
+export { BlobExpr } from './blob.js';
+export { RefExpr } from './ref.js';
+export { ArrayExpr } from './array.js';
+export { SetExpr } from './set.js';
+export { DictExpr } from './dict.js';
+export { StructExpr } from './struct.js';
+export { VariantExpr } from './variant.js';
+export { type CallableFunctionExpr, FunctionExpr } from './function.js';
+export { type CallableAsyncFunctionExpr, AsyncFunctionExpr } from './asyncfunction.js';
 
+// Import factory implementation
+import { from, equal, notEqual, less, lessEqual, print, is, greaterEqual, greater, func, str, platform, asyncFunction, asyncPlatform } from './block.js';
+export { BlockBuilder, type AsyncPlatformDefinition, type PlatformDefinition } from './block.js';
 
 // Import standard libraries
 import IntegerLib from './libs/integer.js';
@@ -138,6 +153,30 @@ export const East = {
   function: func,
 
   /**
+   * Creates an async East function with typed inputs and output.
+   * Functions can be nested, serialized to IR, and compiled to JavaScript.
+   *
+   * @param inputs - Array of East types for function parameters
+   * @param output - East type for function return value
+   * @param body - Function body using block builder and parameters
+   * @returns An AsyncFunctionExpr that can be compiled or serialized
+   *
+   * @example
+   * ```ts
+   * // An async function that pauses the program for a given number of milliseconds
+   * const sleep = East.asyncPlatform("sleep", [IntegerType], NullType);
+   *
+   * // Wrap it in an async East function to wait whole number of seconds
+   * const sleepSeconds = East.asyncFunction(
+   *   [IntegerType],
+   *   NullType,
+   *   ($, seconds) => $(sleep(seconds.multiply(1000n)))
+   * );
+   * ```
+   */
+  asyncFunction,
+
+  /**
    * Defines a platform function that can be called from East code.
    * Platform functions allow East code to interact with the external environment.
    *
@@ -145,6 +184,8 @@ export const East = {
    * @param inputs - Array of East types for the function parameters
    * @param output - East type for the function return value
    * @returns A callable platform function helper
+   * 
+   * @see {@link asyncPlatform} for defining async platform functions.
    *
    * @example
    * ```ts
@@ -163,13 +204,37 @@ export const East = {
    * ```
    */
   platform,
-  // compile,
-  // block,
-  // error,
-  // tryCatch,
-  // match: matchExpr,
 
-  // builtins
+  /**
+   * Defines an asynchronous platform function that can be called from East code.
+   * Platform functions allow East code to interact with the external environment.
+   * East will handle awaiting the result automatically, but the platform function can only
+   * be called from async East functions.
+   *
+   * @param name - The name of the platform function
+   * @param inputs - Array of East types for the function parameters
+   * @param output - East type for the function return value
+   * @returns A callable platform function helper
+   * 
+   * @see {@link platform} for synchronous platform functions.
+   *
+   * @example
+   * ```ts
+   * const log = East.platform("log", [StringType], NullType);
+   * const readFile = East.asyncPlatform("readFile", [StringType], StringType);
+   *
+   * const myFunction = East.asyncFunction([StringType], NullType, ($, msg) => {
+   *   $(log(East.str`Message: ${msg}`));
+   *   $.return(null);
+   * });
+   *
+   * const asyncPlatform = [
+   *   log.implement(console.log),
+   *   readFile.implement(fs.promises.readFile),
+   * ];
+   * ```
+   */
+  asyncPlatform,
 
   /**
    * Converts any East expression to its string representation.

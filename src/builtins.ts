@@ -471,13 +471,13 @@ export const Builtins: Record<BuiltinName, BuiltinType> = {
   },
   RefMerge: {
     type_parameters: ["T", "T2"],
-    inputs: [RefType("T"), "T2", FunctionType(["T", "T2"], "T", null)] as const,
+    inputs: [RefType("T"), "T2", FunctionType(["T", "T2"], "T")] as const,
     output: NullType,
   },
 
   ArrayGenerate: {
     type_parameters: ["T"],
-    inputs: [IntegerType, FunctionType([IntegerType], "T", null)] as const,
+    inputs: [IntegerType, FunctionType([IntegerType], "T")] as const,
     output: ArrayType("T"),
   },
   ArrayRange: {
@@ -507,7 +507,7 @@ export const Builtins: Record<BuiltinName, BuiltinType> = {
   },
   ArrayGetOrDefault: {
     type_parameters: ["T"],
-    inputs: [ArrayType("T"), IntegerType, FunctionType([IntegerType], "T", null)] as const,
+    inputs: [ArrayType("T"), IntegerType, FunctionType([IntegerType], "T")] as const,
     output: "T",
   },
   ArrayTryGet: {
@@ -522,7 +522,7 @@ export const Builtins: Record<BuiltinName, BuiltinType> = {
   },
   ArrayMerge: {
     type_parameters: ["T", "T2"],
-    inputs: [ArrayType("T"), IntegerType, "T2", FunctionType(["T", "T2", IntegerType], "T", null)] as const,
+    inputs: [ArrayType("T"), IntegerType, "T2", FunctionType(["T", "T2", IntegerType], "T")] as const,
     output: NullType,
   },
   ArrayPushLast: {
@@ -557,7 +557,7 @@ export const Builtins: Record<BuiltinName, BuiltinType> = {
   },
   ArrayMergeAll: {
     type_parameters: ["T", "T2"],
-    inputs: [ArrayType("T"), ArrayType("T2"), FunctionType(["T", "T2", IntegerType], "T", null)] as const,
+    inputs: [ArrayType("T"), ArrayType("T2"), FunctionType(["T", "T2", IntegerType], "T")] as const,
     output: NullType,
   },
   ArrayClear: {
@@ -567,7 +567,7 @@ export const Builtins: Record<BuiltinName, BuiltinType> = {
   },
   ArraySortInPlace: {
     type_parameters: ["T", "T2"],
-    inputs: [ArrayType("T"), FunctionType(["T"], "T2", null)] as const,
+    inputs: [ArrayType("T"), FunctionType(["T"], "T2")] as const,
     output: NullType,
   },
   ArrayReverseInPlace: {
@@ -577,7 +577,7 @@ export const Builtins: Record<BuiltinName, BuiltinType> = {
   },
   ArraySort: {
     type_parameters: ["T", "T2"],
-    inputs: [ArrayType("T"), FunctionType(["T"], "T2", null)] as const,
+    inputs: [ArrayType("T"), FunctionType(["T"], "T2")] as const,
     output: ArrayType("T"),
   },
   ArrayReverse: {
@@ -587,27 +587,27 @@ export const Builtins: Record<BuiltinName, BuiltinType> = {
   },
   ArrayIsSorted: {
     type_parameters: ["T", "T2"],
-    inputs: [ArrayType("T"), FunctionType(["T"], "T2", null)] as const,
+    inputs: [ArrayType("T"), FunctionType(["T"], "T2")] as const,
     output: BooleanType,
   },
   ArrayFindSortedFirst: {
     type_parameters: ["T", "T2"],
-    inputs: [ArrayType("T"), "T2", FunctionType(["T"], "T2", null)] as const,
+    inputs: [ArrayType("T"), "T2", FunctionType(["T"], "T2")] as const,
     output: IntegerType,
   },
   ArrayFindSortedLast: {
     type_parameters: ["T", "T2"],
-    inputs: [ArrayType("T"), "T2", FunctionType(["T"], "T2", null)] as const,
+    inputs: [ArrayType("T"), "T2", FunctionType(["T"], "T2")] as const,
     output: IntegerType,
   },
   ArrayFindSortedRange: {
     type_parameters: ["T", "T2"],
-    inputs: [ArrayType("T"), "T2", FunctionType(["T"], "T2", null)] as const,
+    inputs: [ArrayType("T"), "T2", FunctionType(["T"], "T2")] as const,
     output: StructType({ start: IntegerType, end: IntegerType }),
   },
   ArrayFindFirst: {
     type_parameters: ["T", "T2"],
-    inputs: [ArrayType("T"), "T2", FunctionType(["T"], "T2", null)] as const,
+    inputs: [ArrayType("T"), "T2", FunctionType(["T"], "T2")] as const,
     output: VariantType({ none: NullType, some: IntegerType }),
   },
   ArrayConcat: {
@@ -622,12 +622,12 @@ export const Builtins: Record<BuiltinName, BuiltinType> = {
   },
   ArrayGetKeys: {
     type_parameters: ["T"],
-    inputs: [ArrayType("T"), ArrayType(IntegerType), FunctionType([IntegerType], "T", null)] as const,
+    inputs: [ArrayType("T"), ArrayType(IntegerType), FunctionType([IntegerType], "T")] as const,
     output: ArrayType("T"),
   },
   ArrayForEach: {
     type_parameters: ["T", "T2"],
-    inputs: [ArrayType("T"), FunctionType(["T", IntegerType], "T2", null)] as const,
+    inputs: [ArrayType("T"), FunctionType(["T", IntegerType], "T2")] as const,
     output: NullType,
   },
   ArrayCopy: {
@@ -637,32 +637,32 @@ export const Builtins: Record<BuiltinName, BuiltinType> = {
   },
   ArrayMap: {
     type_parameters: ["T", "T2"],
-    inputs: [ArrayType("T"), FunctionType(["T", IntegerType], "T2", null)] as const,
+    inputs: [ArrayType("T"), FunctionType(["T", IntegerType], "T2")] as const,
     output: ArrayType("T2"),
   },
   ArrayFilter: {
     type_parameters: ["T"],
-    inputs: [ArrayType("T"), FunctionType(["T", IntegerType], BooleanType, null)] as const,
+    inputs: [ArrayType("T"), FunctionType(["T", IntegerType], BooleanType)] as const,
     output: ArrayType("T"),
   },
   ArrayFilterMap: {
     type_parameters: ["T", "T2"],
-    inputs: [ArrayType("T"), FunctionType(["T", IntegerType], VariantType({ none: NullType, some: "T2" }), null)] as const,
+    inputs: [ArrayType("T"), FunctionType(["T", IntegerType], VariantType({ none: NullType, some: "T2" }))] as const,
     output: ArrayType("T2"),
   },
   ArrayFirstMap: {
     type_parameters: ["T", "T2"],
-    inputs: [ArrayType("T"), FunctionType(["T", IntegerType], VariantType({ none: NullType, some: "T2" }), null)] as const,
+    inputs: [ArrayType("T"), FunctionType(["T", IntegerType], VariantType({ none: NullType, some: "T2" }))] as const,
     output: VariantType({ none: NullType, some: "T2" }),
   },
   ArrayFold: {
     type_parameters: ["T", "T2"],
-    inputs: [ArrayType("T"), "T2", FunctionType(["T2", "T", IntegerType], "T2", null)] as const,
+    inputs: [ArrayType("T"), "T2", FunctionType(["T2", "T", IntegerType], "T2")] as const,
     output: "T2",
   },
   ArrayMapReduce: {
     type_parameters: ["T", "T2"],
-    inputs: [ArrayType("T"), FunctionType(["T", IntegerType], "T2", null), FunctionType(["T2", "T2"], "T2", null)] as const,
+    inputs: [ArrayType("T"), FunctionType(["T", IntegerType], "T2"), FunctionType(["T2", "T2"], "T2")] as const,
     output: "T2",
   },
   ArrayStringJoin: {
@@ -672,38 +672,38 @@ export const Builtins: Record<BuiltinName, BuiltinType> = {
   },
   ArrayToSet: {
     type_parameters: ["T", "K2"],
-    inputs: [ArrayType("T"), FunctionType(["T", IntegerType], "K2", null)] as const,
+    inputs: [ArrayType("T"), FunctionType(["T", IntegerType], "K2")] as const,
     output: SetType("K2"),
   },
   ArrayToDict: {
     type_parameters: ["T", "K2", "T2"],
-    inputs: [ArrayType("T"), FunctionType(["T", IntegerType], "K2", null), FunctionType(["T", IntegerType], "T2", null), FunctionType(["T2", "T2", "K2"], "T2", null)] as const,
+    inputs: [ArrayType("T"), FunctionType(["T", IntegerType], "K2"), FunctionType(["T", IntegerType], "T2"), FunctionType(["T2", "T2", "K2"], "T2")] as const,
     output: DictType("K2", "T2"),
   },
   ArrayFlattenToArray: {
     type_parameters: ["T", "T2"],
-    inputs: [ArrayType("T"), FunctionType(["T", IntegerType], ArrayType("T2"), null)] as const,
+    inputs: [ArrayType("T"), FunctionType(["T", IntegerType], ArrayType("T2"))] as const,
     output: ArrayType("T2"),
   },
   ArrayFlattenToSet: {
     type_parameters: ["T", "K2"],
-    inputs: [ArrayType("T"), FunctionType(["T", IntegerType], SetType("K2"), null)] as const,
+    inputs: [ArrayType("T"), FunctionType(["T", IntegerType], SetType("K2"))] as const,
     output: SetType("K2"),
   },
   ArrayFlattenToDict: {
     type_parameters: ["T", "K2", "T2"],
-    inputs: [ArrayType("T"), FunctionType(["T", IntegerType], DictType("K2", "T2"), null), FunctionType(["T2", "T2", "K2"], "T2", null)] as const,
+    inputs: [ArrayType("T"), FunctionType(["T", IntegerType], DictType("K2", "T2")), FunctionType(["T2", "T2", "K2"], "T2")] as const,
     output: DictType("K2", "T2"),
   },
   ArrayGroupFold: {
     type_parameters: ["T", "K2", "T2"],
-    inputs: [ArrayType("T"), FunctionType(["T", IntegerType], "K2", null), FunctionType(["K2"], "T2", null), FunctionType(["T2", "T", IntegerType], "T2", null)] as const,
+    inputs: [ArrayType("T"), FunctionType(["T", IntegerType], "K2"), FunctionType(["K2"], "T2"), FunctionType(["T2", "T", IntegerType], "T2")] as const,
     output: DictType("K2", "T2"),
   },
 
   SetGenerate: {
     type_parameters: ["K"],
-    inputs: [IntegerType, FunctionType([IntegerType], "K", null), FunctionType(["K"], NullType, null)] as const,
+    inputs: [IntegerType, FunctionType([IntegerType], "K"), FunctionType(["K"], NullType)] as const,
     output: SetType("K"),
   },
   SetSize: {
@@ -783,78 +783,78 @@ export const Builtins: Record<BuiltinName, BuiltinType> = {
   },
   SetForEach: {
     type_parameters: ["K", "T2"],
-    inputs: [SetType("K"), FunctionType(["K"], "T2", null)] as const,
+    inputs: [SetType("K"), FunctionType(["K"], "T2")] as const,
     output: NullType,
   },
   SetMap: {
     type_parameters: ["K", "T2"],
-    inputs: [SetType("K"), FunctionType(["K"], "T2", null)] as const,
+    inputs: [SetType("K"), FunctionType(["K"], "T2")] as const,
     output: DictType("K", "T2"),
   },
   SetFilter: {
     type_parameters: ["K"],
-    inputs: [SetType("K"), FunctionType(["K"], BooleanType, null)] as const,
+    inputs: [SetType("K"), FunctionType(["K"], BooleanType)] as const,
     output: SetType("K"),
   },
   SetFilterMap: {
     type_parameters: ["K", "V2"],
-    inputs: [SetType("K"), FunctionType(["K"], VariantType({ none: NullType, some: "V2" }), null)] as const,
+    inputs: [SetType("K"), FunctionType(["K"], VariantType({ none: NullType, some: "V2" }))] as const,
     output: DictType("K", "V2"),
   },
   SetFirstMap: {
     type_parameters: ["K", "T2"],
-    inputs: [SetType("K"), FunctionType(["K"], VariantType({ none: NullType, some: "T2" }), null)] as const,
+    inputs: [SetType("K"), FunctionType(["K"], VariantType({ none: NullType, some: "T2" }))] as const,
     output: VariantType({ none: NullType, some: "T2" }),
   },
   SetMapReduce: {
     type_parameters: ["K", "T2"],
-    inputs: [SetType("K"), FunctionType(["K"], "T2", null), FunctionType(["T2", "T2"], "T2", null)] as const,
+    inputs: [SetType("K"), FunctionType(["K"], "T2"), FunctionType(["T2", "T2"], "T2")] as const,
     output: "T2",
   },
   SetReduce: {
     type_parameters: ["K", "T2"],
-    inputs: [SetType("K"), FunctionType(["T2", "K"], "T2", null), "T2"] as const,
+    inputs: [SetType("K"), FunctionType(["T2", "K"], "T2"), "T2"] as const,
     output: "T2",
   },
   SetToArray: {
     type_parameters: ["K", "T2"],
-    inputs: [SetType("K"), FunctionType(["K"], "T2", null)] as const,
+    inputs: [SetType("K"), FunctionType(["K"], "T2")] as const,
     output: ArrayType("T2"),
   },
   SetToSet: {
     type_parameters: ["K", "K2"],
-    inputs: [SetType("K"), FunctionType(["K"], "K2", null)] as const,
+    inputs: [SetType("K"), FunctionType(["K"], "K2")] as const,
     output: SetType("K2"),
   },
   SetToDict: {
     type_parameters: ["K", "K2", "T2"],
-    inputs: [SetType("K"), FunctionType(["K"], "K2", null), FunctionType(["K"], "T2", null), FunctionType(["T2", "T2", "K2"], "T2", null)] as const,
+    inputs: [SetType("K"), FunctionType(["K"], "K2"), FunctionType(["K"], "T2"), FunctionType(["T2", "T2", "K2"], "T2")] as const,
     output: DictType("K2", "T2"),
   },
   SetFlattenToArray: {
     type_parameters: ["K", "T2"],
-    inputs: [SetType("K"), FunctionType(["K"], ArrayType("T2"), null)] as const,
+    inputs: [SetType("K"), FunctionType(["K"], ArrayType("T2"))] as const,
     output: ArrayType("T2"),
   },
   SetFlattenToSet: {
     type_parameters: ["K", "K2"],
-    inputs: [SetType("K"), FunctionType(["K"], SetType("K2"), null)] as const,
+    inputs: [SetType("K"), FunctionType(["K"], SetType("K2"))] as const,
     output: SetType("K2"),
   },
   SetFlattenToDict: {
     type_parameters: ["K", "K2", "T2"],
-    inputs: [SetType("K"), FunctionType(["K"], DictType("K2", "T2"), null), FunctionType(["T2", "T2", "K2"], "T2", null)] as const,
+    inputs: [SetType("K"), FunctionType(["K"], DictType("K2", "T2")), FunctionType(["T2", "T2", "K2"], "T2")] as const,
     output: DictType("K2", "T2"),
   },
   SetGroupFold: {
     type_parameters: ["K", "K2", "T2"],
-    inputs: [SetType("K"), FunctionType(["K"], "K2", null), FunctionType(["K2"], "T2", null), FunctionType(["T2", "K"], "T2", null)] as const,
+    inputs: [SetType("K"), FunctionType(["K"], "K2"), FunctionType(["K2"], "T2"), FunctionType(["T2", "K"], "T2")] as const,
     output: DictType("K2", "T2"),
   },
 
   DictGenerate: {
     type_parameters: ["K", "V"],
-    inputs: [IntegerType, FunctionType([IntegerType], "K", null), FunctionType([IntegerType], "V", null), FunctionType(["V", "V", "K"], "V", null)] as const,
+    inputs: [IntegerType, FunctionType([IntegerType], "K"), FunctionType([IntegerType], "V"), FunctionType(["V", "V", "K"], "V")] as const,
     output: DictType("K", "V"),
   },
   DictSize: {
@@ -874,7 +874,7 @@ export const Builtins: Record<BuiltinName, BuiltinType> = {
   },
   DictGetOrDefault: {
     type_parameters: ["K", "V"],
-    inputs: [DictType("K", "V"), "K", FunctionType(["K"], "V", null)] as const,
+    inputs: [DictType("K", "V"), "K", FunctionType(["K"], "V")] as const,
     output: "V",
   },
   DictTryGet: {
@@ -889,12 +889,12 @@ export const Builtins: Record<BuiltinName, BuiltinType> = {
   },
   DictInsertOrUpdate: {
     type_parameters: ["K", "V"],
-    inputs: [DictType("K", "V"), "K", "V", FunctionType(["V", "V", "K"], "V", null)] as const,
+    inputs: [DictType("K", "V"), "K", "V", FunctionType(["V", "V", "K"], "V")] as const,
     output: NullType,
   },
   DictGetOrInsert: {
     type_parameters: ["K", "V"],
-    inputs: [DictType("K", "V"), "K", FunctionType(["K"], "V", null)] as const,
+    inputs: [DictType("K", "V"), "K", FunctionType(["K"], "V")] as const,
     output: "V",
   },
   DictUpdate: {
@@ -909,7 +909,7 @@ export const Builtins: Record<BuiltinName, BuiltinType> = {
   },
   DictMerge: {
     type_parameters: ["K", "V", "V2"],
-    inputs: [DictType("K", "V"), "K", "V2", FunctionType(["V", "V2", "K"], "V", null), FunctionType(["K"], "V", null)] as const,
+    inputs: [DictType("K", "V"), "K", "V2", FunctionType(["V", "V2", "K"], "V"), FunctionType(["K"], "V")] as const,
     output: NullType,
   },
   DictDelete: {
@@ -934,12 +934,12 @@ export const Builtins: Record<BuiltinName, BuiltinType> = {
   },
   DictUnionInPlace: {
     type_parameters: ["K", "V"],
-    inputs: [DictType("K", "V"), DictType("K", "V"), FunctionType(["V", "V", "K"], "V", null)] as const,
+    inputs: [DictType("K", "V"), DictType("K", "V"), FunctionType(["V", "V", "K"], "V")] as const,
     output: NullType,
   },
   DictMergeAll: {
     type_parameters: ["K", "V", "V2"],
-    inputs: [DictType("K", "V"), DictType("K", "V2"), FunctionType(["V", "V2", "K"], "V", null), FunctionType(["K"], "V", null)] as const,
+    inputs: [DictType("K", "V"), DictType("K", "V2"), FunctionType(["V", "V2", "K"], "V"), FunctionType(["K"], "V")] as const,
     output: NullType,
   },
   DictKeys: {
@@ -949,12 +949,12 @@ export const Builtins: Record<BuiltinName, BuiltinType> = {
   },
   DictGetKeys: {
     type_parameters: ["K", "V"],
-    inputs: [DictType("K", "V"), SetType("K"), FunctionType(["K"], "V", null)] as const,
+    inputs: [DictType("K", "V"), SetType("K"), FunctionType(["K"], "V")] as const,
     output: DictType("K", "V"),
   },
   DictForEach: {
     type_parameters: ["K", "V", "T2"],
-    inputs: [DictType("K", "V"), FunctionType(["V", "K"], "T2", null)] as const,
+    inputs: [DictType("K", "V"), FunctionType(["V", "K"], "T2")] as const,
     output: NullType,
   },
   DictCopy: {
@@ -964,67 +964,67 @@ export const Builtins: Record<BuiltinName, BuiltinType> = {
   },
   DictMap: {
     type_parameters: ["K", "V", "V2"],
-    inputs: [DictType("K", "V"), FunctionType(["V", "K"], "V2", null)] as const,
+    inputs: [DictType("K", "V"), FunctionType(["V", "K"], "V2")] as const,
     output: DictType("K", "V2"),
   },
   DictFilter: {
     type_parameters: ["K", "V"],
-    inputs: [DictType("K", "V"), FunctionType(["V", "K"], BooleanType, null)] as const,
+    inputs: [DictType("K", "V"), FunctionType(["V", "K"], BooleanType)] as const,
     output: DictType("K", "V"),
   },
   DictFilterMap: {
     type_parameters: ["K", "V", "V2"],
-    inputs: [DictType("K", "V"), FunctionType(["V", "K"], VariantType({ none: NullType, some: "V2" }), null)] as const,
+    inputs: [DictType("K", "V"), FunctionType(["V", "K"], VariantType({ none: NullType, some: "V2" }))] as const,
     output: DictType("K", "V2"),
   },
   DictFirstMap: {
     type_parameters: ["K", "V", "T2"],
-    inputs: [DictType("K", "V"), FunctionType(["V", "K"], VariantType({ none: NullType, some: "T2" }), null)] as const,
+    inputs: [DictType("K", "V"), FunctionType(["V", "K"], VariantType({ none: NullType, some: "T2" }))] as const,
     output: VariantType({ none: NullType, some: "T2" }),
   },
   DictMapReduce: {
     type_parameters: ["K", "V", "T2"],
-    inputs: [DictType("K", "V"), FunctionType(["V", "K"], "T2", null), FunctionType(["T2", "T2"], "T2", null)] as const,
+    inputs: [DictType("K", "V"), FunctionType(["V", "K"], "T2"), FunctionType(["T2", "T2"], "T2")] as const,
     output: "T2",
   },
   DictReduce: {
     type_parameters: ["K", "V", "T2"],
-    inputs: [DictType("K", "V"), FunctionType(["T2", "V", "K"], "T2", null), "T2"] as const,
+    inputs: [DictType("K", "V"), FunctionType(["T2", "V", "K"], "T2"), "T2"] as const,
     output: "T2",
   },
   DictToArray: {
     type_parameters: ["K", "V", "T2"],
-    inputs: [DictType("K", "V"), FunctionType(["V", "K"], "T2", null)] as const,
+    inputs: [DictType("K", "V"), FunctionType(["V", "K"], "T2")] as const,
     output: ArrayType("T2"),
   },
   DictToSet: {
     type_parameters: ["K", "V", "K2"],
-    inputs: [DictType("K", "V"), FunctionType(["V", "K"], "K2", null)] as const,
+    inputs: [DictType("K", "V"), FunctionType(["V", "K"], "K2")] as const,
     output: SetType("K2"),
   },
   DictToDict: {
     type_parameters: ["K", "V", "K2", "V2"],
-    inputs: [DictType("K", "V"), FunctionType(["V", "K"], "K2", null), FunctionType(["V", "K"], "V2", null), FunctionType(["V2", "V2", "K2"], "V2", null)] as const,
+    inputs: [DictType("K", "V"), FunctionType(["V", "K"], "K2"), FunctionType(["V", "K"], "V2"), FunctionType(["V2", "V2", "K2"], "V2")] as const,
     output: DictType("K2", "V2"),
   },
   DictFlattenToArray: {
     type_parameters: ["K", "V", "T2"],
-    inputs: [DictType("K", "V"), FunctionType(["V", "K"], ArrayType("T2"), null)] as const,
+    inputs: [DictType("K", "V"), FunctionType(["V", "K"], ArrayType("T2"))] as const,
     output: ArrayType("T2"),
   },
   DictFlattenToSet: {
     type_parameters: ["K", "V", "K2"],
-    inputs: [DictType("K", "V"), FunctionType(["V", "K"], SetType("K2"), null)] as const,
+    inputs: [DictType("K", "V"), FunctionType(["V", "K"], SetType("K2"))] as const,
     output: SetType("K2"),
   },
   DictFlattenToDict: {
     type_parameters: ["K", "V", "K2", "V2"],
-    inputs: [DictType("K", "V"), FunctionType(["V", "K"], DictType("K2", "V2"), null), FunctionType(["V2", "V2", "K2"], "V2", null)] as const,
+    inputs: [DictType("K", "V"), FunctionType(["V", "K"], DictType("K2", "V2")), FunctionType(["V2", "V2", "K2"], "V2")] as const,
     output: DictType("K2", "V2"),
   },
   DictGroupFold: {
     type_parameters: ["K", "V", "K2", "T2"],
-    inputs: [DictType("K", "V"), FunctionType(["V", "K"], "K2", null), FunctionType(["K2"], "T2", null), FunctionType(["T2", "V", "K"], "T2", null)] as const,
+    inputs: [DictType("K", "V"), FunctionType(["V", "K"], "K2"), FunctionType(["K2"], "T2"), FunctionType(["T2", "V", "K"], "T2")] as const,
     output: DictType("K2", "T2"),
   },
 }
@@ -1110,7 +1110,21 @@ export function applyTypeParameters(type: EastType | string, params: Map<string,
       type: "Function" as const,
       inputs: [] as EastType[],
       output: undefined as unknown as EastType,
-      platforms: type.platforms,
+    };
+    inStack.push(type);
+    outStack.push(self);
+    for (const inputType of type.inputs) {
+      self.inputs.push(applyTypeParameters(inputType, params, inStack, outStack));
+    }
+    self.output = applyTypeParameters(type.output, params, inStack, outStack);
+    inStack.pop();
+    outStack.pop();
+    return self;
+  } else if (type.type === "AsyncFunction") {
+    const self = {
+      type: "AsyncFunction" as const,
+      inputs: [] as EastType[],
+      output: undefined as unknown as EastType,
     };
     inStack.push(type);
     outStack.push(self);

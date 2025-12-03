@@ -420,7 +420,9 @@ export function toJSONFor(type: EastType | EastTypeValue, typeCtx: JSONEncodeTyp
         }
         return ret;
     } else if (type.type === "Function") {
-        throw new Error(`Cannot encode function type to JSON`);
+        throw new Error(`Cannot encode Function type to JSON`);
+    } else if (type.type === "AsyncFunction") {
+        throw new Error(`Cannot encode AsyncFunction type to JSON`);
     } else {
         throw new Error(`Unhandled type ${(type satisfies never as any).type} for toJson`);
     }
@@ -895,7 +897,9 @@ function createJSONDecoder(
         }
         return ret;
     } else if (type.type === "Function") {
-        throw new Error(`Cannot decode function type from JSON`);
+        throw new Error(`Cannot decode Function type from JSON`);
+    } else if (type.type === "AsyncFunction") {
+        throw new Error(`Cannot decode AsyncFunction type from JSON`);
     } else {
         throw new Error(`Unhandled type ${(type satisfies never as any).type} for fromJson`);
     }

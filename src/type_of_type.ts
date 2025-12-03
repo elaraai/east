@@ -63,7 +63,10 @@ export const EastTypeType = RecursiveType(type => VariantType({
   "Function": StructType({
     inputs: ArrayType(type),
     output: type,
-    platforms: ArrayType(StringType), // list of Platform functions invoked
+  }),
+  "AsyncFunction": StructType({
+    inputs: ArrayType(type),
+    output: type,
   })
 }));
 export type EastTypeType = typeof EastTypeType;
@@ -77,7 +80,10 @@ export type StructTypeValue = variant<"Struct", { name: string, type: any }[]>;
 export type FunctionTypeValue = variant<"Function", {
   inputs: any[],
   output: any,
-  platforms: string[], // list of Platform functions invoked
+}>;
+export type AsyncFunctionTypeValue = variant<"AsyncFunction", {
+  inputs: any[],
+  output: any,
 }>;
 
 /** A serializable representation of East types. Note that `any` is used to terminate recursing of TypeScript types. */
@@ -97,7 +103,8 @@ export type EastTypeValue =
   | StructTypeValue
   | VariantTypeValue
   | variant<"Recursive", bigint>
-  | FunctionTypeValue;
+  | FunctionTypeValue
+  | AsyncFunctionTypeValue;
 
 
 // Cache for memoizing toEastTypeValue results (top-level non-recursive calls only)
@@ -188,16 +195,18 @@ function toEastTypeValueImpl(type: EastType, stack: EastType[], is_recursive: bo
   } else if (type.type === "Recursive") {
     return toEastTypeValue(type.node, stack, true);
   } else if (type.type === "Function") {
-    // TODO review this handling of platforms
-    if (type.platforms == null) {
-      throw new Error(`Function type has platforms = null`);
-    }
-
     stack.push(type);
     const ret = variant("Function", {
       inputs: type.inputs.map(p => toEastTypeValue(p, stack, false)),
       output: toEastTypeValue(type.output, stack, false),
-      platforms: type.platforms,
+    });
+    stack.pop();
+    return ret;
+  } else if (type.type === "AsyncFunction") {
+    stack.push(type);
+    const ret = variant("AsyncFunction", {
+      inputs: type.inputs.map(p => toEastTypeValue(p, stack, false)),
+      output: toEastTypeValue(type.output, stack, false),
     });
     stack.pop();
     return ret;
@@ -259,7 +268,7 @@ export function isTypeValueEqual(t1: EastTypeValue, t2: EastTypeValue): boolean 
  * - Mutable collections (Array, Set, Dict) are invariant
  * - {@link VariantType} supports width subtyping (more cases → fewer cases)
  * - {@link RecursiveType} is invariant for heap-to-heap, but allows head covariance for stack-to-heap
- * - {@link FunctionType} uses contravariant inputs and covariant outputs
+ * - {@link FunctionType} and {@link AsyncFunctionType} use contravariant inputs and covariant outputs (and FunctionType is a subtype of AsyncFunctionType if their signatures match)
  */
 // Cache for memoizing isSubtypeValue results (top-level calls only)
 const isSubtypeValueCache = new WeakMap<EastTypeValue, WeakMap<EastTypeValue, boolean>>();
@@ -412,19 +421,32 @@ function isSubtypeValueImpl(
   }
 
   // Function type - contravariant inputs, covariant output
-  if (t1.type === "Function" && t2.type === "Function") {
+  if (t1.type === "Function" && (t2.type === "Function" || t2.type === "AsyncFunction")) {
     const inputs1 = t1.value.inputs;
     const inputs2 = t2.value.inputs;
     if (inputs1.length !== inputs2.length) return false;
     stack1.push(t1);
     stack2.push(t2);
     try {
-      // Only a subset of expected platform functions may be invoked
-      for (const p of t1.value.platforms) {
-        if (!t2.value.platforms.includes(p)) {
-          return false;
-        }
+      // Contravariant inputs: t2's inputs must be subtypes of t1's inputs
+      for (let i = 0; i < inputs1.length; i++) {
+        if (!isSubtypeValue(inputs2[i], inputs1[i], stack2, stack1)) return false;
       }
+      // Covariant output
+      return isSubtypeValue(t1.value.output, t2.value.output, stack1, stack2);
+    } finally {
+      stack1.pop();
+      stack2.pop();
+    }
+  }
+
+  if (t1.type === "AsyncFunction" && t2.type === "AsyncFunction") {
+    const inputs1 = t1.value.inputs;
+    const inputs2 = t2.value.inputs;
+    if (inputs1.length !== inputs2.length) return false;
+    stack1.push(t1);
+    stack2.push(t2);
+    try {
       // Contravariant inputs: t2's inputs must be subtypes of t1's inputs
       for (let i = 0; i < inputs1.length; i++) {
         if (!isSubtypeValue(inputs2[i], inputs1[i], stack2, stack1)) return false;
@@ -490,7 +512,11 @@ function expandTypeValueImpl(type: EastTypeValue, root: EastTypeValue, depth: bi
     return variant("Function", {
       inputs: type.value.inputs.map(i => expandTypeValue(i, root, depth + 1n)),
       output: expandTypeValue(type.value.output, root, depth + 1n),
-      platforms: type.value.platforms,
+    });
+  } else if (type.type === "AsyncFunction") {
+    return variant("AsyncFunction", {
+      inputs: type.value.inputs.map(i => expandTypeValue(i, root, depth + 1n)),
+      output: expandTypeValue(type.value.output, root, depth + 1n),
     });
   } else if (type.type === "Recursive" && depth === type.value) {
     // Unfold once

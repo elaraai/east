@@ -5,7 +5,7 @@
 import { East, Expr, IntegerType, NullType, OptionType, variant, VariantType } from "../src/index.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
 
-describe("Variant", (test) => {
+await describe("Variant", (test) => {
     test("Variant equality and type merging", $ => {
         $(assert.equal(East.value(true).ifElse(_$ => variant("some", 42n), _$ => variant("none", null)), variant("some", 42n)));
         $(assert.equal(East.value(false).ifElse(_$ => variant("some", 42n), _$ => variant("none", null)), variant("none", null)));

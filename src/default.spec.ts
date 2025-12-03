@@ -19,7 +19,8 @@ import {
     DictType,
     StructType,
     VariantType,
-    FunctionType
+    FunctionType,
+    AsyncFunctionType
 } from "./types.js";
 
 describe("defaultValue", () => {
@@ -124,8 +125,13 @@ describe("defaultValue", () => {
     });
 
     test("should throw for Function type", () => {
-        const type = FunctionType([], NullType, []);
+        const type = FunctionType([], NullType);
         assert.throws(() => defaultValue(type), /Cannot create a default value of type .Function/);
+    });
+
+    test("should throw for AsyncFunction type", () => {
+        const type = AsyncFunctionType([], NullType);
+        assert.throws(() => defaultValue(type), /Cannot create a default value of type .AsyncFunction/);
     });
 });
 
@@ -215,7 +221,12 @@ describe("minimalValue", () => {
     });
 
     test("should throw for Function type", () => {
-        const type = FunctionType([IntegerType], StringType, []);
+        const type = FunctionType([IntegerType], StringType);
         assert.throws(() => minimalValue(type), /Cannot create a default value of type .Function/);
+    });
+
+    test("should throw for AsyncFunction type", () => {
+        const type = AsyncFunctionType([IntegerType], StringType);
+        assert.throws(() => minimalValue(type), /Cannot create a default value of type .AsyncFunction/);
     });
 });

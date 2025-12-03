@@ -5,7 +5,7 @@
 import { East, BooleanType } from "../src/index.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
 
-describe("Boolean", (test) => {
+await describe("Boolean", (test) => {
     test("Boolean operations", $ => {
         $(assert.equal(East.value(true).not(), false));
         $(assert.equal(East.value(false).not(), true));

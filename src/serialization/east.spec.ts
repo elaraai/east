@@ -31,6 +31,7 @@ import {
   StructType,
   VariantType,
   RecursiveType,
+  AsyncFunctionType,
 } from '../types.js';
 import { compareFor, equalFor } from '../comparison.js';
 import { SortedSet } from '../containers/sortedset.js';
@@ -1081,15 +1082,27 @@ describe('Never type handling', () => {
 });
 
 describe('Function type handling', () => {
-  test('should print Function type as λ', () => {
-    const funcType = FunctionType([], IntegerType, []);
+  test('should print Function type summary', () => {
+    const funcType = FunctionType([], IntegerType);
     const printer = printFor(funcType);
     const result = printer((() => 42) as any);
-    assert.strictEqual(result, 'λ');
+    assert.strictEqual(result, '() => .Integer');
   });
 
   test('should throw when creating parser for Function type', () => {
-    const funcType = FunctionType([], IntegerType, []);
+    const funcType = FunctionType([], IntegerType);
+    assert.throws(() => parseFor(funcType), /Cannot parse/);
+  });
+
+  test('should print AsyncFunction type summary', () => {
+    const funcType = AsyncFunctionType([], IntegerType);
+    const printer = printFor(funcType);
+    const result = printer((async () => 42) as any);
+    assert.strictEqual(result, 'async () => .Integer');
+  });
+
+  test('should throw when creating parser for Function type', () => {
+    const funcType = FunctionType([], IntegerType);
     assert.throws(() => parseFor(funcType), /Cannot parse/);
   });
 });

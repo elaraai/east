@@ -304,6 +304,12 @@ export function valueOrExprToAstTyped<T extends EastType>(value: any, type: T, v
     }
 
     return Expr.function(type.inputs, type.output, value)[AstSymbol] as any; // location?
+  } else if (type.type === "AsyncFunction") {
+    if (typeof value !== "function") {
+      throw new Error(`Expected function but got ${value === null ? "null" : typeof value}`);
+    }
+
+    return Expr.asyncFunction(type.inputs, type.output, value)[AstSymbol] as any; // location?
   } else {
     throw new Error(`Type conversion not implemented for ${printType(type)}`);
   }

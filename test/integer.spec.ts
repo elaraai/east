@@ -5,7 +5,7 @@
 import { East, IntegerType } from "../src/index.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
 
-describe("Integer", (test) => {
+await describe("Integer", (test) => {
     test("Arithmetic", $ => {
         $(assert.equal(East.value(10n).negate(), -10n));
         $(assert.equal(East.value(10n).add(5n), 15n));

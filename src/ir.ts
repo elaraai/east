@@ -89,12 +89,28 @@ export type FunctionIR = variant<"Function", {
   body: any, // IR
 }>;
 
+export type AsyncFunctionIR = variant<"AsyncFunction", {
+  type: EastTypeValue,
+  location: LocationValue,
+  captures: VariableIR[],
+  parameters: VariableIR[],
+  body: any, // IR
+}>;
+
 export type CallIR = variant<"Call", {
   type: EastTypeValue,
   location: LocationValue,
   function: any, // IR
   arguments: any[], // IR[]
 }>;
+
+export type CallAsyncIR = variant<"CallAsync", {
+  type: EastTypeValue,
+  location: LocationValue,
+  function: any, // IR
+  arguments: any[], // IR[]
+}>;
+
 
 export type NewRefIR = variant<"NewRef", {
   type: EastTypeValue,
@@ -250,6 +266,7 @@ export type PlatformIR = variant<"Platform", {
   location: LocationValue,
   name: string,
   arguments: any[], // IR[]
+  async: boolean,
 }>;
 
 /** The common intermediate representation (IR) for East code.
@@ -258,7 +275,7 @@ export type PlatformIR = variant<"Platform", {
  * It has been processed from AST and checked for type safety and variable resolution.
  * The code is ready to be serialized, evaluated or compiled.
  */
-export type IR = ErrorIR | TryCatchIR |ValueIR | VariableIR | LetIR | AssignIR | AsIR | FunctionIR | CallIR | NewRefIR | NewArrayIR | NewSetIR | NewDictIR | StructIR | GetFieldIR | VariantIR | BlockIR | IfElseIR | MatchIR | UnwrapRecursiveIR | WrapRecursiveIR | WhileIR | ForArrayIR | ForSetIR | ForDictIR | ReturnIR | ContinueIR | BreakIR | BuiltinIR | PlatformIR;
+export type IR = ErrorIR | TryCatchIR |ValueIR | VariableIR | LetIR | AssignIR | AsIR | FunctionIR | AsyncFunctionIR | CallIR | CallAsyncIR | NewRefIR | NewArrayIR | NewSetIR | NewDictIR | StructIR | GetFieldIR | VariantIR | BlockIR | IfElseIR | MatchIR | UnwrapRecursiveIR | WrapRecursiveIR | WhileIR | ForArrayIR | ForSetIR | ForDictIR | ReturnIR | ContinueIR | BreakIR | BuiltinIR | PlatformIR;
 
 ////////////////////////////////////////////////////////////////////////////////////////////
 // Homoiconic IR EastTypes
@@ -291,7 +308,9 @@ export const IRType = RecursiveType(ir => VariantType({
   Assign: StructType({ type: EastTypeType, location: LocationType, variable: ir, value: ir }),
   As: StructType({ type: EastTypeType, location: LocationType, value: ir }),
   Function: StructType({ type: EastTypeType, location: LocationType, captures: ArrayType(ir), parameters: ArrayType(ir), body: ir }),
+  AsyncFunction: StructType({ type: EastTypeType, location: LocationType, captures: ArrayType(ir), parameters: ArrayType(ir), body: ir }),
   Call: StructType({ type: EastTypeType, location: LocationType, function: ir, arguments: ArrayType(ir) }),
+  CallAsync: StructType({ type: EastTypeType, location: LocationType, function: ir, arguments: ArrayType(ir) }),
   NewRef: StructType({ type: EastTypeType, location: LocationType, value: ir }),
   NewArray: StructType({ type: EastTypeType, location: LocationType, values: ArrayType(ir) }),
   NewSet: StructType({ type: EastTypeType, location: LocationType, values: ArrayType(ir) }),
@@ -312,5 +331,5 @@ export const IRType = RecursiveType(ir => VariantType({
   Continue: StructType({ type: EastTypeType, location: LocationType, label: IRLabelType }),
   Break: StructType({ type: EastTypeType, location: LocationType, label: IRLabelType }),
   Builtin: StructType({ type: EastTypeType, location: LocationType, builtin: StringType, type_parameters: ArrayType(EastTypeType), arguments: ArrayType(ir) }),
-  Platform: StructType({ type: EastTypeType, location: LocationType, name: StringType, arguments: ArrayType(ir) }),
+  Platform: StructType({ type: EastTypeType, location: LocationType, name: StringType, arguments: ArrayType(ir), async: BooleanType }),
 }));

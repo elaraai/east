@@ -14,6 +14,8 @@ All formats support:
  - Circular references
  - Preservation of aliasing shared between mutable containers
 
+Functions and closures cannot be serialized (but the IR defining them can).
+
 ## JSON
 
 JSON is provided for interoperability with other systems unaware of East and lightweight debuggability.
@@ -32,6 +34,8 @@ It is a JSON-like encoding with distinct syntax for arrays, sets, dictionaries, 
 A value is unambiguous with or without knowing the type in advance (though the tooling here supposes the type is given).
 
 Circular references and mutable aliases use relative keypaths with a syntax like `3#.foo[0]` meaning "go up three levels, then get the `foo` field, then get the 0th element of that array.
+
+User-friendly summaries of function signatures are printed for debugging purposes, but functions cannot be deserialized.
 
 ## Beast
 

@@ -99,6 +99,8 @@ export function isFor(type: EastTypeValue | EastType, typeCtx: TypeContext = [])
     return ret;
   } else if (type.type === "Function") {
     throw new Error(`Attempted to compare values of type .Function`);
+  } else if (type.type === "AsyncFunction") {
+    throw new Error(`Attempted to compare values of type .AsyncFunction`);
   } else {
     throw new Error(`Unhandled type ${(type satisfies never as EastTypeValue).type}`);
   }
@@ -330,6 +332,8 @@ export function equalFor(type: EastTypeValue | EastType, typeCtx: TypeContext = 
     return ret;
   } else if (type.type === "Function") {
     throw new Error(`Attempted to compare values of type .Function`);
+  } else if (type.type === "AsyncFunction") {
+    throw new Error(`Attempted to compare values of type .AsyncFunction`);
   } else {
     throw new Error(`Unhandled type ${(type satisfies never as EastTypeValue).type}`);
   }
@@ -1018,6 +1022,8 @@ export function compareFor(type: EastTypeValue | EastType, typeCtx: TypeContext 
     return ret;
   } else if (type.type === "Function") {
     throw new Error(`Attempted to compare values of type .Function`);
+  } else if (type.type === "AsyncFunction") {
+    throw new Error(`Attempted to compare values of type .AsyncFunction`);
   } else {
     throw new Error(`Unhandled type ${(type satisfies never as EastTypeValue).type}`);
   }

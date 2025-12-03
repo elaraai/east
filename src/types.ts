@@ -84,9 +84,6 @@ export type RefType<T = any> = { type: "Ref", value: T };
  * @throws When the element type contains functions
  */
 export function RefType<T>(type: T): RefType<T> {
-  if (typeof type !== "string" && !isDataType(type as EastType)) {
-    throw new Error(`Ref value type must be a (non-function) data type, got ${printType(type as EastType)}`);
-  }
   return { type: "Ref", value: type };
 };
 
@@ -105,9 +102,6 @@ export type ArrayType<T = any> = { type: "Array", value: T };
  * @throws When the element type contains functions
  */
 export function ArrayType<T>(type: T): ArrayType<T> {
-  if (typeof type !== "string" && !isDataType(type as EastType)) {
-    throw new Error(`Array value type must be a (non-function) data type, got ${printType(type as EastType)}`);
-  }
   return { type: "Array", value: type };
 };
 
@@ -159,9 +153,6 @@ export function DictType<K, T>(key: K, value: T): DictType<K, T> {
   if (typeof key !== "string" && !isImmutableType(key as EastType)) {
     throw new Error(`Dict key type must be an immutable type, got ${printType(key as EastType)}`);
   }
-  if (typeof value !== "string" && !isDataType(value as EastType)) {
-    throw new Error(`Dict value type must be a (non-function) data type, got ${printType(value as EastType)}`);
-  }
   return { type: "Dict", key, value };
 };
 
@@ -182,12 +173,6 @@ export type StructType<Fields extends { [K in string]: any } = { [K in string]: 
  * @returns A Struct type
  */
 export function StructType<Fields extends { [K in string]: any }>(field_types: Fields): StructType<Fields> {
-  // Validate all field types are data types (no functions)
-  for (const [field_name, field_type] of Object.entries(field_types)) {
-    if (typeof field_type !== "string" && !isDataType(field_type as EastType)) {
-      throw new Error(`Struct field ${field_name} must be a (non-function) data type, got ${printType(field_type as EastType)}`);
-    }
-  }
   return { type: "Struct", fields: field_types };
 };
 
@@ -208,12 +193,6 @@ export type VariantType<Cases extends { [K in string]: any } = { [K in string]: 
  * @returns A Variant type with cases sorted alphabetically
  */
 export function VariantType<Cases extends { [K in string]: any }>(case_types: Cases): VariantType<Cases> {
-  // Validate all case types are data types (no functions)
-  for (const [case_name, case_type] of Object.entries(case_types)) {
-    if (typeof case_type !== "string" && !isDataType(case_type as EastType)) {
-      throw new Error(`Variant case ${case_name} must be a (non-function) data type, got ${printType(case_type as EastType)}`);
-    }
-  }
   // Cases are sorted alphabetically by their name
   const cases_sorted = Object.fromEntries(Object.entries(case_types).sort((x, y) => x[0] < y[0] ? -1 : x[0] === y[0] ? 0 : 1)) as Cases;
   return { type: "Variant", cases: cases_sorted };
@@ -234,7 +213,7 @@ export function VariantType<Cases extends { [K in string]: any }>(case_types: Ca
 function validateNotMutuallyRecursive(type: EastType | string, allowedMarker: RecursiveType<undefined>): void {
   const visited = new Set<EastType>();
 
-  function check(t: EastType | string): void {
+  function check(t: EastType | string, allowed: boolean): void {
     // Skip string placeholders (used for generic builtins)
     if (typeof t === "string") return;
 
@@ -248,7 +227,12 @@ function validateNotMutuallyRecursive(type: EastType | string, allowedMarker: Re
     }
 
     // Skip allowedMarker
-    if (t === allowedMarker) return;
+    if (t === allowedMarker) {
+      if (!allowed) {
+        throw new Error("RecursiveType cannot pass into set keys, dictionary keys, or function input/output types");
+      }
+      return;
+    }
 
     // Avoid infinite loops
     if (visited.has(t)) return;
@@ -266,27 +250,32 @@ function validateNotMutuallyRecursive(type: EastType | string, allowedMarker: Re
       }
     } else if (t.type === "Struct") {
       for (const [_, field_type] of Object.entries(t.fields)) {
-        check(field_type);
+        check(field_type, allowed);
       }
     } else if (t.type === "Variant") {
       for (const [_, case_type] of Object.entries(t.cases)) {
-        check(case_type);
+        check(case_type, allowed);
       }
+    } else if (t.type === "Ref") {
+      check(t.value, allowed);
     } else if (t.type === "Array") {
-      check(t.value);
+      check(t.value, allowed);
     } else if (t.type === "Set") {
-      check(t.key);
+      check(t.key, false);
     } else if (t.type === "Dict") {
-      check(t.key);
-      check(t.value);
+      check(t.key, false);
+      check(t.value, allowed);
     } else if (t.type === "Function") {
-      t.inputs.forEach(check);
-      check(t.output);
+      t.inputs.forEach(input => check(input, false));
+      check(t.output, false);
+    } else if (t.type === "AsyncFunction") {
+      t.inputs.forEach(input => check(input, false));
+      check(t.output, false);
     }
     // Primitive types don't need recursion
   }
 
-  check(type);
+  check(type, true);
 }
 
 export type RecursiveTypeMarker = { type: "Recursive" };
@@ -345,10 +334,6 @@ export function RecursiveType<F extends (self: RecursiveTypeMarker) => EastType>
   // Validate SCC size 1 (no nested RecursiveTypes with cross-references)
   validateNotMutuallyRecursive(type, ret);
 
-  if (typeof type !== "string" && !isDataType(type as EastType)) {
-    throw new Error(`Recursive node type must be a (non-function) data type, got ${printType(type as EastType)}`);
-  }
-
   return ret as RecursiveType<ReturnType<F>>;
 };
 
@@ -362,21 +347,48 @@ export function RecursiveType<F extends (self: RecursiveTypeMarker) => EastType>
  * Functions are first-class values that can be serialized as IR but not as data.
  * The `platforms` field tracks which platform functions are invoked by this function
  * (transitively through any called functions), enabling effect tracking and async analysis.
+ * 
+ * @see {@link AsyncFunctionType} for asynchronous functions.
  */
-export type FunctionType<I extends any[] = any[], O extends any = any> = { type: "Function", inputs: I, output: O, platforms: string[] | null };
+export type FunctionType<I extends any[] = any[], O extends any = any> = { type: "Function", inputs: I, output: O };
 /**
  * Constructs a Function type with the specified input and output types.
  *
- * @typeParam I - Tuple type of input parameter types
- * @typeParam O - The output/return type
  * @param inputs - Array of {@link EastType} instances for each parameter
  * @param output - The {@link EastType} of the return value
  * @returns A Function type
+ * 
+ * @see {@link AsyncFunctionType} for asynchronous functions.
  */
-export function FunctionType<const I extends any[], O extends any>(inputs: I, output: O, platforms: string[] | null): FunctionType<I, O> {
-  // TODO - for the moment we default function types to being pure, meaning users may need to annotate their higher-order functions.
-  // In future we may want to track side-effects more precisely.
-  return { type: "Function", inputs, output, platforms };
+export function FunctionType<const I extends any[], O extends any>(inputs: I, output: O): FunctionType<I, O> {
+  return { type: "Function", inputs, output };
+};
+
+/**
+ * Represents an asynchronous Function type in East's type system.
+ *
+ * @typeParam I - Tuple type of input parameter types
+ * @typeParam O - The output/return type
+ *
+ * @remarks
+ * Functions are first-class values that can be serialized as IR but not as data.
+ * The `platforms` field tracks which platform functions are invoked by this function
+ * (transitively through any called functions), enabling effect tracking and async analysis.
+ * 
+ * @see {@link FunctionType} for synchronous functions.
+ */
+export type AsyncFunctionType<I extends any[] = any[], O extends any = any> = { type: "AsyncFunction", inputs: I, output: O };
+/**
+ * Constructs an AsyncFunction type with the specified input and output types.
+ *
+ * @param inputs - Array of {@link EastType} instances for each parameter
+ * @param output - The {@link EastType} of the return value
+ * @returns An AsyncFunction type
+ * 
+ * @see {@link AsyncFunctionType} for asynchronous functions.
+ */
+export function AsyncFunctionType<const I extends any[], O extends any>(inputs: I, output: O): AsyncFunctionType<I, O> {
+  return { type: "AsyncFunction", inputs, output };
 };
 
 
@@ -402,13 +414,14 @@ export type EastType =
   | StructType
   | VariantType
   | RecursiveType
-  | FunctionType;
+  | FunctionType
+  | AsyncFunctionType;
 
 /**
- * Union of all East data types (excludes {@link FunctionType}).
+ * Union of all East data types (excludes {@link FunctionType} and {@link AsyncFunctionType}).
  *
  * @remarks
- * Data types can be fully serialized to JSON and transmitted between runtimes.
+ * Data types have a total ordering, can be fully serialized and transmitted between runtimes.
  * Functions can be serialized as IR but not as pure data.
  */
 export type DataType =
@@ -433,7 +446,7 @@ export type DataType =
  *
  * @remarks
  * Immutable types can be used as dictionary keys and set elements.
- * Excludes {@link RefType}, {@link ArrayType}, {@link SetType}, {@link DictType}, and {@link FunctionType}.
+ * Excludes {@link RefType}, {@link ArrayType}, {@link SetType}, {@link DictType}, {@link FunctionType} and {@link AsyncFunctionType}.
  */
 export type ImmutableType =
   | NeverType
@@ -456,8 +469,7 @@ export type ImmutableType =
  * @returns `true` if the type is a pure data type, `false` if it contains functions
  *
  * @remarks
- * Data types can be fully serialized and transmitted between runtimes.
- * This recursively checks {@link StructType}, {@link VariantType}, and {@link RecursiveType} fields.
+ * Data types have a total ordering, can be fully serialized and transmitted between runtimes.
  */
 export function isDataType(type: EastType, recursive_type?: EastType): type is DataType {
   // Avoid infinite loops
@@ -466,17 +478,15 @@ export function isDataType(type: EastType, recursive_type?: EastType): type is D
   }
 
   if (type.type === "Ref") {
-    // Ref constructors check their value type are data types
-    return true;
+    return isDataType(type.value, recursive_type);
   } else if (type.type === "Array") {
-    // Array constructors check their value type are data types
-    return true;
+    return isDataType(type.value, recursive_type);
   } else if (type.type === "Set") {
-    // Set constructors check their value type are (immutable) data types
+    // Set constructors check their key type is an (immutable) data type
     return true;
   } else if (type.type === "Dict") {
-    // Dict constructors check their key and value types are data types
-    return true;
+    // Dict constructors check their key type is an (immutable) data type
+    return isDataType(type.value, recursive_type);
   } else if (type.type === "Struct") {
     for (const field_type of Object.values(type.fields)) {
       if (!isDataType(field_type, recursive_type)) {
@@ -495,6 +505,8 @@ export function isDataType(type: EastType, recursive_type?: EastType): type is D
     return type.node === recursive_type ? true : isDataType(type.node, type);
   } else if (type.type === "Function") {
     return false;
+  } else if (type.type === "AsyncFunction") {
+    return false;
   } else {
     // Primitive types are data types
     return true
@@ -509,8 +521,7 @@ export function isDataType(type: EastType, recursive_type?: EastType): type is D
  * @returns `true` if the type is immutable, `false` if it contains mutable collections or functions
  *
  * @remarks
- * Immutable types exclude {@link ArrayType}, {@link SetType}, {@link DictType}, and {@link FunctionType}.
- * This recursively checks {@link StructType}, {@link VariantType}, and {@link RecursiveType} fields.
+ * Immutable types exclude {@link ArrayType}, {@link SetType}, {@link DictType}, {@link FunctionType} and {@link AsyncFunctionType}.
  */
 export function isImmutableType(type: EastType, recursive_type?: EastType): type is ImmutableType {
   // Avoid infinite loops
@@ -549,6 +560,9 @@ export function isImmutableType(type: EastType, recursive_type?: EastType): type
   } else if (type.type === "Function") {
     // Functions are not data types, and "immutable data" is a subset of "data"
     return false;
+  } else if (type.type === "AsyncFunction") {
+    // Functions are not data types, and "immutable data" is a subset of "data"
+    return false;
   } else {
     // Primitive types are immutable
     return true;
@@ -578,11 +592,11 @@ export type ValueTypeOf<T> =
   T extends NullType ? null :
   T extends BooleanType ? boolean :
   T extends IntegerType ? bigint :
-  T extends RefType<infer U> ? ref<ValueTypeOf<U>> :
   T extends FloatType ? number :
   T extends StringType ? string :
   T extends DateTimeType ? Date :
   T extends BlobType ? Uint8Array :
+  T extends RefType<infer U> ? ref<ValueTypeOf<U>> :
   T extends ArrayType<infer U> ? ValueTypeOf<U>[] :
   T extends SetType<infer U> ? Set<ValueTypeOf<U>> :
   T extends DictType<infer U, infer V> ? Map<ValueTypeOf<U>, ValueTypeOf<V>> :
@@ -591,6 +605,7 @@ export type ValueTypeOf<T> =
   T extends RecursiveType<infer U> ? ValueTypeOf<U> :
   T extends RecursiveTypeMarker ? any : // make TypeScript faster - don't expand further
   T extends FunctionType<infer I, infer O> ? (...inputs: { [K in keyof I]: ValueTypeOf<I[K]> }) => ValueTypeOf<O> :
+  T extends AsyncFunctionType<infer I, infer O> ? (...inputs: { [K in keyof I]: ValueTypeOf<I[K]> }) => Promise<ValueTypeOf<O>> :
   any;
 
 // export type ValueTypeOf<_T> = any;
@@ -825,20 +840,25 @@ function isTypeEqualImpl(t1: EastType, t2: EastType, r1: EastType, r2: EastType)
       return false;
     }
 
-    // Check platform requirements match
-    if (t1.platforms === null && t2.platforms === null) {
-      return true;
-    }
-    if (t1.platforms === null || t2.platforms === null) {
+    return true;
+  } else if (t1.type === "AsyncFunction") {
+    if (t2.type !== "AsyncFunction") {
       return false;
     }
-    if (t1.platforms.length !== t2.platforms.length) {
+
+    // Check input types match
+    if (t1.inputs.length !== t2.inputs.length) {
       return false;
     }
-    for (let i = 0; i < t1.platforms.length; i++) {
-      if (t1.platforms[i] !== t2.platforms[i]) {
+    for (let i = 0; i < t1.inputs.length; i++) {
+      if (!isTypeEqual(t1.inputs[i], t2.inputs[i], r1, r2)) {
         return false;
       }
+    }
+
+    // Check output type matches
+    if (!isTypeEqual(t1.output, t2.output, r1, r2)) {
+      return false;
     }
 
     return true;
@@ -944,6 +964,8 @@ export function isValueOf(value: any, type: EastType, node_type?: EastType, node
     }
   } else if (type.type === "Function") {
     throw new Error('Javascript functions cannot be converted to East functions');
+  } else if (type.type === "AsyncFunction") {
+    throw new Error('Javascript functions cannot be converted to East async functions');
   } else {
     throw new Error(`Unknown type encountered during value type check: ${(type satisfies never as any).type}`);
   }
@@ -1026,7 +1048,13 @@ export function printType(type: EastType, stack: EastType[] = []): string {
   } else if (type.type === "Function") {
     // Note: functions can't be inside recursive types
     stack.push(type);
-    const ret = `.Function (inputs=[${type.inputs.map(t => printType(t, stack)).join(", ")}], output=${printType(type.output, stack)}, platforms=${type.platforms === null ? "null" : `[${type.platforms.map(p => JSON.stringify(p)).join(", ")}]`})`;
+    const ret = `.Function (inputs=[${type.inputs.map(t => printType(t, stack)).join(", ")}], output=${printType(type.output, stack)})`;
+    stack.pop();
+    return ret;
+  } else if (type.type === "AsyncFunction") {
+    // Note: functions can't be inside recursive types
+    stack.push(type);
+    const ret = `.AsyncFunction (inputs=[${type.inputs.map(t => printType(t, stack)).join(", ")}], output=${printType(type.output, stack)})`;
     stack.pop();
     return ret;
   } else {
@@ -1064,7 +1092,7 @@ type ExpandOnce<T, NodeType> =
  * - {@link ArrayType}, {@link SetType}, {@link DictType} are invariant (mutable)
  * - {@link StructType} is covariant in all fields
  * - {@link VariantType} is covariant (subtypes can have fewer cases)
- * - {@link FunctionType} is contravariant in inputs, covariant in output
+ * - {@link FunctionType} and {@link AsyncFunctionType} are contravariant in inputs, covariant in output (and synchronous functions are subtypes of async functions)
  * - {@link RecursiveType} allows head covariance with tail invariance (one level deep)
  * - {@link NeverType} is a subtype of all types
  */
@@ -1073,6 +1101,7 @@ export type SubType<T> =
   T extends StructType<infer Fields> ? StructType<{ [K in keyof Fields]: SubType<Fields[K]> }> :
   T extends VariantType<infer Cases> ? VariantType<{ [K in keyof Cases]?: SubType<Cases[K]> }> :
   T extends FunctionType<infer I, infer O> ? FunctionType<I, SubType<O>> :
+  T extends AsyncFunctionType<infer I, infer O> ? AsyncFunctionType<I, SubType<O>> | FunctionType<I, SubType<O>> :
   T;
 
 /**
@@ -1198,7 +1227,13 @@ function isSubtypeImpl(t1: EastType, t2: EastType): boolean {
       return false;
     }
   } else if (t1.type === "Function") {
-    if (t2.type === "Function") {
+    if (t2.type === "Function" || t2.type === "AsyncFunction") {
+      return t1.inputs.length === t2.inputs.length && t1.inputs.every((t, i) => isSubtype(t2.inputs[i], t)) && isSubtype(t1.output, t2.output); // contravariant inputs and covariant output
+    } else {
+      return false;
+    }
+  } else if (t1.type === "AsyncFunction") {
+    if (t2.type === "AsyncFunction") {
       return t1.inputs.length === t2.inputs.length && t1.inputs.every((t, i) => isSubtype(t2.inputs[i], t)) && isSubtype(t1.output, t2.output); // contravariant inputs and covariant output
     } else {
       return false;
@@ -1220,6 +1255,7 @@ function isSubtypeImpl(t1: EastType, t2: EastType): boolean {
  * - {@link StructType} unions require same fields, unions field types
  * - {@link VariantType} unions combine all cases from both types
  * - {@link FunctionType} unions intersect inputs (contravariant), union outputs (covariant)
+ * - {@link AsyncFunctionType} unions intersect inputs (contravariant), union outputs (covariant), and synchronous functions are subtypes of async functions
  * - Mutable collections must have identical element/key/value types
  */
 export type TypeUnion<T1, T2> =
@@ -1228,7 +1264,8 @@ export type TypeUnion<T1, T2> =
   // arrays, sets and dicts are invariant
   T1 extends StructType<infer Fields1> ? T2 extends StructType<infer Fields2> ? StructType<{ [K in keyof Fields1 & keyof Fields2]: TypeUnion<Fields1[K], Fields2[K]> }> : never :
   T1 extends VariantType<infer Cases1> ? T2 extends VariantType<infer Cases2> ? VariantType<{ [K in Exclude<keyof Cases1, keyof Cases2>]: Cases1[K] } & { [K in Exclude<keyof Cases2, keyof Cases1>]: Cases2[K] } & { [K in keyof Cases1 & keyof Cases2]: TypeUnion<Cases1[K], Cases2[K]> }> : never :
-  T1 extends FunctionType<infer I1, infer O1> ? T2 extends FunctionType<infer I2, infer O2> ? FunctionType<{ [K in keyof I1 & keyof I2]: TypeIntersect<I1[K], I2[K]> }, TypeUnion<O1, O2>> : never :
+  T1 extends FunctionType<infer I1, infer O1> ? T2 extends FunctionType<infer I2, infer O2> ? FunctionType<{ [K in keyof I1 & keyof I2]: TypeIntersect<I1[K], I2[K]> }, TypeUnion<O1, O2>> : T2 extends AsyncFunctionType<infer I2, infer O2> ? AsyncFunctionType<{ [K in keyof I1 & keyof I2]: TypeIntersect<I1[K], I2[K]> }, TypeUnion<O1, O2>> : never :
+  T1 extends AsyncFunctionType<infer I1, infer O1> ? T2 extends FunctionType<infer I2, infer O2> ? AsyncFunctionType<{ [K in keyof I1 & keyof I2]: TypeIntersect<I1[K], I2[K]> }, TypeUnion<O1, O2>> : T2 extends AsyncFunctionType<infer I2, infer O2> ? AsyncFunctionType<{ [K in keyof I1 & keyof I2]: TypeIntersect<I1[K], I2[K]> }, TypeUnion<O1, O2>> : never :
   T1 extends T2 ? T1 :
   never;
 
@@ -1243,7 +1280,8 @@ export type TypeUnion<T1, T2> =
  * - {@link NeverType} is absorbing: `Intersect<Never, T> = Never`
  * - {@link StructType} intersections require same fields, intersect field types
  * - {@link VariantType} intersections keep only common cases
- * - {@link FunctionType} intersections union inputs (contravariant), intersect outputs (covariant)
+ * - {@link FunctionType} intersections union inputs (contravariant), intersect outputs (covariant), and synchronous functions are subtypes of async functions
+ * - {@link AsyncFunctionType} intersections union inputs (contravariant), intersect outputs (covariant)
  * - Mutable collections must have identical element/key/value types
  */
 export type TypeIntersect<T1, T2> =
@@ -1252,7 +1290,8 @@ export type TypeIntersect<T1, T2> =
   // arrays, sets and dicts are invariant
   T1 extends StructType<infer Fields1> ? T2 extends StructType<infer Fields2> ? StructType<{ [K in keyof Fields1 & keyof Fields2]: TypeIntersect<Fields1[K], Fields2[K]> }> : never :
   T1 extends VariantType<infer Cases1> ? T2 extends VariantType<infer Cases2> ? VariantType<{ [K in keyof Cases1 & keyof Cases2]: TypeIntersect<Cases1[K], Cases2[K]> }> : never :
-  T1 extends FunctionType<infer I1, infer O1> ? T2 extends FunctionType<infer I2, infer O2> ? FunctionType<{ [K in keyof I1 & keyof I2]: TypeUnion<I1[K], I2[K]> }, TypeIntersect<O1, O2>> : never :
+  T1 extends FunctionType<infer I1, infer O1> ? T2 extends FunctionType<infer I2, infer O2> ? FunctionType<{ [K in keyof I1 & keyof I2]: TypeUnion<I1[K], I2[K]> }, TypeIntersect<O1, O2>> : T2 extends AsyncFunctionType<infer I2, infer O2> ? FunctionType<{ [K in keyof I1 & keyof I2]: TypeUnion<I1[K], I2[K]> }, TypeIntersect<O1, O2>> : never :
+  T1 extends AsyncFunctionType<infer I1, infer O1> ? T2 extends FunctionType<infer I2, infer O2> ? FunctionType<{ [K in keyof I1 & keyof I2]: TypeUnion<I1[K], I2[K]> }, TypeIntersect<O1, O2>> : T2 extends AsyncFunctionType<infer I2, infer O2> ? AsyncFunctionType<{ [K in keyof I1 & keyof I2]: TypeUnion<I1[K], I2[K]> }, TypeIntersect<O1, O2>> : never :
   T1 extends T2 ? T1 :
   never;
 
@@ -1362,15 +1401,26 @@ export function TypeUnion<T1 extends EastType, T2 extends EastType>(t1: T1, t2: 
         if (t1.inputs.length !== t2.inputs.length) {
           throw new TypeMismatchError(`Cannot union ${printType(t1)} with ${printType(t2)}: functions take different number of arguments`)
         }
-        let platforms: string[] | null;
-        if (t1.platforms === null) {
-          platforms = null;
-        } else if (t2.platforms === null) {
-          platforms = null;
-        } else {
-          platforms = [...new Set([...t1.platforms, ...t2.platforms])].sort();
+        return FunctionType(t1.inputs.map((t, i) => TypeIntersect(t, t2.inputs[i])), TypeUnion(t1.output, t2.output)) as TypeUnion<T1, T2>;
+      } else if (t2.type === "AsyncFunction") {
+        if (t1.inputs.length !== t2.inputs.length) {
+          throw new TypeMismatchError(`Cannot union ${printType(t1)} with ${printType(t2)}: functions take different number of arguments`)
         }
-        return FunctionType(t1.inputs.map((t, i) => TypeIntersect(t, t2.inputs[i])), TypeUnion(t1.output, t2.output), platforms) as TypeUnion<T1, T2>;
+        return AsyncFunctionType(t1.inputs.map((t, i) => TypeIntersect(t, t2.inputs[i])), TypeUnion(t1.output, t2.output)) as TypeUnion<T1, T2>;
+      } else {
+        throw new TypeMismatchError(`Cannot union ${printType(t1)} with ${printType(t2)}: incompatible types`)
+      }
+    } else if (t1.type === "AsyncFunction") {
+      if (t2.type === "Function") {
+        if (t1.inputs.length !== t2.inputs.length) {
+          throw new TypeMismatchError(`Cannot union ${printType(t1)} with ${printType(t2)}: functions take different number of arguments`)
+        }
+        return AsyncFunctionType(t1.inputs.map((t, i) => TypeIntersect(t, t2.inputs[i])), TypeUnion(t1.output, t2.output)) as TypeUnion<T1, T2>;
+      } else if (t2.type === "AsyncFunction") {
+        if (t1.inputs.length !== t2.inputs.length) {
+          throw new TypeMismatchError(`Cannot union ${printType(t1)} with ${printType(t2)}: functions take different number of arguments`)
+        }
+        return AsyncFunctionType(t1.inputs.map((t, i) => TypeIntersect(t, t2.inputs[i])), TypeUnion(t1.output, t2.output)) as TypeUnion<T1, T2>;
       } else {
         throw new TypeMismatchError(`Cannot union ${printType(t1)} with ${printType(t2)}: incompatible types`)
       }
@@ -1491,15 +1541,26 @@ export function TypeIntersect<T1 extends EastType, T2 extends EastType>(t1: T1, 
         if (t1.inputs.length !== t2.inputs.length) {
           throw new TypeMismatchError(`Cannot intersect ${printType(t1)} with ${printType(t2)}: functions take different number of arguments`)
         }
-        let platforms: string[] | null;
-        if (t1.platforms === null) {
-          platforms = t2.platforms;
-        } else if (t2.platforms === null) {
-          platforms = t1.platforms;
-        } else {
-          platforms = t1.platforms.filter(p => t2.platforms!.includes(p));
+        return FunctionType(t1.inputs.map((t, i) => TypeUnion(t, t2.inputs[i])), TypeIntersect(t1.output, t2.output)) as TypeIntersect<T1, T2>;
+      } else if (t2.type === "AsyncFunction") {
+        if (t1.inputs.length !== t2.inputs.length) {
+          throw new TypeMismatchError(`Cannot intersect ${printType(t1)} with ${printType(t2)}: functions take different number of arguments`)
         }
-        return FunctionType(t1.inputs.map((t, i) => TypeUnion(t, t2.inputs[i])), TypeIntersect(t1.output, t2.output), platforms) as TypeIntersect<T1, T2>;
+        return FunctionType(t1.inputs.map((t, i) => TypeUnion(t, t2.inputs[i])), TypeIntersect(t1.output, t2.output)) as TypeIntersect<T1, T2>;
+      } else {
+        throw new TypeMismatchError(`Cannot intersect ${printType(t1)} with ${printType(t2)}: incompatible types`)
+      }
+    } else if (t1.type === "AsyncFunction") {
+      if (t2.type === "Function") {
+        if (t1.inputs.length !== t2.inputs.length) {
+          throw new TypeMismatchError(`Cannot intersect ${printType(t1)} with ${printType(t2)}: functions take different number of arguments`)
+        }
+        return FunctionType(t1.inputs.map((t, i) => TypeUnion(t, t2.inputs[i])), TypeIntersect(t1.output, t2.output)) as TypeIntersect<T1, T2>;
+      } else if (t2.type === "AsyncFunction") {
+        if (t1.inputs.length !== t2.inputs.length) {
+          throw new TypeMismatchError(`Cannot intersect ${printType(t1)} with ${printType(t2)}: functions take different number of arguments`)
+        }
+        return AsyncFunctionType(t1.inputs.map((t, i) => TypeUnion(t, t2.inputs[i])), TypeIntersect(t1.output, t2.output)) as TypeIntersect<T1, T2>;
       } else {
         throw new TypeMismatchError(`Cannot intersect ${printType(t1)} with ${printType(t2)}: incompatible types`)
       }
@@ -1624,18 +1685,16 @@ export function TypeEqual<T1 extends EastType, T2 extends EastType>(t1: T1, t2: 
         if (t1.inputs.length !== t2.inputs.length) {
           throw new TypeMismatchError(`${printType(t1)} is not equal to ${printType(t2)}: functions take different number of arguments`)
         }
-        if (t1.platforms === null) {
-          if (t2.platforms !== null) {
-            throw new TypeMismatchError(`${printType(t1)} is not equal to ${printType(t2)}: functions have different platform effects`);
-          }
-        } else if (t2.platforms === null) {
-          throw new TypeMismatchError(`${printType(t1)} is not equal to ${printType(t2)}: functions have different platform effects`);
-        } else {
-          if (t1.platforms.length !== t2.platforms.length || !t1.platforms.every((p, i) => p === t2.platforms![i])) {
-            throw new TypeMismatchError(`${printType(t1)} is not equal to ${printType(t2)}: functions have different platform effects`);
-          }
+        return FunctionType(t1.inputs.map((t, i) => TypeEqual(t, t2.inputs[i], r1, r2)), TypeEqual(t1.output, t2.output, r1, r2)) as T1;
+      } else {
+        throw new TypeMismatchError(`${printType(t1)} is not equal to ${printType(t2)}: incompatible types`)
+      }
+    } else if (t1.type === "AsyncFunction") {
+      if (t2.type === "AsyncFunction") {
+        if (t1.inputs.length !== t2.inputs.length) {
+          throw new TypeMismatchError(`${printType(t1)} is not equal to ${printType(t2)}: functions take different number of arguments`)
         }
-        return FunctionType(t1.inputs.map((t, i) => TypeEqual(t, t2.inputs[i], r1, r2)), TypeEqual(t1.output, t2.output, r1, r2), t1.platforms) as T1;
+        return AsyncFunctionType(t1.inputs.map((t, i) => TypeEqual(t, t2.inputs[i], r1, r2)), TypeEqual(t1.output, t2.output, r1, r2)) as T1;
       } else {
         throw new TypeMismatchError(`${printType(t1)} is not equal to ${printType(t2)}: incompatible types`)
       }
@@ -1740,6 +1799,8 @@ export function TypeWiden(t1: EastType, t2: EastType): EastType {
         throw new TypeMismatchError(`Cannot widen ${printType(t1)} with ${printType(t2)}: incompatible types`)
       }
     } else if (t1.type === "Function") {
+      throw new TypeMismatchError(`Cannot widen ${printType(t1)} with ${printType(t2)}: functions not supported`)
+    } else if (t1.type === "AsyncFunction") {
       throw new TypeMismatchError(`Cannot widen ${printType(t1)} with ${printType(t2)}: functions not supported`)
     } else {
       if (t1.type === t2.type) {

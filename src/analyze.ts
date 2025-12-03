@@ -11,7 +11,7 @@
  * Different backends (Julia, Python, etc.) would have their own analysis modules.
  */
 
-import type { FunctionIR, IR } from "./ir.js";
+import type { AsyncFunctionIR, FunctionIR, IR } from "./ir.js";
 import { printLocationValue } from "./ir.js";
 import type { EastTypeValue, StructTypeValue } from "./type_of_type.js";
 import { isTypeValueEqual, isSubtypeValue, expandTypeValue, toEastTypeValue } from "./type_of_type.js";
@@ -33,11 +33,11 @@ import { Builtins } from "./builtins.js";
  * @example
  * ```ts
  * const log = East.platform("log", [StringType], NullType);
- * const readFile = East.platform("readFile", [StringType], StringType);
+ * const readFile = East.asyncPlatform("readFile", [StringType], StringType);
  *
  * const platform = [
  *   log.implement(console.log),
- *   readFile.implementAsync(fs.promises.readFile),
+ *   readFile.implement(fs.promises.readFile),
  * ];
  * ```
  */
@@ -108,18 +108,18 @@ export type VariableContext = Record<string, VariableMetadata>;
  * const ir = // ... parsed East program
  * const platform = [
  *   log.implement(console.log),
- *   fetch.implementAsync(fetch)
+ *   fetch.implement(fetch)  // async platform uses .implement() too
  * ];
  *
  * const enrichedIR = analyzeIR(ir, platform, {});
  * const compiled = compile_internal(enrichedIR, {}, platform);
  * ```
  */
-export function analyzeIR(
-  ir: IR,
+export function analyzeIR<T extends IR>(
+  ir: T,
   platformDef: PlatformDefinition[],
   ctx: VariableContext = {},
-): AnalyzedIR {
+): AnalyzedIR<T> {
   // Working data for tracking during analysis
   const analysis = new Map<IR, { captured?: boolean }>();
 
@@ -139,8 +139,7 @@ export function analyzeIR(
   function visit(node: IR, ctx: VariableContext, expectedReturnType?: EastTypeValue): AnalyzedIR {
     // Detect circular IR (we don't cache because we're building new nodes)
     if (visiting.has(node)) {
-      const loc = node.value.location;
-      throw new Error(`Circular IR reference detected at ${printLocationValue(loc)}`);
+      throw new Error(`Circular IR reference detected at ${printLocationValue(node.value.location)}`);
     }
 
     visiting.add(node);
@@ -568,6 +567,103 @@ export function analyzeIR(
       } as AnalyzedIR<FunctionIR>;
     }
 
+    else if (node.type === "AsyncFunction") {
+      // Validate it has a Function type
+      if (node.value.type.type !== "AsyncFunction") {
+        throw new Error(
+          `Expected AsyncFunction type, got ${printTypeValue(node.value.type)} ` +
+          `at ${printLocationValue(node.value.location)}`
+        );
+      }
+
+      // Create new context for function body
+      const fnCtx: VariableContext = {};
+
+      // Add captured variables to context
+      for (const captureVar of node.value.captures) {
+        const outerVar = ctx[captureVar.value.name];
+        if (outerVar === undefined) {
+          throw new Error(
+            `Captured variable ${captureVar.value.name} not in scope ` +
+            `at ${printLocationValue(node.value.location)}`
+          );
+        }
+        if (!isTypeValueEqual(outerVar.type, captureVar.value.type)) {
+          throw new Error(
+            `Captured variable ${captureVar.value.name} has type ${printTypeValue(outerVar.type)} ` +
+            `but expected ${printTypeValue(captureVar.value.type)} ` +
+            `at ${printLocationValue(node.value.location)}`
+          );
+        }
+        if (outerVar.mutable !== captureVar.value.mutable) {
+          throw new Error(
+            `Captured variable ${captureVar.value.name} mutability mismatch: ` +
+            `context has ${outerVar.mutable ? 'mutable' : 'const'} ` +
+            `but IR expects ${captureVar.value.mutable ? 'mutable' : 'const'} ` +
+            `at ${printLocationValue(node.value.location)}`
+          );
+        }
+
+        // Mark the outer variable as captured (it's being closed over by this function)
+        outerVar.captured = true;
+        const defVarAnalysis = analysis.get(outerVar.definedBy);
+        if (!defVarAnalysis) {
+          throw new Error(
+            `Internal error: VariableIR node for captured variable ${captureVar.value.name} not analyzed. ` +
+            `This should never happen - all VariableIR nodes should be analyzed when encountered.`
+          );
+        }
+        defVarAnalysis.captured = true;
+
+        fnCtx[captureVar.value.name] = {
+          type: captureVar.value.type,
+          mutable: captureVar.value.mutable,
+          definedBy: outerVar.definedBy,
+          captured: false  // In the function's context, they're not "captured" yet
+        };
+      }
+
+      // Add parameters to context
+      for (const param of node.value.parameters) {
+        // Analyze the parameter VariableIR node
+        analysis.set(param, {
+          captured: false
+        });
+
+        fnCtx[param.value.name] = {
+          type: param.value.type,
+          mutable: param.value.mutable,
+          definedBy: param,  // Parameter VariableIR defines itself
+          captured: false
+        };
+      }
+
+      // Visit function body, passing expected return type for Return statement validation
+      const expectedOutput = node.value.type.value.output;
+      const bodyInfo = visit(node.value.body, fnCtx, expectedOutput);
+
+      // Validate body return type
+      // - If Never: OK (there was an explicit Return statement that was already validated)
+      // - Otherwise: must exactly match expected output type
+      if (bodyInfo.value.type.type !== "Never" && !isTypeValueEqual(bodyInfo.value.type, expectedOutput)) {
+        throw new Error(
+          `AsyncFunction body returns type ${printTypeValue(bodyInfo.value.type)} ` +
+          `but function signature expects ${printTypeValue(expectedOutput)} ` +
+          `at ${printLocationValue(node.value.location)}`
+        );
+      }
+
+      // Creating a function is sync (it just captures variables at this stage)
+      return {
+        ...node,
+        value: {
+          ...node.value,
+          body: bodyInfo,  // Use analyzed body
+          isAsync: false,
+        }
+      } as AnalyzedIR<AsyncFunctionIR>;
+    }
+
     else if (node.type === "Call") {
       // Visit function expression
       const fnInfo = visit(node.value.function, ctx, expectedReturnType);
@@ -587,22 +683,6 @@ export function analyzeIR(
           `got ${node.value.arguments.length} ` +
           `at ${printLocationValue(node.value.location)}`
         );
-      }
-
-      // Visit and validate all arguments
-      isAsync = fnInfo.value.isAsync;  // Start with function's async status
-
-      // Check if the function calls an async function internally
-      for (const platform of fnInfo.value.type.value.platforms) {
-        const platformDef = platformMap.get(platform);
-        if (!platformDef) {
-          throw new Error(
-            `Unknown platform function ${platform} called by ${printTypeValue(fnInfo.value.type)} at ${printLocationValue(node.value.location)}`
-          );
-        }
-        if (platformDef.type === 'async') {
-          isAsync = true;
-        }
       }
 
       // Analyze all arguments
@@ -650,10 +730,76 @@ export function analyzeIR(
       } as AnalyzedIR;
     }
 
+    else if (node.type === "CallAsync") {
+      // CallAsync is similar to Call but always async - equivalent to `await fn(...)`
+      isAsync = true;
+
+      // Visit function expression
+      const fnInfo = visit(node.value.function, ctx, expectedReturnType);
+
+      // Validate it's an async function type
+      if (fnInfo.value.type.type !== "AsyncFunction") {
+        throw new Error(
+          `CallAsync expects AsyncFunction type, got ${printTypeValue(fnInfo.value.type)} ` +
+          `at ${printLocationValue(node.value.location)}`
+        );
+      }
+
+      // Validate argument count
+      if (fnInfo.value.type.value.inputs.length !== node.value.arguments.length) {
+        throw new Error(
+          `Function expects ${fnInfo.value.type.value.inputs.length} arguments, ` +
+          `got ${node.value.arguments.length} ` +
+          `at ${printLocationValue(node.value.location)}`
+        );
+      }
+
+      // Analyze all arguments
+      const analyzedArgs: AnalyzedIR[] = [];
+      for (let i = 0; i < node.value.arguments.length; i++) {
+        const arg = node.value.arguments[i]!;
+        const argInfo = visit(arg, ctx, expectedReturnType);
+        analyzedArgs.push(argInfo);
+
+        // Validate argument type exactly matches expected
+        const expectedType = fnInfo.value.type.value.inputs[i]!;
+        if (argInfo.value.type.type !== "Never" && !isTypeValueEqual(argInfo.value.type, expectedType)) {
+          throw new Error(
+            `Function call argument ${i + 1} requires exact type match. ` +
+            `Expected type ${printTypeValue(expectedType)} ` +
+            `but got ${printTypeValue(argInfo.value.type)}. ` +
+            `Insert an As node if subtyping is intended. ` +
+            `at ${printLocationValue(node.value.location)}`
+          );
+        }
+      }
+
+      // Validate return type matches
+      if (!isTypeValueEqual(node.value.type, fnInfo.value.type.value.output)) {
+        throw new Error(
+          `Function call return type expected to be ${printTypeValue(fnInfo.value.type.value.output)} ` +
+          `but IR has ${printTypeValue(node.value.type)} ` +
+          `at ${printLocationValue(node.value.location)}`
+        );
+      }
+
+      // Return analyzed Call with analyzed function and arguments
+      return {
+        ...node,
+        value: {
+          ...node.value,
+          function: fnInfo,
+          arguments: analyzedArgs as IR[],
+          isAsync,
+        }
+      } as AnalyzedIR;
+    }
+
     else if (node.type === "Builtin") {
-      // Builtins are always synchronous themselves, but arguments might be async
+      // builtins are currently all synchronous (and accept synchronous-only functions as arguments)
       isAsync = false;
 
+      // Look up builtin function
       const builtinName = node.value.builtin;
       const builtin = Builtins[builtinName];
       if (!builtin) {
@@ -678,40 +824,6 @@ export function analyzeIR(
         analyzedArgs.push(argInfo);
         if (argInfo.value.isAsync) {
           isAsync = true;
-        }
-
-        // TODO - validate the type parameters and arguments precisely
-        // At the moment this machinery works with AST/EastType, but we need the same for IR/EastTypeValue too
-        // (No builtin "captures" functions nor returns functions).
-        // For now, trust the frontend and IR generation
-
-        // Check for functions called by the builtin
-        // These are arguments where the builtin expects a Function type in the type template
-        const argIndex = analyzedArgs.length - 1;
-        const builtinArgTemplateType = builtin.inputs[argIndex]!;
-        if (typeof builtinArgTemplateType !== "string" && builtinArgTemplateType.type === "Function") {
-          // Validate argument is a Function
-          if (argInfo.value.type.type !== "Function") {
-            throw new Error(
-              `Builtin function '${builtinName}' expects argument ${argIndex + 1} to be a Function, ` +
-              `but got ${printTypeValue(argInfo.value.type)} ` +
-              `at ${printLocationValue(argInfo.value.location)}`
-            );
-          }
-
-          // If this function argument calls any async platform functions, mark the builtin as async
-          for (const platform of argInfo.value.type.value.platforms) {
-            const platformDef = platformMap.get(platform);
-            if (!platformDef) {
-              throw new Error(
-                `Unknown platform function ${platform} called by builtin argument ${argIndex} ` +
-                `at ${printLocationValue(argInfo.value.location)}`
-              );
-            }
-            if (platformDef.type === 'async') {
-              isAsync = true;
-            }
-          }
         }
       }
 
@@ -1288,7 +1400,22 @@ export function analyzeIR(
         );
       }
 
-      isAsync = tryInfo.value.isAsync || catchInfo.value.isAsync;
+      // Visit finally body
+      const finallyInfo = visit(node.value.finally_body, ctx, expectedReturnType);
+
+      isAsync = tryInfo.value.isAsync || catchInfo.value.isAsync || finallyInfo.value.isAsync;
+
+      // Return analyzed TryCatch with analyzed bodies
+      return {
+        ...node,
+        value: {
+          ...node.value,
+          try_body: tryInfo as IR,
+          catch_body: catchInfo as IR,
+          finally_body: finallyInfo as IR,
+          isAsync,
+        }
+      } as AnalyzedIR;
     }
 
     else if (node.type === "Struct") {
@@ -1562,5 +1689,5 @@ export function analyzeIR(
     }
   }
 
-  return visit(ir, ctx);
+  return visit(ir, ctx) as AnalyzedIR<T>;
 }

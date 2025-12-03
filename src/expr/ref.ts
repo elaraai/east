@@ -126,7 +126,7 @@ export class RefExpr<T extends any> extends Expr<RefType<T>> {
     const location = get_location(2);
     const value2Type = value[TypeSymbol];
 
-    const updateFnExpr = Expr.from(updateFn as any, FunctionType([value2Type, this.value_type], this.value_type, null));
+    const updateFnExpr = Expr.from(updateFn as any, FunctionType([value2Type, this.value_type], this.value_type));
 
     return this[FactorySymbol]({
       ast_type: "Builtin",

@@ -5,10 +5,11 @@
 import type { AST } from "../ast.js";
 import type { Location } from "../location.js";
 import type { ExprType, TypeOf, SubtypeExprOrValue } from "./types.js";
-import { type BooleanType, type StringType, type EastType, type NeverType, type StructType, ArrayType, FunctionType, IntegerType, VariantType } from "../types.js";
+import { type BooleanType, type StringType, type EastType, type NeverType, type StructType, ArrayType, FunctionType, IntegerType, VariantType, AsyncFunctionType } from "../types.js";
 import type { BlockBuilder } from "./block.js";
 import type { CallableFunctionExpr } from "./function.js";
 import type { NeverExpr } from "./never.js";
+import type { CallableAsyncFunctionExpr } from "./asyncfunction.js";
 
 /**
  * Simple factory function type for creating expressions from AST
@@ -111,6 +112,15 @@ export abstract class Expr<T = any> {
   static function<const I extends any[], F extends ($: BlockBuilder<NeverType>, ...inputs: { [K in keyof I]: ExprType<I[K]> }) => any>(input_types: I, output_type: undefined, body: F): CallableFunctionExpr<I, TypeOf<ReturnType<F> extends void ? NeverType : ReturnType<F>>>
   static function<const I extends any[], O>(input_types: I, output_type: O, body: ($: BlockBuilder<O>, ...inputs: { [K in keyof I]: ExprType<I[K]> }) => SubtypeExprOrValue<O> | void): CallableFunctionExpr<I, O>
   static function(_input_types: any[], _output_type: any, _body: any): Expr<FunctionType<any[], any>> {
+    // Note that this static method is overridden later
+    throw new Error("Method used before initialization");
+  }
+
+  /** Create a function expression. */
+  /** @internal */
+  static asyncFunction<const I extends any[], F extends ($: BlockBuilder<NeverType>, ...inputs: { [K in keyof I]: ExprType<I[K]> }) => any>(input_types: I, output_type: undefined, body: F): CallableAsyncFunctionExpr<I, TypeOf<ReturnType<F> extends void ? NeverType : ReturnType<F>>>
+  static asyncFunction<const I extends any[], O>(input_types: I, output_type: O, body: ($: BlockBuilder<O>, ...inputs: { [K in keyof I]: ExprType<I[K]> }) => SubtypeExprOrValue<O> | void): CallableAsyncFunctionExpr<I, O>
+  static asyncFunction(_input_types: any[], _output_type: any, _body: any): Expr<AsyncFunctionType<any[], any>> {
     // Note that this static method is overridden later
     throw new Error("Method used before initialization");
   }

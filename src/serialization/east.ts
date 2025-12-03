@@ -374,7 +374,11 @@ export function printFor(
     typeCtx.pop();
     return ret;
   } else if (type.type === "Function") {
-    return (_: (x: any) => any, _ctx?: EastPrintValueContext) => "λ";
+    // This is just a convenience printer - functions cannot be serialized/deserialized
+    return (_: (x: any) => any, _ctx?: EastPrintValueContext) => `(${type.value.inputs.map((x: EastTypeValue) => printTypeValue(x)).join(", ")}) => ${printTypeValue(type.value.output)}`;
+  } else if (type.type === "AsyncFunction") {
+    // This is just a convenience printer - async functions cannot be serialized/deserialized
+    return (_: (x: any) => any, _ctx?: EastPrintValueContext) => `async (${type.value.inputs.map((x: EastTypeValue) => printTypeValue(x)).join(", ")}) => ${printTypeValue(type.value.output)}`;
   } else if (type.type === "Recursive") {
     const ret = typeCtx[typeCtx.length - Number(type.value)];
     if (ret === undefined) {
@@ -385,6 +389,8 @@ export function printFor(
     throw new Error(`Unhandled type ${(type satisfies never as EastTypeValue).type}`);
   }
 }
+
+const printTypeValue = printFor(EastTypeValueType);
 
 /** Create a parser for a specific EastType.
  *
@@ -500,6 +506,8 @@ const createParser = (type: EastTypeValue, frozen: boolean, typeCtx: EastParseTy
       return createVariantParser(type.value, frozen, typeCtx);
     case "Function":
       throw new Error(`Cannot parse .Function`);
+    case "AsyncFunction":
+      throw new Error(`Cannot parse .AsyncFunction`);
     case "Never":
       return (_input: string, pos: number, _ctx?: EastParseValueContext) => { throw new ParseError(`Attempted to parse value of type .Never`, pos) };
     case "Recursive":

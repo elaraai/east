@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { variant } from './containers/variant.js';
 import { compareFor, equalFor, greaterEqualFor, greaterFor, isFor, lessEqualFor, lessFor, notEqualFor } from './comparison.js';
-import { ArrayType, BlobType, BooleanType, DateTimeType, DictType, type EastType, FloatType, FunctionType, IntegerType, NeverType, NullType, RecursiveType, SetType, StringType, StructType, type ValueTypeOf, VariantType } from './types.js';
+import { ArrayType, AsyncFunctionType, BlobType, BooleanType, DateTimeType, DictType, type EastType, FloatType, FunctionType, IntegerType, NeverType, NullType, RecursiveType, SetType, StringType, StructType, type ValueTypeOf, VariantType } from './types.js';
 
 describe('Comparison of EAST values', () => {
     function run<T extends EastType>(type: T, values: ValueTypeOf<T>[]) {
@@ -200,7 +200,7 @@ describe('Comparison of EAST values', () => {
     });
 
     test('should handle Function type comparisons', () => {
-        const type = FunctionType([], NullType, []);
+        const type = FunctionType([], NullType);
 
         assert.throws(() => isFor(type), /Attempted to compare values of type \.Function/);
         assert.throws(() => equalFor(type), /Attempted to compare values of type \.Function/);
@@ -209,6 +209,18 @@ describe('Comparison of EAST values', () => {
         assert.throws(() => lessEqualFor(type), /Attempted to compare values of type \.Function/);
         assert.throws(() => greaterFor(type), /Attempted to compare values of type \.Function/);
         assert.throws(() => greaterEqualFor(type), /Attempted to compare values of type \.Function/);
+    });
+
+    test('should handle AsyncFunction type comparisons', () => {
+        const type = AsyncFunctionType([], NullType);
+
+        assert.throws(() => isFor(type), /Attempted to compare values of type \.AsyncFunction/);
+        assert.throws(() => equalFor(type), /Attempted to compare values of type \.AsyncFunction/);
+        assert.throws(() => notEqualFor(type), /Attempted to compare values of type \.AsyncFunction/);
+        assert.throws(() => lessFor(type), /Attempted to compare values of type \.AsyncFunction/);
+        assert.throws(() => lessEqualFor(type), /Attempted to compare values of type \.AsyncFunction/);
+        assert.throws(() => greaterFor(type), /Attempted to compare values of type \.AsyncFunction/);
+        assert.throws(() => greaterEqualFor(type), /Attempted to compare values of type \.AsyncFunction/);
     });
 
     test('should handle Float NaN edge cases', () => {

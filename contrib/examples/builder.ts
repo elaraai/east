@@ -25,7 +25,7 @@ class FunctionBodyBuilder<Is extends EastType[], O extends EastType> {
     }
 
     body(expr: SubtypeExprOrValue<FunctionType<Is, O>>): FunctionFinalizer<Is, O> {
-        const body = East.value(expr, FunctionType(this.inputs, this.output, null)); // can restrict platform function access here - replace null by array of platform function names
+        const body = East.value(expr, FunctionType(this.inputs, this.output));
 
         return new FunctionFinalizer(this.name, this.inputs, this.output, body.toIR());
     }

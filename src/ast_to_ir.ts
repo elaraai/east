@@ -20,6 +20,7 @@ type Ctx = {
   n_loops: number,
   inputs: EastType[],
   output: EastType,
+  async: boolean,
 }
 
 // TODO we should probably redo type checking exhaustively here?
@@ -35,7 +36,7 @@ function toLocationValue(location: Location): LocationValue {
 /** Perform scope resolution and type checking on `AST`, produce `IR` ready for serialization, compilation or evaluation.
 * 
 * @internal */
-export function ast_to_ir(ast: AST, ctx: Ctx = { local_ctx: new Map(), parent_ctx: new Map(), captures: new Set(), loop_ctx: new Map(), n_vars: 0, n_loops: 0, inputs: [], output: NeverType }): IR {
+export function ast_to_ir(ast: AST, ctx: Ctx = { local_ctx: new Map(), parent_ctx: new Map(), captures: new Set(), loop_ctx: new Map(), n_vars: 0, n_loops: 0, inputs: [], output: NeverType, async: false }): IR {
   try {
     if (ast.ast_type === "Variable") {
       if (ctx.local_ctx.has(ast)) {
@@ -165,17 +166,6 @@ export function ast_to_ir(ast: AST, ctx: Ctx = { local_ctx: new Map(), parent_ct
           let arg_ir = ast_to_ir(arg, ctx);
           const expectedType = applyTypeParameters(builtin_def.inputs[i]!, type_map, [], []);
 
-          // Special handling of FunctionType
-          if (expectedType.type === "Function") {
-            if (arg.type.type !== "Function") {
-              throw new Error(
-                `Builtin ${builtin_name} with type parameters [${ast.type_parameters.map(tp => printType(tp)).join(", ")}] argument ${i} of type ${printType(arg.type)} is not compatible with expected type ${printType(expectedType)} at ${printLocation(ast.location)}`
-              );
-            }
-            // Take the function argument's actual platform functions and populate here as a form of specialization
-            expectedType.platforms = arg.type.platforms;
-          }
-
           // Now check type compatibility
           if (arg.type.type !== "Never" && !isTypeEqual(arg.type, expectedType)) {
             if (!isSubtype(arg.type, expectedType)) {
@@ -194,11 +184,16 @@ export function ast_to_ir(ast: AST, ctx: Ctx = { local_ctx: new Map(), parent_ct
         }),
       });
     } else if (ast.ast_type === "Platform") {
+      if (ctx.async === false && ast.async === true) {
+        throw new Error(`Async platform call not allowed outside async function at ${printLocation(ast.location)}`);
+      }
+
       return variant("Platform", {
         type: toEastTypeValue(ast.type),
         location: toLocationValue(ast.location),
         name: ast.name,
         arguments: ast.arguments.map(ast => ast_to_ir(ast, ctx)), // type equality handled at Expr/AST level
+        async: ast.async,
       });
     } else if (ast.ast_type === "Struct") {
       return variant("Struct", {
@@ -273,7 +268,7 @@ export function ast_to_ir(ast: AST, ctx: Ctx = { local_ctx: new Map(), parent_ct
       const local_ctx = new Map(parameters.map((parameter, i) => ([ast.parameters[i]!, parameter] as const)));
       const parent_ctx = new Map([...ctx.local_ctx, ...ctx.parent_ctx]);
       const captures = new Set<VariableIR>();
-      const ctx2: Ctx = { local_ctx, parent_ctx, captures, loop_ctx: new Map(), n_vars: ctx.n_vars, n_loops: ctx.n_loops, inputs: (ast.type as FunctionType).inputs, output: (ast.type as FunctionType).output }
+      const ctx2: Ctx = { local_ctx, parent_ctx, captures, loop_ctx: new Map(), n_vars: ctx.n_vars, n_loops: ctx.n_loops, inputs: (ast.type as FunctionType).inputs, output: (ast.type as FunctionType).output, async: false }
 
       const body = ast_to_ir(ast.body, ctx2);
 
@@ -287,9 +282,71 @@ export function ast_to_ir(ast: AST, ctx: Ctx = { local_ctx: new Map(), parent_ct
         captures: [...captures],
         body,
       });
+    } else if (ast.ast_type === "AsyncFunction") {
+      const parameters: VariableIR[] = ast.parameters.map(parameter => {
+        const param: VariableIR = variant("Variable", {
+          type: toEastTypeValue(parameter.type),
+          name: `_${ctx.n_vars}`,
+          location: toLocationValue(parameter.location),
+          mutable: parameter.mutable, // false...
+          captured: false,
+        });
+        ctx.n_vars += 1;
+        return param;
+      });
+
+      const local_ctx = new Map(parameters.map((parameter, i) => ([ast.parameters[i]!, parameter] as const)));
+      const parent_ctx = new Map([...ctx.local_ctx, ...ctx.parent_ctx]);
+      const captures = new Set<VariableIR>();
+      const ctx2: Ctx = { local_ctx, parent_ctx, captures, loop_ctx: new Map(), n_vars: ctx.n_vars, n_loops: ctx.n_loops, inputs: (ast.type as FunctionType).inputs, output: (ast.type as FunctionType).output, async: true }
+
+      const body = ast_to_ir(ast.body, ctx2);
+
+      ctx.n_vars = ctx2.n_vars;
+      ctx.n_loops = ctx2.n_loops;
+
+      return variant("AsyncFunction", {
+        type: toEastTypeValue(ast.type),
+        location: toLocationValue(ast.location),
+        parameters,
+        captures: [...captures],
+        body,
+      });
     } else if (ast.ast_type === "Call") {
       // TODO - type equality could have been handled at Expr/AST level instead
+      // TODO - what about widening the result with As?
       return variant("Call", {
+        type: toEastTypeValue(ast.type),
+        location: toLocationValue(ast.location),
+        function: ast_to_ir(ast.function, ctx),
+        arguments: ast.arguments.map((argument, i) => {
+          let arg = ast_to_ir(argument, ctx);
+          const expectedType = (ast.function.type as FunctionType).inputs[i];
+
+          if (!isTypeEqual(argument.type, expectedType)) {
+            if (!isSubtype(argument.type, expectedType)) {
+              throw new Error(
+                `Argument ${i} of type ${printType(argument.type)} is not compatible with expected type ${printType(expectedType)} at ${printLocation(ast.location)}`
+              );
+            }
+            arg = variant("As", {
+              type: toEastTypeValue(expectedType),
+              value: arg,
+              location: toLocationValue(ast.location),
+            });
+          }
+
+          return arg;
+        }),
+      });
+    } else if (ast.ast_type === "CallAsync") {
+      if (ctx.async === false) {
+        throw new Error(`Async function call not allowed outside async function at ${printLocation(ast.location)}`);
+      }
+
+      // TODO - type equality could have been handled at Expr/AST level instead
+      // TODO - what about widening the result with As?
+      return variant("CallAsync", {
         type: toEastTypeValue(ast.type),
         location: toLocationValue(ast.location),
         function: ast_to_ir(ast.function, ctx),
@@ -431,6 +488,7 @@ export function ast_to_ir(ast: AST, ctx: Ctx = { local_ctx: new Map(), parent_ct
           n_loops: ctx.n_loops,
           inputs: ctx.inputs,
           output: ctx.output,
+          async: ctx.async,
         };
         let branch_body = ast_to_ir(branch.body, ctx_branch);
         ctx.n_vars = ctx_branch.n_vars;
@@ -462,6 +520,7 @@ export function ast_to_ir(ast: AST, ctx: Ctx = { local_ctx: new Map(), parent_ct
         n_loops: ctx.n_loops,
         inputs: ctx.inputs,
         output: ctx.output,
+        async: ctx.async,
       };
       let else_body = ast_to_ir(ast.else_body, ctx_else);
       ctx.n_vars = ctx_else.n_vars;
@@ -503,6 +562,7 @@ export function ast_to_ir(ast: AST, ctx: Ctx = { local_ctx: new Map(), parent_ct
         n_loops: ctx.n_loops,
         inputs: ctx.inputs,
         output: ctx.output,
+        async: ctx.async,
       };
       const try_body = ast_to_ir(ast.try_body, ctx_try);
       ctx.n_vars = ctx_try.n_vars;
@@ -535,6 +595,7 @@ export function ast_to_ir(ast: AST, ctx: Ctx = { local_ctx: new Map(), parent_ct
         n_loops: ctx.n_loops,
         inputs: ctx.inputs,
         output: ctx.output,
+        async: ctx.async,
       };
       const catch_body = ast_to_ir(ast.catch_body, ctx_catch);
       ctx.n_vars = ctx_catch.n_vars;
@@ -552,6 +613,7 @@ export function ast_to_ir(ast: AST, ctx: Ctx = { local_ctx: new Map(), parent_ct
           n_loops: ctx.n_loops,
           inputs: ctx.inputs,
           output: ctx.output,
+          async: ctx.async,
         };
         finally_body = ast_to_ir(ast.finally_body, ctx_finally);
         ctx.n_vars = ctx_finally.n_vars;
@@ -626,6 +688,7 @@ export function ast_to_ir(ast: AST, ctx: Ctx = { local_ctx: new Map(), parent_ct
         n_loops: ctx.n_loops,
         inputs: ctx.inputs,
         output: ctx.output,
+        async: ctx.async,
       };
       const body = ast_to_ir(ast.body, ctx2);
       ctx.n_vars = ctx2.n_vars;
@@ -673,6 +736,7 @@ export function ast_to_ir(ast: AST, ctx: Ctx = { local_ctx: new Map(), parent_ct
         n_loops: ctx.n_loops,
         inputs: ctx.inputs,
         output: ctx.output,
+        async: ctx.async,
       };
       const body = ast_to_ir(ast.body, ctx2);
       ctx.n_vars = ctx2.n_vars;
@@ -713,6 +777,7 @@ export function ast_to_ir(ast: AST, ctx: Ctx = { local_ctx: new Map(), parent_ct
         n_loops: ctx.n_loops,
         inputs: ctx.inputs,
         output: ctx.output,
+        async: ctx.async,
       };
       const body = ast_to_ir(ast.body, ctx2);
       ctx.n_vars = ctx2.n_vars;
@@ -761,6 +826,7 @@ export function ast_to_ir(ast: AST, ctx: Ctx = { local_ctx: new Map(), parent_ct
         n_loops: ctx.n_loops,
         inputs: ctx.inputs,
         output: ctx.output,
+        async: ctx.async,
       };
       const body = ast_to_ir(ast.body, ctx2);
       ctx.n_vars = ctx2.n_vars;
@@ -798,6 +864,7 @@ export function ast_to_ir(ast: AST, ctx: Ctx = { local_ctx: new Map(), parent_ct
           n_loops: ctx.n_loops,
           inputs: ctx.inputs,
           output: ctx.output,
+          async: ctx.async,
         };
         let body = ast_to_ir(v.body, ctx2);
         ctx.n_vars = ctx2.n_vars;

@@ -3,9 +3,9 @@
  * Dual-licensed under AGPL-3.0 and commercial license. See LICENSE for details.
  */
 
-import { getPlatforms, type AST, type IfElseAST, type Label, type TryCatchAST, type VariableAST } from "../ast.js";
+import { type AST, type IfElseAST, type Label, type TryCatchAST, type VariableAST } from "../ast.js";
 import { get_location, printLocation, type Location } from "../location.js";
-import { type EastType, FunctionType, isSubtype, NullType, printType, isTypeEqual, StringType, NeverType, VariantType, BooleanType, TypeUnion, IntegerType, StructType, ArrayType, type ValueTypeOf } from "../types.js";
+import { type EastType, FunctionType, isSubtype, NullType, printType, isTypeEqual, StringType, NeverType, VariantType, BooleanType, TypeUnion, IntegerType, StructType, ArrayType, type ValueTypeOf, AsyncFunctionType } from "../types.js";
 
 import type { ExprType, SubtypeExprOrValue, TypeOf } from "./types.js";
 import { AstSymbol, Expr } from "./expr.js";
@@ -27,6 +27,7 @@ import { valueOrExprToAst, valueOrExprToAstTyped } from "./ast.js";
 import type { PlatformFunction } from "../platform.js";
 import { toEastTypeValue } from "../type_of_type.js";
 import { RefExpr } from "./ref.js";
+import { createAsyncFunctionExpr, type CallableAsyncFunctionExpr } from "./asyncfunction.js";
 
 /** A factory function to help build `Expr` from AST.
  * We inject this into each concrete `Expr` type so they can create new expressions recursively, without having circular dependencies between JavaScript modules.
@@ -72,6 +73,8 @@ export function fromAst<T extends AST>(ast: T): Expr<T["type"]> {
     return fromAst(as_ast);
   } else if (type === "Function") {
     return createFunctionExpr(ast.type.inputs, ast.type.output, ast, fromAst);
+  } else if (type === "AsyncFunction") {
+    return createAsyncFunctionExpr(ast.type.inputs, ast.type.output, ast, fromAst);
   } else {
     throw new Error(`fromAst not implemented for type ${printType(ast.type satisfies never)} at ${printLocation(ast.location)}`);
   }
@@ -168,16 +171,92 @@ export function from(value: any, type?: EastType): Expr<any> {
       throw new Error(`Expected function definition to return type ${printType(output)}, got ${printType(body_ast.type)}`);
     }
 
-    const platforms = getPlatforms(body_ast);
-    if (type.platforms !== null) {
-      if (!platforms.every(p => type.platforms!.includes(p))) {
-        throw new Error(`Function is not allowed to call platform functions: ${platforms.filter(p => !type.platforms!.includes(p)).join(", ")}`);
+    const ast: AST = {
+      ast_type: "Function",
+      type: FunctionType(inputs, output),
+      location: get_location(3),
+      parameters: input_variables,
+      body: body_ast,
+    };
+
+    return fromAst(ast);
+  } else if (type && type.type === "AsyncFunction") {
+    if (typeof value !== "function") {
+      throw new Error(`Expected function but got ${typeof value}`);
+    }
+
+    const { inputs, output } = type;
+    const input_variables: VariableAST[] = inputs.map(i => ({
+      ast_type: "Variable",
+      type: i,
+      location: get_location(3),
+      mutable: false,
+    }));
+
+    const $ = BlockBuilder(output);
+    const input_exprs = input_variables.map(fromAst);
+    const ret = value($, ...input_exprs);
+    const statements = $.statements;
+    
+    if (ret !== undefined) {
+      if (ret instanceof Expr) {
+        // It is possible this expression is already the last statement.
+        // Input of the form `$ => $.xxx()` or `$ => { ...; return $.xxx(); }` will cause this
+        // So we filter out this case to avoid unintended repeated statements (and if users write an identical expression twice, they won't be `===`)
+        if (statements.length === 0 || statements[statements.length - 1] !== ret[AstSymbol]) {
+          statements.push(Expr.ast(ret));
+        }
+      } else {
+        const retAst = valueOrExprToAstTyped(ret, output);
+        statements.push(retAst);
       }
     }
 
+    let body_ast: AST;
+    if (isTypeEqual(output, NullType)) {
+      if (statements.length === 0) {
+        body_ast = { ast_type: "Value", type: NullType, location: get_location(2), value: null };
+      } else if (statements.length === 1 && isSubtype(statements[0]!.type, NullType)) {
+        body_ast = statements[0]!;
+      } else {
+        if (!isSubtype(statements[statements.length - 1]!.type, NullType)) {
+          statements.push({ ast_type: "Value", type: NullType, location: get_location(3), value: null });
+        }
+        body_ast = {
+          ast_type: "Block",
+          type: statements[statements.length - 1]!.type,
+          location: get_location(3),
+          statements: statements,
+        }
+      }
+    } else {
+      if (statements.length === 0) {
+        throw new Error(`Function expected output of type ${printType(output)}, but no function body or statements were provided`)
+      } else if (statements.length === 1) {
+        if (!isSubtype(statements[0]!.type, output)) {
+          throw new Error(`Function expected output of type ${printType(output)}, but function body has type ${printType(statements[0]!.type)}`)
+        }
+        body_ast = statements[0]!;
+      } else {
+        if (!isSubtype(statements[statements.length - 1]!.type, output)) {
+          throw new Error(`Function expected output of type ${printType(output)}, but function body has type ${printType(statements[statements.length - 1]!.type)}`)
+        }
+        body_ast = {
+          ast_type: "Block",
+          type: statements[statements.length - 1]!.type,
+          location: get_location(3),
+          statements: statements,
+        }
+      }
+    }
+
+    if (!isSubtype(body_ast.type, output)) {
+      throw new Error(`Expected function definition to return type ${printType(output)}, got ${printType(body_ast.type)}`);
+    }
+
     const ast: AST = {
-      ast_type: "Function",
-      type: FunctionType(inputs, output, platforms),
+      ast_type: "AsyncFunction",
+      type: FunctionType(inputs, output),
       location: get_location(3),
       parameters: input_variables,
       body: body_ast,
@@ -240,7 +319,7 @@ export function func(input_types: EastType[], output_type: EastType | undefined,
 
     const ast = {
       ast_type: "Function" as const,
-      type: FunctionType(input_types, ret_type, getPlatforms(body_ast)),
+      type: FunctionType(input_types, ret_type),
       location: get_location(2),
       parameters: parameters,
       body: body_ast,
@@ -275,7 +354,101 @@ export function func(input_types: EastType[], output_type: EastType | undefined,
 
     const ast = {
       ast_type: "Function" as const,
-      type: FunctionType(input_types, output_type, getPlatforms(body_ast)),
+      type: FunctionType(input_types, output_type),
+      location: get_location(2),
+      parameters: parameters,
+      body: body_ast,
+    };
+
+    return fromAst(ast);
+  }
+}
+
+/** Define an East function.
+ * 
+ * The function may either be a free function or a closure.
+ * A closure is a function defined within another function that "captures", or refers to, one or more variables from an outer function.
+ * Functions without captures are called free functions and can be compiled and executed.
+ */
+export function asyncFunction<const I extends EastType[], O extends EastType>(input_types: I, output_type: O, body: ($: BlockBuilder<O>, ...inputs: { [K in keyof I]: ExprType<I[K]> }) => SubtypeExprOrValue<O> | void): CallableAsyncFunctionExpr<I, O>
+/** @internal */
+export function asyncFunction<const I extends EastType[], F extends ($: BlockBuilder<NeverType>, ...inputs: { [K in keyof I]: ExprType<I[K]> }) => any>(input_types: I, output_type: undefined, body: F): CallableAsyncFunctionExpr<I, TypeOf<ReturnType<F> extends void ? NeverType : ReturnType<F>>>
+export function asyncFunction(input_types: EastType[], output_type: EastType | undefined, body: ($: BlockBuilder<any>, ...inputs: Expr[]) => any): Expr<AsyncFunctionType<any[], any>> {
+  const parameters: VariableAST[] = input_types.map(i => ({
+    ast_type: "Variable",
+    type: i,
+    location: get_location(2),
+    mutable: false,
+  }));
+  const $ = BlockBuilder<any>(output_type ?? NeverType);
+  let ret = body($, ...parameters.map(fromAst));
+  const statements = $.statements;
+
+  if (output_type === undefined) {
+    if (ret === undefined) {
+      throw new Error(`When output_type is not specified, function body must return a value`);
+    }
+    const ret_ast = ret instanceof Expr ? Expr.ast(ret) : valueOrExprToAst(ret);
+    if (statements.length === 0 || statements[statements.length - 1] !== ret_ast) { // avoid duplicate statements
+      statements.push(ret_ast)
+    }
+    const ret_type = ret_ast.type;
+    
+    let body_ast: AST;
+    if (statements.length === 0) {
+      body_ast = { ast_type: "Value", type: NullType, location: get_location(2), value: null };
+    } else if (statements.length === 1) {
+      body_ast = statements[0]!;
+    } else {
+      body_ast = {
+        ast_type: "Block",
+        type: statements[statements.length - 1]!.type,
+        location: get_location(2),
+        statements: statements,
+      };
+    }
+    if (!isSubtype(body_ast.type, ret_type)) {
+      throw new Error(`function expected to return a value of type ${printType(ret_type)}, got ${printType(body_ast.type)}`);
+    }
+
+    const ast = {
+      ast_type: "AsyncFunction" as const,
+      type: AsyncFunctionType(input_types, ret_type),
+      location: get_location(2),
+      parameters: parameters,
+      body: body_ast,
+    };
+
+    return fromAst(ast);
+  } else {
+    if (ret !== undefined) {
+      const ret_ast = valueOrExprToAstTyped(ret, output_type);
+      if (statements.length === 0 || statements[statements.length - 1] !== ret_ast) { // avoid duplicate statements
+        statements.push(ret_ast);
+      }
+    }
+
+    let body_ast: AST;
+    if (statements.length === 0) {
+      body_ast = { ast_type: "Value", type: NullType, location: get_location(2), value: null };
+    } else if (statements.length === 1) {
+      body_ast = statements[0]!;
+    } else {
+      body_ast = {
+        ast_type: "Block",
+        type: statements[statements.length - 1]!.type,
+        location: get_location(2),
+        statements: statements,
+      };
+    }
+    // This is an interesting one - do we have implicit returns? Do we need to track the absence of control flow?
+    // if (!isSubtype(expr.type, output_type)) {
+    //   throw new Error(`func expected to return a value of type ${printType(output_type)}, got ${printType(expr.type)}`);
+    // }
+
+    const ast = {
+      ast_type: "AsyncFunction" as const,
+      type: AsyncFunctionType(input_types, output_type),
       location: get_location(2),
       parameters: parameters,
       body: body_ast,
@@ -724,15 +897,22 @@ export function print(value: Expr): StringExpr {
   }) as StringExpr;
 }
 
-/** Create a callable helper to invoke a platform function.
+/** Callable helper type for synchronous platform functions. */
+export type PlatformDefinition<Inputs extends EastType[], Output extends EastType> = ((...args: { [K in keyof Inputs]: SubtypeExprOrValue<Inputs[K]> }) => ExprType<Output>) & {
+  implement: (fn: (...args: { [K in keyof Inputs]: ValueTypeOf<Inputs[K]> }) => Output extends NullType ? null | undefined | void : ValueTypeOf<Output>) => PlatformFunction,
+}
+
+/** Create a callable helper to invoke a synchronous platform function.
  *
  * Platform functions provide access to external capabilities (logging, I/O, database access, etc.)
  * that East code can call. They are defined by the platform when compiling and executing East IR.
  *
- * @param name - The name of the platform function (must match a function provided in the platform object)
+ * @param name - The name of the platform function
  * @param input_types - Array of input parameter types for the platform function
  * @param output_type - The return type of the platform function
  * @returns A callable function that creates Platform AST nodes when invoked
+ * 
+ * @see {@link asyncPlatform} for defining asynchronous platform functions (that return `Promise`s)
  *
  * @example
  * ```ts
@@ -756,11 +936,8 @@ compiled(); // Logs "Hello, world!" to the console
 export function platform<const Inputs extends EastType[], Output extends EastType>(
   name: string,
   input_types: Inputs,
-  output_type: Output
-): ((...args: { [K in keyof Inputs]: SubtypeExprOrValue<Inputs[K]> }) => ExprType<Output>) & {
-  implement: (fn: (...args: { [K in keyof Inputs]: ValueTypeOf<Inputs[K]> }) => Output extends NullType ? null | undefined | void : ValueTypeOf<Output>) => PlatformFunction,
-  implementAsync: (fn: (...args: { [K in keyof Inputs]: ValueTypeOf<Inputs[K]> }) => Output extends NullType ? Promise<null | undefined | void> : Promise<ValueTypeOf<Output>>) => PlatformFunction,
-} {
+  output_type: Output,
+): PlatformDefinition<Inputs, Output> {
   const fn = (...args: any[]): any => {
     if (args.length !== input_types.length) {
       throw new Error(`Platform function ${name} expected ${input_types.length} arguments, got ${args.length}`);
@@ -795,6 +972,7 @@ export function platform<const Inputs extends EastType[], Output extends EastTyp
       location: get_location(2),
       name: name,
       arguments: argAsts,
+      async: false,
     }) as ExprType<Output>;
   };
 
@@ -821,7 +999,90 @@ export function platform<const Inputs extends EastType[], Output extends EastTyp
       };
     }
   }
-  fn.implementAsync = (fnImpl: (...args: any[]) => any) => {
+
+  return fn;
+}
+
+/** Callable helper type for asynchronous platform functions. */
+export type AsyncPlatformDefinition<Inputs extends EastType[], Output extends EastType> = ((...args: { [K in keyof Inputs]: SubtypeExprOrValue<Inputs[K]> }) => ExprType<Output>) & {
+  implement: (fn: (...args: { [K in keyof Inputs]: ValueTypeOf<Inputs[K]> }) => Output extends NullType ? Promise<null | undefined | void> : Promise<ValueTypeOf<Output>>) => PlatformFunction,
+}
+
+
+/** Create a callable helper to invoke an asynchronous platform function.
+ *
+ * Platform functions provide access to external capabilities (logging, I/O, database access, etc.)
+ * that East code can call. They are defined by the platform when compiling and executing East IR.
+ *
+ * @param name - The name of the asynchronous platform function
+ * @param input_types - Array of input parameter types for the platform function
+ * @param output_type - The return type of the platform function
+ * @returns A callable function that creates Platform AST nodes when invoked
+ * 
+ * @see {@link platform} for defining synchronous platform functions
+ *
+ * @example
+ * ```ts
+// Define a platform function for reading files as a string
+const readFile = East.asyncPlatform("readFile", [StringType], StringType);
+
+// Use it in East code
+const myFunction = East.asyncFunction([], StringType, ($) => {
+  $.return(readFile("data.txt"));
+});
+
+// Provide the (async) implementation when compiling
+const platform = [
+  readFile.implement((filename: string) => fs.promises.readFile(filename, 'utf-8')),
+];
+const compiled = myFunction.toIR().compile(platform);
+compiled(); // Logs "Hello, world!" to the console
+ * ```
+ */
+export function asyncPlatform<const Inputs extends EastType[], Output extends EastType>(
+  name: string,
+  input_types: Inputs,
+  output_type: Output,
+): AsyncPlatformDefinition<Inputs, Output> {
+  const fn = (...args: any[]): any => {
+    if (args.length !== input_types.length) {
+      throw new Error(`Platform function ${name} expected ${input_types.length} arguments, got ${args.length}`);
+    }
+
+    const argAsts = args.map((arg, index) => {
+      const expectedType = input_types[index]!;
+      let ast = valueOrExprToAstTyped(arg, expectedType);
+
+      if (ast.type.type === "Never") {
+        throw new Error(`Platform function ${name} argument ${index} expected type ${printType(expectedType)}, got Never type`);
+      }
+      if (!isTypeEqual(ast.type, expectedType)) {
+        if (!isSubtype(ast.type, expectedType)) {
+          throw new Error(`Platform function ${name} argument ${index} expected type ${printType(expectedType)}, got ${printType(ast.type)}`);
+        }
+        // Insert implicit cast
+        ast = {
+          ast_type: "As",
+          type: expectedType,
+          location: get_location(2),
+          value: ast,
+        }
+      }
+
+      return ast;
+    });
+
+    return fromAst({
+      ast_type: "Platform",
+      type: output_type,
+      location: get_location(2),
+      name: name,
+      arguments: argAsts,
+      async: true,
+    }) as ExprType<Output>;
+  };
+
+  fn.implement = (fnImpl: (...args: any[]) => any) => {
     // Convert types from EastType to EastTypeValue once at implementation time
     const inputsAsValues = input_types.map(t => toEastTypeValue(t));
     const outputAsValue = toEastTypeValue(output_type);
@@ -847,6 +1108,7 @@ export function platform<const Inputs extends EastType[], Output extends EastTyp
 
   return fn;
 }
+
 
 /** A helper for building blocks of code.
  * Methods like `let`, `if`, `for` etc are available on the builder.
@@ -983,7 +1245,12 @@ export const BlockBuilder = <Ret>(return_type: Ret): BlockBuilder<Ret> => {
       throw new Error(`Unreachable statement detected at ${printLocation(get_location(2))}`);
     }
 
-    const v = Expr.ast(variable);
+    let v: AST = Expr.ast(variable);
+
+    // Handle RecursiveType variables which are auto-unwrapped by fromAst
+    if (v.ast_type === "UnwrapRecursive") {
+      v = v.value;
+    }
 
     if (v.ast_type !== "Variable") {
       throw new Error("Can only assign to a variable");
@@ -1683,6 +1950,7 @@ Object.assign(Expr, {
   error,
   tryCatch,
   function: func,
+  asyncFunction,
   print,
   str,
   equal,

@@ -193,6 +193,8 @@ export function encodeBeast2ValueToBufferFor(type: EastTypeValue, typeCtx: Beast
     return ret;
   } else if (type.type === "Function") {
     throw new Error(`Functions cannot be serialized`);
+  } else if (type.type === "AsyncFunction") {
+    throw new Error(`AsyncFunctions cannot be serialized`);
   } else {
     throw new Error(`Unhandled type ${(type satisfies never as EastTypeValue).type}`);
   }
@@ -391,6 +393,8 @@ export function decodeBeast2ValueFor(type: EastTypeValue | EastType, typeCtx: Be
     return ret;
   } else if (type.type === "Function") {
     throw new Error(`Functions cannot be deserialized`);
+  } else if (type.type === "AsyncFunction") {
+    throw new Error(`AsyncFunctions cannot be deserialized`);
   } else {
     throw new Error(`Unhandled type ${(type satisfies never as EastTypeValue).type}`);
   }

@@ -76,16 +76,18 @@ East is statically typed with **structural typing**. All types (except functions
 | `StringType` | `string` | Immutable | UTF-8 text |
 | `DateTimeType` | `Date` | Immutable | UTC timestamp with millisecond precision |
 | `BlobType` | `Uint8Array` | Immutable | Binary data |
-| **Compound Types** |
+| **Mutable Collections** |
 | `ArrayType<T>` | `ValueTypeOf<T>[]` | **Mutable** | Ordered collection |
 | `SetType<K>` | `Set<ValueTypeOf<K>>` | **Mutable** | Sorted set (keys ordered by total ordering) |
 | `DictType<K, V>` | `Map<ValueTypeOf<K>, ValueTypeOf<V>>` | **Mutable** | Sorted dict (keys ordered by total ordering) |
+| `RefType<T>` | `ref<ValueTypeOf<T>>` | **Mutable** | Refcell, mutable box |
+| **Compound Types** |
 | `StructType<Fields>` | `{...}` | Immutable | Product type (field order matters) |
 | `VariantType<Cases>` | `variant` | Immutable | Sum type (cases sorted alphabetically) |
 | `RecursiveType<T>` | `ValueTypeOf<T>` | Immutable | Trees, DAGs, circular structures |
-| `RefType<T>` | `ref<ValueTypeOf<T>>` | **Mutable** | Shared mutable state across closures |
 | **Function Type** |
 | `FunctionType<I, O>` | Function | Immutable | First-class function (serializable as IR, not as data) |
+| `AsyncFunctionType<I, O>` | Function | Immutable | Asynchronous function (serializable as IR, not as data) |
 
 **Key Notes:**
 - **Total ordering**: All types (even `Float` with `NaN`, `-0.0`) have defined ordering
@@ -108,8 +110,10 @@ Main entry point for building East programs.
 | `print<T extends EastType>(expr: Expr<T>): StringExpr` | Convert any expression to string | `East.print(x)` |
 | **Function Definition** |
 | `function<I extends EastType[], O extends EastType>(inputs: I, output: O, body: ($, ...args) => Expr \| value): FunctionExpr` | Define a function | `East.function([IntegerType], IntegerType, ($, x) => x.add(1n))` |
+| `asyncFunction<I extends EastType[], O extends EastType>(inputs: I, output: O, body: ($, ...args) => Expr \| value): FunctionExpr` | Define an async function (no need for `await`) | `East.asyncFunction([IntegerType], NullType, ($, x) => sleep(x))` |
 | `compile<I extends EastType[], O extends EastType>(fn: FunctionExpr<I, O>, platform: PlatformFunction[]): (...inputs) => ValueTypeOf<O>` | Compile to executable JavaScript | `East.compile(myFunction, [log.implement(console.log)])` |
 | `platform<I extends EastType[], O extends EastType>(name: string, inputs: I, output: O): (...args) => ExprType<O>` | Create platform function helper | `const log = East.platform("log", [StringType], NullType)` |
+| `asyncPlatform<I extends EastType[], O extends EastType>(name: string, inputs: I, output: O): (...args) => ExprType<O>` | Create async platform function helper (no need for await) | `const readFile = East.asyncPlatform("readFile", [StringType], BlobType)` |
 | **Comparisons** |
 | `equal<T extends EastType>(a: Expr<T>, b: Expr<T> \| ValueTypeOf<T>): BooleanExpr` | Deep equality | `East.equal(x, 10n)` |
 | `notEqual<T extends EastType>(a: Expr<T>, b: Expr<T> \| ValueTypeOf<T>): BooleanExpr` | Deep inequality | `East.notEqual(x, 0n)` |
@@ -128,6 +132,7 @@ Main entry point for building East programs.
 ## Functions
 
 Functions are first-class with concrete input/output types.
+A function can either be synchronous or asynchronous, depending on which platform functions are used within.
 
 ### Platform Functions
 
@@ -149,6 +154,26 @@ compiled("Alice");  // Logs: "Hello, Alice!"
 const ir = greet.toIR();
 const json = JSON.stringify(ir.toJSON());
 // Remote: EastIR.fromJSON(JSON.parse(json)).compile(platform)
+```
+
+Async platform effects need to be declared as async and used within async East functions:
+
+```typescript
+const log = East.platform("log", [StringType], NullType);
+const readFile = East.asyncPlatform("readFile", [StringType], StringType);
+const platform = [
+    log.implement(console.log),
+    readFile.implement(filename => fs.promises.readFile(filename, 'utf-8')),
+];
+
+const logFile = East.asyncFunction([StringType], NullType, ($, filename) => {
+    const contents = $.let(readFile(filename)); // note - no await
+    $(log(contents));
+    $.return(null);
+});
+
+const compiled = East.compile(logFile, platform);
+await compiled("data.txt");  // compiled function returns a Promise
 ```
 
 ### BlockBuilder Operations

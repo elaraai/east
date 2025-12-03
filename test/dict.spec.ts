@@ -7,7 +7,7 @@ import { describeEast as describe, assertEast as assert } from "./platforms.spec
 
 const { str } = East;
 
-describe("Dict", (test) => {
+await describe("Dict", (test) => {
     test("Dict ops", $ => {
 
         $(assert.equal(East.value(new Map(), DictType(IntegerType, StringType)).size(), 0n))
