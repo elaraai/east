@@ -1287,6 +1287,13 @@ export const BlockBuilder = <Ret>(return_type: Ret): BlockBuilder<Ret> => {
       throw new Error(`Return expected to have type ${printType(return_type as EastType)}, got ${printType(expAst.type)}`);
     }
 
+    // Deduplicate: if the expression is already the last statement (e.g., from $()),
+    // don't push it again - just wrap it in the Return
+    const exprAstRef = expr instanceof Expr ? Expr.ast(expr) : null;
+    if (exprAstRef !== null && statements.length > 0 && statements[statements.length - 1] === exprAstRef) {
+      statements.pop();
+    }
+
     const ast = {
       ast_type: "Return" as const,
       type: NeverType,

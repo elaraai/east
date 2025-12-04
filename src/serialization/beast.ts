@@ -28,22 +28,15 @@ const isTypeValueEqual = equalFor(EastTypeValueType) as (t1: EastTypeValue, t2: 
 // Old East supported nullable types with a special flag (bit 7 set in type byte).
 // New East removed nullable in favor of explicit Option/Variant types.
 //
-// DECODING: We auto-convert nullable types to Variant<{notNull: T, null: Null}>
+// DECODING: We auto-convert nullable types to Option<T> (Variant<{none: Null, some: T}>)
 //   - This allows reading legacy .beast files seamlessly
-//   - The variant cases are named to sort correctly: "notNull" < "null" alphabetically
-//   - Tag mapping: tag 0 = notNull (has value), tag 1 = null
-//   - This matches the old nullable encoding perfectly for values (byte-for-byte identical)
+//   - Tag mapping: tag 0 = none (null), tag 1 = some (has value)
+//   - This matches the old nullable encoding for values (byte-for-byte identical)
 //
-// ENCODING: We currently do NOT auto-convert Variant<{notNull: T, null: Null}> back to nullable
+// ENCODING: We currently do NOT auto-convert Option<T> back to nullable
 //   - Pro: Simpler, more explicit, no magic behavior
 //   - Con: Type schemas are larger (expanded Variant vs single nullable flag)
 //   - Con: Old ELARACore cannot read files written by new East
-//
-// FUTURE WORK: Consider implementing inverse transform on encode for full interoperability:
-//   - Detect Variant with exactly 2 cases: "notNull": T and "null": Null
-//   - Encode as nullable T (type byte with bit 7 set)
-//   - This would enable bidirectional compatibility and smaller type schemas
-//   - Trade-off: More magic behavior, but symmetric with decode behavior
 //
 // =============================================================================
 
@@ -72,6 +65,43 @@ export const BEAST_BYTE_TO_TYPE = [
   undefined, // 12 - Tree (not implemented)
   "Variant",
 ] as const;
+
+/**
+ * Normalize a Beast-decoded type to standard East ordering.
+ * Sorts variant cases alphabetically by name, matching East's canonical type representation.
+ * Only used for type comparison in Beast decoding - the original ordering is preserved
+ * for value decoding (to match byte layout).
+ */
+function _normalizeBeastType(type: EastTypeValue): EastTypeValue {
+  const t = type.type;
+
+  if (t === "Array") {
+    return variant("Array", _normalizeBeastType(type.value));
+  } else if (t === "Set") {
+    return variant("Set", _normalizeBeastType(type.value));
+  } else if (t === "Dict") {
+    return variant("Dict", {
+      key: _normalizeBeastType(type.value.key),
+      value: _normalizeBeastType(type.value.value),
+    });
+  } else if (t === "Struct") {
+    // Struct fields preserve declaration order (not sorted), only normalize field types
+    return variant("Struct", type.value.map(f => ({
+      name: f.name,
+      type: _normalizeBeastType(f.type),
+    })));
+  } else if (t === "Variant") {
+    // Sort cases by name and normalize their types
+    const sortedCases = [...type.value].sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+    return variant("Variant", sortedCases.map(c => ({
+      name: c.name,
+      type: _normalizeBeastType(c.type),
+    })));
+  }
+
+  // Primitives pass through unchanged
+  return type;
+}
 
 export function encodeTypeToBeastBuffer(type: EastTypeValue, writer: BufferWriter): void {
   const t = type.type;
@@ -193,10 +223,11 @@ export function decodeTypeBeast(buffer: Uint8Array, offset: number): [EastTypeVa
     throw new Error(`Unhandled type: ${t}`);
   }
 
-  // If nullable, wrap in a Variant with "notNull" (tag 0) and "null" (tag 1)
-  // This matches the old encoding where tag 0 = has value, tag 1 = null
+  // If nullable, wrap in a Variant with "some" (tag 0) and "none" (tag 1)
+  // Old nullable: tag 0 = has value, tag 1 = null
+  // So we need: index 0 = some, index 1 = none (to match byte encoding)
   if (nullable) {
-    return [variant("Variant", [ { name: "notNull", type: baseType }, { name: "null", type: variant("Null", null) } ]), offset];
+    return [variant("Variant", [ { name: "some", type: baseType }, { name: "none", type: variant("Null", null) } ]), offset];
   }
 
   return [baseType, offset];
@@ -534,8 +565,6 @@ export function decodeBeastFor(type: EastTypeValue | EastType): (data: Uint8Arra
     type = toEastTypeValue(type);
   }
 
-  const valueDecoder = decodeBeastValueFor(type as EastTypeValue);
-
   return (data: Uint8Array) => {
     // Verify magic bytes
     if (data.length < MAGIC_BYTES.length) {
@@ -552,12 +581,17 @@ export function decodeBeastFor(type: EastTypeValue | EastType): (data: Uint8Arra
     let offset = MAGIC_BYTES.length;
     const [decodedType, typeEndOffset] = decodeTypeBeast(data, offset);
 
+    // Normalize decoded type for comparison (sorts variant cases)
+    // but keep original for value decoding (preserves byte-level tag ordering)
+    const normalizedType = _normalizeBeastType(decodedType);
+
     // Verify type matches expected type
-    if (!isTypeValueEqual(decodedType, type as EastTypeValue)) {
-      throw new Error(`Type mismatch: expected ${printTypeValue(type as EastTypeValue)}, got ${printTypeValue(decodedType)}`);
+    if (!isTypeValueEqual(normalizedType, type as EastTypeValue)) {
+      throw new Error(`Type mismatch: expected ${printTypeValue(type as EastTypeValue)}, got ${printTypeValue(normalizedType)}`);
     }
 
-    // Decode value
+    // Decode value using original decoded_type (correct tag ordering)
+    const valueDecoder = decodeBeastValueFor(decodedType);
     const [value, valueEndOffset] = valueDecoder(data, typeEndOffset);
 
     // Verify we consumed all data
