@@ -10,6 +10,7 @@
 
 import { platform } from './expr/block.js';
 import type { EastType } from './types.js';
+export { TypeSymbol } from './expr/expr.js';
 
 export * from './eastir.js';
 export * from './platform.js';
