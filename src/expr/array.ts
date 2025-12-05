@@ -18,6 +18,9 @@ import type { FloatExpr } from "./float.js";
 import type { DictExpr } from "./dict.js";
 import type { CallableFunctionExpr } from "./function.js";
 import { none, some } from "../containers/variant.js";
+import { CsvSerializeConfigType, csvSerializeOptionsToValue, type CsvSerializeOptions } from "../serialization/csv.js";
+import type { BlobExpr } from "./blob.js";
+import { BlobType } from "../types.js";
 
 /**
  * Expression representing mutable array values and operations.
@@ -2962,6 +2965,41 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
         }) as any
       );
     }
+  }
+
+  /**
+   * Encodes this array of structs as CSV data.
+   *
+   * @param options - CSV serialization options
+   * @returns A BlobExpr containing the encoded CSV data
+   *
+   * @remarks Only works on arrays of structs with primitive or optional primitive fields.
+   *
+   * @example
+   * ```ts
+   * const PersonType = StructType({ name: StringType, age: IntegerType });
+   *
+   * const toCsv = East.function([ArrayType(PersonType)], BlobType, ($, people) => {
+   *   $.return(people.encodeCsv({ delimiter: ',' }));
+   * });
+   * const compiled = East.compile(toCsv.toIR(), []);
+   * const blob = compiled([{ name: "Alice", age: 30n }, { name: "Bob", age: 25n }]);
+   * new TextDecoder().decode(blob);  // "name,age\r\nAlice,30\r\nBob,25"
+   * ```
+   */
+  encodeCsv(options?: CsvSerializeOptions): BlobExpr {
+    // Convert options to East config value
+    const configValue = csvSerializeOptionsToValue(options);
+    const configAst = valueOrExprToAstTyped(configValue, CsvSerializeConfigType);
+
+    return this[FactorySymbol]({
+      ast_type: "Builtin",
+      type: BlobType,
+      location: get_location(2),
+      builtin: "ArrayEncodeCsv",
+      type_parameters: [this.value_type as EastType, CsvSerializeConfigType],
+      arguments: [this[AstSymbol], configAst],
+    }) as BlobExpr;
   }
 
 }
