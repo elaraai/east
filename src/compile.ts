@@ -11,7 +11,7 @@ import { EastError } from "./error.js";
 import { SortedSet } from "./containers/sortedset.js";
 import { SortedMap } from "./containers/sortedmap.js";
 import { BufferWriter } from "./serialization/binary-utils.js";
-import { decodeBeast2For, decodeBeastFor, encodeBeast2For, encodeBeastFor, fromJSONFor, toJSONFor } from "./serialization/index.js";
+import { decodeBeast2For, decodeBeastFor, encodeBeast2For, encodeBeastFor, fromJSONFor, toJSONFor, decodeCsvFor, encodeCsvFor } from "./serialization/index.js";
 import { formatDateTime } from "./datetime_format/print.js";
 import { parseDateTimeFormatted } from "./datetime_format/parse.js";
 import type { DateTimeFormatToken } from "./datetime_format/types.js";
@@ -1473,6 +1473,26 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
         return decodeBeast2(data);
       } catch (e: unknown) {
         throw new EastError(`Failed to decode Beast2 data: ${(e as Error).message}`, { location });
+      }
+    }
+  },
+  BlobDecodeCsv: (location: LocationValue, structType: EastTypeValue, _configType: EastTypeValue) => {
+    return (data: Uint8Array, config: any) => {
+      try {
+        const decoder = decodeCsvFor(structType, config);
+        return decoder(data);
+      } catch (e: unknown) {
+        throw new EastError(`Failed to decode CSV data: ${(e as Error).message}`, { location });
+      }
+    }
+  },
+  ArrayEncodeCsv: (location: LocationValue, structType: EastTypeValue, _configType: EastTypeValue) => {
+    return (data: any[], config: any) => {
+      try {
+        const encoder = encodeCsvFor(structType, config);
+        return encoder(data);
+      } catch (e: unknown) {
+        throw new EastError(`Failed to encode CSV data: ${(e as Error).message}`, { location });
       }
     }
   },

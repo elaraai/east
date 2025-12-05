@@ -4,12 +4,14 @@
  */
 import type { AST } from "../ast.js";
 import { get_location } from "../location.js";
-import { IntegerType, StringType, type BlobType, type EastType } from "../types.js";
+import { ArrayType, IntegerType, StringType, type BlobType, type EastType, type StructType } from "../types.js";
 import { valueOrExprToAstTyped } from "./ast.js";
 import { AstSymbol, Expr, FactorySymbol, type ToExpr } from "./expr.js";
 import type { IntegerExpr } from "./integer.js";
 import type { StringExpr } from "./string.js";
 import type { ExprType } from "./types.js";
+import { CsvParseConfigType, csvParseOptionsToValue, type CsvParseOptions } from "../serialization/csv.js";
+import type { ArrayExpr } from "./array.js";
 
 /**
  * Expression representing binary blob values and operations.
@@ -206,5 +208,41 @@ export class BlobExpr extends Expr<BlobType> {
     } else {
       throw new Error(`Unsupported Beast version: ${version}`);
     }
+  }
+
+  /**
+   * Decodes the blob as CSV data into an array of structs.
+   *
+   * @param structType - The struct type for each row
+   * @param options - CSV parsing options
+   * @returns An ArrayExpr containing the decoded structs
+   *
+   * @throws East runtime error if the CSV is malformed or doesn't match the struct type
+   *
+   * @example
+   * ```ts
+   * const PersonType = StructType({ name: StringType, age: IntegerType });
+   *
+   * const parseCsv = East.function([BlobType], ArrayType(PersonType), ($, blob) => {
+   *   $.return(blob.decodeCsv(PersonType, { delimiter: ',' }));
+   * });
+   * const compiled = East.compile(parseCsv.toIR(), []);
+   * const csv = new TextEncoder().encode("name,age\nAlice,30\nBob,25");
+   * compiled(csv);  // [{ name: "Alice", age: 30n }, { name: "Bob", age: 25n }]
+   * ```
+   */
+  decodeCsv<T extends StructType>(structType: T, options?: CsvParseOptions): ArrayExpr<T> {
+    // Convert options to East config value
+    const configValue = csvParseOptionsToValue(options);
+    const configAst = valueOrExprToAstTyped(configValue, CsvParseConfigType);
+
+    return this[FactorySymbol]({
+      ast_type: "Builtin",
+      type: ArrayType(structType),
+      location: get_location(2),
+      builtin: "BlobDecodeCsv",
+      type_parameters: [structType, CsvParseConfigType],
+      arguments: [this[AstSymbol], configAst],
+    }) as ArrayExpr<T>;
   }
 }

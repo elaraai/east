@@ -221,7 +221,7 @@ console.log(compiled(date));
 
 ### Blob
 
-The Blob standard library provides binary encoding utilities.
+The Blob standard library provides binary encoding and CSV parsing utilities.
 
 **Example:**
 ```typescript
@@ -238,17 +238,58 @@ const blob = compiled(42n);
 console.log(blob);  // Uint8Array containing BEAST-encoded 42n
 ```
 
+**CSV Parsing Example:**
+```typescript
+const PersonType = StructType({ name: StringType, age: IntegerType });
+
+const parseCsv = East.function([BlobType], ArrayType(PersonType), ($, blob) => {
+    // Parse CSV with default options
+    const people = blob.decodeCsv(PersonType);
+
+    // Parse CSV with custom options
+    const peopleCustom = blob.decodeCsv(PersonType, {
+        delimiter: ';',
+        hasHeader: true,
+        skipEmptyLines: true,
+        trimFields: true
+    });
+
+    $.return(people);
+});
+
+const compiled = East.compile(parseCsv, []);
+const csv = new TextEncoder().encode("name,age\nAlice,30\nBob,25");
+console.log(compiled(csv));  // [{ name: "Alice", age: 30n }, { name: "Bob", age: 25n }]
+```
+
 **Operations:**
 | Signature | Description | Example |
 |-----------|-------------|---------|
+| **Binary Encoding** |
 | `East.Blob.encodeBeast(value: Expr, version: 'v1' \| 'v2' = 'v1'): BlobExpr` | Encode value to binary BEAST format (v1 or v2) | `East.Blob.encodeBeast(myValue, 'v2')` |
+| **CSV Parsing (RFC 4180)** |
+| `blob.decodeCsv<T extends StructType>(structType: T, options?: CsvParseOptions): ArrayExpr<T>` | Parse CSV blob to array of structs | `blob.decodeCsv(PersonType)` |
+
+**CsvParseOptions:**
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `delimiter` | `string` | `","` | Field delimiter character |
+| `quoteChar` | `string` | `'"'` | Quote character for escaping |
+| `escapeChar` | `string` | `'"'` | Escape character (doubled quotes by default) |
+| `newline` | `string` | auto-detect | Line ending (`"\n"`, `"\r\n"`, or `"\r"`) |
+| `hasHeader` | `boolean` | `true` | First row contains column headers |
+| `nullStrings` | `string[]` | `[""]` | Strings to treat as null/none |
+| `skipEmptyLines` | `boolean` | `true` | Skip rows where all fields are empty |
+| `trimFields` | `boolean` | `false` | Trim whitespace from field values |
+| `columnMapping` | `Map<string, string>` | `{}` | Map CSV headers to struct field names |
+| `strict` | `boolean` | `false` | Error on unexpected columns |
 
 
 ---
 
 ### Array
 
-The Array standard library provides generation utilities for creating arrays.
+The Array standard library provides generation utilities for creating arrays and CSV serialization.
 
 **Example:**
 ```typescript
@@ -272,12 +313,52 @@ const compiled = East.compile(createSequences, []);
 console.log(compiled());  // [0n, 2n, 4n, 6n, 8n]
 ```
 
+**CSV Serialization Example:**
+```typescript
+const PersonType = StructType({ name: StringType, age: IntegerType });
+
+const serializeCsv = East.function([ArrayType(PersonType)], BlobType, ($, people) => {
+    // Serialize to CSV with default options
+    const csv = people.encodeCsv();
+
+    // Serialize with custom options
+    const csvCustom = people.encodeCsv({
+        delimiter: ';',
+        includeHeader: true,
+        newline: '\r\n',
+        alwaysQuote: false
+    });
+
+    $.return(csv);
+});
+
+const compiled = East.compile(serializeCsv, []);
+const people = [{ name: "Alice", age: 30n }, { name: "Bob", age: 25n }];
+const blob = compiled(people);
+console.log(new TextDecoder().decode(blob));
+// "name,age\r\nAlice,30\r\nBob,25"
+```
+
 **Operations:**
 | Signature | Description | Example |
 |-----------|-------------|---------|
+| **Generation** |
 | `East.Array.range(start: IntegerExpr \| bigint, end: IntegerExpr \| bigint, step: IntegerExpr \| bigint = 1n): ArrayExpr<IntegerType>` | Generate integer range [start, end) | `East.Array.range(0n, 10n, 2n)` |
 | `East.Array.linspace(start: FloatExpr \| number, stop: FloatExpr \| number, size: IntegerExpr \| bigint): ArrayExpr<FloatType>` | Generate equally-spaced floats [start, stop] (inclusive) | `East.Array.linspace(0.0, 1.0, 11n)` |
 | `East.Array.generate<T extends EastType>(size: IntegerExpr \| bigint, valueType: T, valueFn: FunctionType<[IntegerType], T>): ArrayExpr<T>` | Generate n elements using function from index | `East.Array.generate(10n, IntegerType, ($, i) => i.multiply(2n))` |
+| **CSV Serialization (RFC 4180)** |
+| `array.encodeCsv(options?: CsvSerializeOptions): BlobExpr` | Serialize array of structs to CSV blob | `people.encodeCsv()` |
+
+**CsvSerializeOptions:**
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `delimiter` | `string` | `","` | Field delimiter character |
+| `quoteChar` | `string` | `'"'` | Quote character for escaping |
+| `escapeChar` | `string` | `'"'` | Escape character for quotes |
+| `newline` | `string` | `"\r\n"` | Line ending |
+| `includeHeader` | `boolean` | `true` | Include header row with field names |
+| `nullString` | `string` | `""` | String to output for null/none values |
+| `alwaysQuote` | `boolean` | `false` | Always quote all fields |
 
 
 ---

@@ -4,6 +4,7 @@
  */
 import {
   East,
+  Expr,
   NullType, BooleanType, IntegerType, FloatType, StringType, DateTimeType, BlobType,
   ArrayType, SetType, DictType, StructType, VariantType,
   variant,
@@ -1911,5 +1912,319 @@ await describe("Blob", (test) => {
     const emptyArray = $.let(East.value([], ArrayType(IntegerType)));
     const encodedEmpty = $.let(East.Blob.encodeBeast(emptyArray, 'v2'));
     $(assert.equal(encodedEmpty.size(), 12n));
+  });
+
+  // ===========================================================================
+  // CSV Decoding
+  // ===========================================================================
+
+  test("decodeCsv - simple struct with header", $ => {
+    const PersonType = StructType({ name: StringType, age: IntegerType });
+    const csv = $.let(East.value(
+      new TextEncoder().encode("name,age\nAlice,30\nBob,25"),
+      BlobType
+    ));
+
+    const result = $.let(csv.decodeCsv(PersonType));
+
+    $(assert.equal(result.size(), 2n));
+    $(assert.equal(result.get(0n).name, "Alice"));
+    $(assert.equal(result.get(0n).age, 30n));
+    $(assert.equal(result.get(1n).name, "Bob"));
+    $(assert.equal(result.get(1n).age, 25n));
+  });
+
+  test("decodeCsv - empty CSV returns empty array", $ => {
+    const T = StructType({ name: StringType });
+    const csv = $.let(East.value(
+      new TextEncoder().encode("name\n"),
+      BlobType
+    ));
+
+    const result = $.let(csv.decodeCsv(T));
+
+    $(assert.equal(result.size(), 0n));
+  });
+
+  test("decodeCsv - handles UTF-8 BOM", $ => {
+    const T = StructType({ name: StringType });
+    const csv = $.let(East.value(
+      new Uint8Array([0xEF, 0xBB, 0xBF, ...new TextEncoder().encode("name\nAlice")]),
+      BlobType
+    ));
+
+    const result = $.let(csv.decodeCsv(T));
+
+    $(assert.equal(result.size(), 1n));
+    $(assert.equal(result.get(0n).name, "Alice"));
+  });
+
+  test("decodeCsv - integer fields", $ => {
+    const T = StructType({ value: IntegerType });
+    const csv = $.let(East.value(
+      new TextEncoder().encode("value\n42\n-123\n0"),
+      BlobType
+    ));
+
+    const result = $.let(csv.decodeCsv(T));
+
+    $(assert.equal(result.size(), 3n));
+    $(assert.equal(result.get(0n).value, 42n));
+    $(assert.equal(result.get(1n).value, -123n));
+    $(assert.equal(result.get(2n).value, 0n));
+  });
+
+  test("decodeCsv - float fields", $ => {
+    const T = StructType({ value: FloatType });
+    const csv = $.let(East.value(
+      new TextEncoder().encode("value\n3.14\n-2.5\nInfinity\n-Infinity"),
+      BlobType
+    ));
+
+    const result = $.let(csv.decodeCsv(T));
+
+    $(assert.equal(result.size(), 4n));
+    $(assert.equal(result.get(0n).value, 3.14));
+    $(assert.equal(result.get(1n).value, -2.5));
+    $(assert.equal(result.get(2n).value, East.value(Infinity)));
+    $(assert.equal(result.get(3n).value, East.value(-Infinity)));
+  });
+
+  test("decodeCsv - boolean fields", $ => {
+    const T = StructType({ value: BooleanType });
+    const csv = $.let(East.value(
+      new TextEncoder().encode("value\ntrue\nfalse"),
+      BlobType
+    ));
+
+    const result = $.let(csv.decodeCsv(T));
+
+    $(assert.equal(result.size(), 2n));
+    $(assert.equal(result.get(0n).value, true));
+    $(assert.equal(result.get(1n).value, false));
+  });
+
+  test("decodeCsv - blob fields as hex", $ => {
+    const T = StructType({ value: BlobType });
+    const csv = $.let(East.value(
+      new TextEncoder().encode("value\n0x48656c6c6f"),
+      BlobType
+    ));
+
+    const result = $.let(csv.decodeCsv(T));
+    const expected = $.let(East.value(new Uint8Array([0x48, 0x65, 0x6c, 0x6c, 0x6f]), BlobType));
+
+    $(assert.equal(result.size(), 1n));
+    $(assert.equal(result.get(0n).value, expected));
+  });
+
+  test("decodeCsv - optional string with value", $ => {
+    const T = StructType({ value: VariantType({ none: NullType, some: StringType }) });
+    const csv = $.let(East.value(
+      new TextEncoder().encode("value\nhello"),
+      BlobType
+    ));
+
+    const result = $.let(csv.decodeCsv(T));
+
+    $(assert.equal(result.size(), 1n));
+    $(assert.equal(
+      Expr.match(result.get(0n).value, { some: ($, v) => v, none: () => "" }),
+      "hello"
+    ));
+  });
+
+  test("decodeCsv - optional string empty is none", $ => {
+    const T = StructType({ value: VariantType({ none: NullType, some: StringType }) });
+    // Empty string after header creates one data row with empty value
+    // Use skipEmptyLines: false to include the empty row
+    const csv = $.let(East.value(
+      new TextEncoder().encode("value\n\n"),
+      BlobType
+    ));
+
+    const result = $.let(csv.decodeCsv(T, { skipEmptyLines: false }));
+
+    $(assert.equal(result.size(), 1n));
+    $(assert.equal(result.get(0n).value.getTag(), "none"));
+  });
+
+  test("decodeCsv - missing optional column becomes none", $ => {
+    const T = StructType({ name: StringType, nickname: VariantType({ none: NullType, some: StringType }) });
+    const csv = $.let(East.value(
+      new TextEncoder().encode("name\nAlice"),
+      BlobType
+    ));
+
+    const result = $.let(csv.decodeCsv(T));
+
+    $(assert.equal(result.size(), 1n));
+    $(assert.equal(result.get(0n).name, "Alice"));
+    $(assert.equal(result.get(0n).nickname.getTag(), "none"));
+  });
+
+  test("decodeCsv - quoted fields with comma", $ => {
+    const T = StructType({ value: StringType });
+    const csv = $.let(East.value(
+      new TextEncoder().encode('value\n"hello, world"'),
+      BlobType
+    ));
+
+    const result = $.let(csv.decodeCsv(T));
+
+    $(assert.equal(result.size(), 1n));
+    $(assert.equal(result.get(0n).value, "hello, world"));
+  });
+
+  test("decodeCsv - escaped quotes", $ => {
+    const T = StructType({ value: StringType });
+    const csv = $.let(East.value(
+      new TextEncoder().encode('value\n"say ""hello"""'),
+      BlobType
+    ));
+
+    const result = $.let(csv.decodeCsv(T));
+
+    $(assert.equal(result.size(), 1n));
+    $(assert.equal(result.get(0n).value, 'say "hello"'));
+  });
+
+  test("decodeCsv - multiline quoted field", $ => {
+    const T = StructType({ value: StringType });
+    const csv = $.let(East.value(
+      new TextEncoder().encode('value\n"line1\nline2"'),
+      BlobType
+    ));
+
+    const result = $.let(csv.decodeCsv(T));
+
+    $(assert.equal(result.size(), 1n));
+    $(assert.equal(result.get(0n).value, "line1\nline2"));
+  });
+
+  test("decodeCsv - CRLF line endings", $ => {
+    const T = StructType({ value: StringType });
+    const csv = $.let(East.value(
+      new TextEncoder().encode("value\r\nhello\r\nworld"),
+      BlobType
+    ));
+
+    const result = $.let(csv.decodeCsv(T));
+
+    $(assert.equal(result.size(), 2n));
+    $(assert.equal(result.get(0n).value, "hello"));
+    $(assert.equal(result.get(1n).value, "world"));
+  });
+
+  test("decodeCsv - custom delimiter", $ => {
+    const T = StructType({ a: StringType, b: StringType });
+    const csv = $.let(East.value(
+      new TextEncoder().encode("a;b\nhello;world"),
+      BlobType
+    ));
+
+    const result = $.let(csv.decodeCsv(T, { delimiter: ";" }));
+
+    $(assert.equal(result.size(), 1n));
+    $(assert.equal(result.get(0n).a, "hello"));
+    $(assert.equal(result.get(0n).b, "world"));
+  });
+
+  test("decodeCsv - without header", $ => {
+    const T = StructType({ a: StringType, b: StringType });
+    const csv = $.let(East.value(
+      new TextEncoder().encode("hello,world"),
+      BlobType
+    ));
+
+    const result = $.let(csv.decodeCsv(T, { hasHeader: false }));
+
+    $(assert.equal(result.size(), 1n));
+    $(assert.equal(result.get(0n).a, "hello"));
+    $(assert.equal(result.get(0n).b, "world"));
+  });
+
+  test("decodeCsv - custom null strings", $ => {
+    const T = StructType({ value: VariantType({ none: NullType, some: StringType }) });
+    const csv = $.let(East.value(
+      new TextEncoder().encode("value\nhello\nNULL\nN/A"),
+      BlobType
+    ));
+
+    const result = $.let(csv.decodeCsv(T, { nullStrings: ["", "NULL", "N/A"] }));
+
+    $(assert.equal(result.size(), 3n));
+    $(assert.equal(result.get(0n).value.getTag(), "some"));
+    $(assert.equal(
+      Expr.match(result.get(0n).value, { some: ($, v) => v, none: () => "" }),
+      "hello"
+    ));
+    $(assert.equal(result.get(1n).value.getTag(), "none"));
+    $(assert.equal(result.get(2n).value.getTag(), "none"));
+  });
+
+  test("decodeCsv - trim fields", $ => {
+    const T = StructType({ value: StringType });
+    const csv = $.let(East.value(
+      new TextEncoder().encode("value\n  hello  "),
+      BlobType
+    ));
+
+    const result = $.let(csv.decodeCsv(T, { trimFields: true }));
+
+    $(assert.equal(result.size(), 1n));
+    $(assert.equal(result.get(0n).value, "hello"));
+  });
+
+  test("decodeCsv - error on missing required column", $ => {
+    const T = StructType({ name: StringType, age: IntegerType });
+    const csv = $.let(East.value(
+      new TextEncoder().encode("name\nAlice"),
+      BlobType
+    ));
+
+    $(assert.throws(csv.decodeCsv(T)));
+  });
+
+  test("decodeCsv - error on null for required field", $ => {
+    const T = StructType({ name: StringType });
+    // Empty string after header creates one data row with empty value (null for required field)
+    // Use skipEmptyLines: false to include the empty row
+    const csv = $.let(East.value(
+      new TextEncoder().encode("name\n\n"),
+      BlobType
+    ));
+
+    $(assert.throws(csv.decodeCsv(T, { skipEmptyLines: false })));
+  });
+
+  test("decodeCsv - error on invalid integer", $ => {
+    const T = StructType({ value: IntegerType });
+    const csv = $.let(East.value(
+      new TextEncoder().encode("value\nabc"),
+      BlobType
+    ));
+
+    $(assert.throws(csv.decodeCsv(T)));
+  });
+
+  test("decodeCsv - error on unclosed quote", $ => {
+    const T = StructType({ value: StringType });
+    const csv = $.let(East.value(
+      new TextEncoder().encode('value\n"unclosed'),
+      BlobType
+    ));
+
+    $(assert.throws(csv.decodeCsv(T)));
+  });
+
+  test("decodeCsv - strict mode errors on extra columns", $ => {
+    const T = StructType({ name: StringType });
+    const csv = $.let(East.value(
+      new TextEncoder().encode("name,extra\nAlice,foo"),
+      BlobType
+    ));
+
+    $(assert.throws(csv.decodeCsv(T, { strict: true })));
   });
 });

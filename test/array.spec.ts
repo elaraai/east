@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Elara AI Pty Ltd
  * Dual-licensed under AGPL-3.0 and commercial license. See LICENSE for details.
  */
-import { East, Expr, ArrayType, IntegerType, StringType, BooleanType, some, none, SetType, DictType } from "../src/index.js";
+import { East, Expr, ArrayType, IntegerType, FloatType, StringType, BooleanType, BlobType, some, none, SetType, DictType, StructType, VariantType, NullType, variant } from "../src/index.js";
 import type { option } from "../src/index.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
 
@@ -925,4 +925,246 @@ await describe("Array", (test) => {
             ])
         ))
     })
+
+    // =========================================================================
+    // encodeCsv tests
+    // =========================================================================
+
+    test("encodeCsv - basic encoding with header", $ => {
+        const T = StructType({ name: StringType, age: IntegerType });
+        const arr = $.let([
+            { name: "Alice", age: 30n },
+            { name: "Bob", age: 25n },
+        ], ArrayType(T));
+
+        const result = $.let(arr.encodeCsv());
+
+        $(assert.equal(result.decodeUtf8(), "name,age\r\nAlice,30\r\nBob,25"));
+    });
+
+    test("encodeCsv - empty array", $ => {
+        const T = StructType({ name: StringType });
+        const arr = $.let([], ArrayType(T));
+
+        const result = $.let(arr.encodeCsv());
+
+        $(assert.equal(result.decodeUtf8(), "name"));
+    });
+
+    test("encodeCsv - string fields", $ => {
+        const T = StructType({ value: StringType });
+        const arr = $.let([{ value: "hello" }, { value: "world" }], ArrayType(T));
+
+        const result = $.let(arr.encodeCsv());
+
+        $(assert.equal(result.decodeUtf8(), "value\r\nhello\r\nworld"));
+    });
+
+    test("encodeCsv - integer fields", $ => {
+        const T = StructType({ value: IntegerType });
+        const arr = $.let([{ value: 42n }, { value: -123n }, { value: 0n }], ArrayType(T));
+
+        const result = $.let(arr.encodeCsv());
+
+        $(assert.equal(result.decodeUtf8(), "value\r\n42\r\n-123\r\n0"));
+    });
+
+    test("encodeCsv - float fields", $ => {
+        const T = StructType({ value: FloatType });
+        const arr = $.let([{ value: 3.14 }, { value: -2.5 }], ArrayType(T));
+
+        const result = $.let(arr.encodeCsv());
+
+        $(assert.equal(result.decodeUtf8(), "value\r\n3.14\r\n-2.5"));
+    });
+
+    test("encodeCsv - float special values", $ => {
+        const T = StructType({ value: FloatType });
+        const arr = $.let([
+            { value: Infinity },
+            { value: -Infinity },
+            { value: NaN },
+        ], ArrayType(T));
+
+        const result = $.let(arr.encodeCsv());
+
+        $(assert.equal(result.decodeUtf8(), "value\r\nInfinity\r\n-Infinity\r\nNaN"));
+    });
+
+    test("encodeCsv - boolean fields", $ => {
+        const T = StructType({ value: BooleanType });
+        const arr = $.let([{ value: true }, { value: false }], ArrayType(T));
+
+        const result = $.let(arr.encodeCsv());
+
+        $(assert.equal(result.decodeUtf8(), "value\r\ntrue\r\nfalse"));
+    });
+
+    test("encodeCsv - blob fields as hex", $ => {
+        const T = StructType({ value: BlobType });
+        const arr = $.let([{ value: new Uint8Array([0x48, 0x65, 0x6c, 0x6c, 0x6f]) }], ArrayType(T));
+
+        const result = $.let(arr.encodeCsv());
+
+        $(assert.equal(result.decodeUtf8(), "value\r\n0x48656c6c6f"));
+    });
+
+    test("encodeCsv - optional field some", $ => {
+        const T = StructType({ value: VariantType({ none: NullType, some: StringType }) });
+        const arr = $.let([{ value: variant("some", "hello") }], ArrayType(T));
+
+        const result = $.let(arr.encodeCsv());
+
+        $(assert.equal(result.decodeUtf8(), "value\r\nhello"));
+    });
+
+    test("encodeCsv - optional field none", $ => {
+        const T = StructType({ value: VariantType({ none: NullType, some: StringType }) });
+        const arr = $.let([{ value: variant("none", null) }], ArrayType(T));
+
+        const result = $.let(arr.encodeCsv());
+
+        $(assert.equal(result.decodeUtf8(), "value\r\n"));
+    });
+
+    test("encodeCsv - quote fields containing delimiter", $ => {
+        const T = StructType({ value: StringType });
+        const arr = $.let([{ value: "hello, world" }], ArrayType(T));
+
+        const result = $.let(arr.encodeCsv());
+
+        $(assert.equal(result.decodeUtf8(), 'value\r\n"hello, world"'));
+    });
+
+    test("encodeCsv - quote fields containing newlines", $ => {
+        const T = StructType({ value: StringType });
+        const arr = $.let([{ value: "hello\nworld" }], ArrayType(T));
+
+        const result = $.let(arr.encodeCsv());
+
+        $(assert.equal(result.decodeUtf8(), 'value\r\n"hello\nworld"'));
+    });
+
+    test("encodeCsv - escape quotes within fields", $ => {
+        const T = StructType({ value: StringType });
+        const arr = $.let([{ value: 'say "hello"' }], ArrayType(T));
+
+        const result = $.let(arr.encodeCsv());
+
+        $(assert.equal(result.decodeUtf8(), 'value\r\n"say ""hello"""'));
+    });
+
+    test("encodeCsv - custom delimiter", $ => {
+        const T = StructType({ a: StringType, b: StringType });
+        const arr = $.let([{ a: "hello", b: "world" }], ArrayType(T));
+
+        const result = $.let(arr.encodeCsv({ delimiter: ";" }));
+
+        $(assert.equal(result.decodeUtf8(), "a;b\r\nhello;world"));
+    });
+
+    test("encodeCsv - custom newline", $ => {
+        const T = StructType({ value: StringType });
+        const arr = $.let([{ value: "a" }, { value: "b" }], ArrayType(T));
+
+        const result = $.let(arr.encodeCsv({ newline: "\n" }));
+
+        $(assert.equal(result.decodeUtf8(), "value\na\nb"));
+    });
+
+    test("encodeCsv - without header", $ => {
+        const T = StructType({ name: StringType });
+        const arr = $.let([{ name: "Alice" }], ArrayType(T));
+
+        const result = $.let(arr.encodeCsv({ includeHeader: false }));
+
+        $(assert.equal(result.decodeUtf8(), "Alice"));
+    });
+
+    test("encodeCsv - custom null string", $ => {
+        const T = StructType({ value: VariantType({ none: NullType, some: StringType }) });
+        const arr = $.let([{ value: variant("none", null) }], ArrayType(T));
+
+        const result = $.let(arr.encodeCsv({ nullString: "NULL" }));
+
+        $(assert.equal(result.decodeUtf8(), "value\r\nNULL"));
+    });
+
+    test("encodeCsv - always quote", $ => {
+        const T = StructType({ value: StringType });
+        const arr = $.let([{ value: "hello" }], ArrayType(T));
+
+        const result = $.let(arr.encodeCsv({ alwaysQuote: true }));
+
+        $(assert.equal(result.decodeUtf8(), '"value"\r\n"hello"'));
+    });
+
+    test("encodeCsv - custom quote character", $ => {
+        const T = StructType({ value: StringType });
+        const arr = $.let([{ value: "hello" }], ArrayType(T));
+
+        const result = $.let(arr.encodeCsv({ quoteChar: "'", alwaysQuote: true }));
+
+        $(assert.equal(result.decodeUtf8(), "'value'\r\n'hello'"));
+    });
+
+    // =========================================================================
+    // CSV round-trip tests
+    // =========================================================================
+
+    test("CSV round-trip - simple data", $ => {
+        const T = StructType({ name: StringType, age: IntegerType, active: BooleanType });
+        const original = $.let([
+            { name: "Alice", age: 30n, active: true },
+            { name: "Bob", age: 25n, active: false },
+        ], ArrayType(T));
+
+        const encoded = $.let(original.encodeCsv());
+        const decoded = $.let(encoded.decodeCsv(T));
+
+        $(assert.equal(decoded, original));
+    });
+
+    test("CSV round-trip - optional fields", $ => {
+        const T = StructType({ name: StringType, nickname: VariantType({ none: NullType, some: StringType }) });
+        const original = $.let([
+            { name: "Alice", nickname: variant("some", "Ali") },
+            { name: "Bob", nickname: variant("none", null) },
+        ], ArrayType(T));
+
+        const encoded = $.let(original.encodeCsv());
+        const decoded = $.let(encoded.decodeCsv(T));
+
+        $(assert.equal(decoded, original));
+    });
+
+    test("CSV round-trip - special characters", $ => {
+        const T = StructType({ value: StringType });
+        const original = $.let([
+            { value: "hello, world" },
+            { value: 'with "quotes"' },
+            { value: "multi\nline" },
+        ], ArrayType(T));
+
+        const encoded = $.let(original.encodeCsv());
+        const decoded = $.let(encoded.decodeCsv(T));
+
+        $(assert.equal(decoded, original));
+    });
+
+    test("CSV round-trip - large number of rows", $ => {
+        const T = StructType({ id: IntegerType, name: StringType, value: FloatType });
+        const original = $.let(
+            East.Array.generate(10000n, T, ($, i) => ({
+                id: i,
+                name: East.str`row_${i}`,
+                value: i.toFloat().divide(10.0),
+            }))
+        );
+
+        const encoded = $.let(original.encodeCsv());
+        const decoded = $.let(encoded.decodeCsv(T));
+
+        $(assert.equal(decoded, original));
+    });
 });

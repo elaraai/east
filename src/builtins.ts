@@ -19,7 +19,7 @@ export type BuiltinName = "Is" | "Equal" | "NotEqual" | "Less" | "LessEqual" | "
   | "FloatToInteger" | "FloatNegate" | "FloatAdd" | "FloatSubtract" | "FloatMultiply" | "FloatDivide" | "FloatRemainder" | "FloatPow" | "FloatAbs" | "FloatSign" | "FloatSqrt" | "FloatExp" | "FloatLog" | "FloatSin" | "FloatCos" | "FloatTan"
   | "Print" | "Parse" | "StringConcat" | "StringRepeat" | "StringLength" | "StringSubstring" | "StringUpperCase" | "StringLowerCase" | "StringSplit" | "StringTrim" | "StringTrimStart" | "StringTrimEnd" | "StringStartsWith" | "StringEndsWith" | "StringContains" | "StringIndexOf" | "StringReplace" | "RegexContains" | "RegexIndexOf" | "RegexReplace" | "StringEncodeUtf8" | "StringEncodeUtf16" | "StringParseJSON" | "StringPrintJSON"
   | "DateTimeGetYear" | "DateTimeGetMonth" | "DateTimeGetDayOfMonth" | "DateTimeGetHour" | "DateTimeGetMinute" | "DateTimeGetSecond" | "DateTimeGetDayOfWeek" | "DateTimeGetMillisecond" | "DateTimeAddMilliseconds" | "DateTimeDurationMilliseconds" | "DateTimeToEpochMilliseconds" | "DateTimeFromEpochMilliseconds" | "DateTimeFromComponents" | "DateTimePrintFormat" | "DateTimeParseFormat"
-  | "BlobSize" | "BlobGetUint8" | "BlobDecodeUtf8" | "BlobDecodeUtf16" | "BlobDecodeBeast" | "BlobEncodeBeast" | "BlobDecodeBeast2" | "BlobEncodeBeast2"
+  | "BlobSize" | "BlobGetUint8" | "BlobDecodeUtf8" | "BlobDecodeUtf16" | "BlobDecodeBeast" | "BlobEncodeBeast" | "BlobDecodeBeast2" | "BlobEncodeBeast2" | "BlobDecodeCsv" | "ArrayEncodeCsv"
   | "RefGet" | "RefUpdate" | "RefMerge"
   | "ArrayGenerate" | "ArrayRange" | "ArrayLinspace" | "ArraySize" | "ArrayHas" | "ArrayGet" | "ArrayGetOrDefault" | "ArrayTryGet" | "ArrayUpdate" | "ArrayMerge" | "ArrayPushLast" | "ArrayPopLast" | "ArrayPushFirst" | "ArrayPopFirst" | "ArrayAppend" | "ArrayPrepend" | "ArrayMergeAll" | "ArrayClear" | "ArraySortInPlace" | "ArrayReverseInPlace" | "ArraySort" | "ArrayReverse" | "ArrayIsSorted" | "ArrayFindSortedFirst" | "ArrayFindSortedLast" | "ArrayFindSortedRange" | "ArrayFindFirst" | "ArrayConcat" | "ArraySlice" | "ArrayGetKeys" | "ArrayForEach" | "ArrayCopy" | "ArrayMap" | "ArrayFilter" | "ArrayFilterMap" | "ArrayFirstMap" | "ArrayMapReduce" | "ArrayFold" | "ArrayStringJoin" | "ArrayToSet" | "ArrayToDict" | "ArrayFlattenToArray" | "ArrayFlattenToSet" | "ArrayFlattenToDict" | "ArrayGroupFold"
   | "SetGenerate" | "SetSize" | "SetHas" | "SetInsert" | "SetTryInsert" | "SetDelete" | "SetTryDelete" | "SetClear" | "SetUnionInPlace" | "SetUnion" | "SetIntersect" | "SetDiff" | "SetSymDiff" | "SetIsSubset" | "SetIsDisjoint" | "SetCopy" | "SetForEach" | "SetMap" | "SetFilter" | "SetFilterMap" | "SetFirstMap" | "SetMapReduce" | "SetReduce" | "SetToArray" | "SetToSet" |"SetToDict" | "SetFlattenToArray" | "SetFlattenToSet" | "SetFlattenToDict" | "SetGroupFold"
@@ -456,6 +456,16 @@ export const Builtins: Record<BuiltinName, BuiltinType> = {
   BlobEncodeBeast2: {
     type_parameters: ["T"],
     inputs: ["T"] as const,
+    output: BlobType,
+  },
+  BlobDecodeCsv: {
+    type_parameters: ["T", "Config"],
+    inputs: [BlobType, "Config"] as const,
+    output: ArrayType("T"),
+  },
+  ArrayEncodeCsv: {
+    type_parameters: ["T", "Config"],
+    inputs: [ArrayType("T"), "Config"] as const,
     output: BlobType,
   },
 

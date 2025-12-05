@@ -7,6 +7,7 @@ export * from "./binary-utils.js";
 export * from "./beast.js";
 export { encodeBeast2For, decodeBeast2For, decodeBeast2 } from "./beast2.js";
 export * from "./json.js";
+export * from "./csv.js";
 
 // export * from "./beast-stream.js";
 export * from "./beast2-stream.js";
