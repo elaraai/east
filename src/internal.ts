@@ -20,6 +20,7 @@ export * from './error.js';
 export * from './ir.js';
 export * from './type_of_type.js';
 export * from './types.js';
+export { decodeBeast2For, encodeBeast2For } from './serialization/beast2.js';
 
 // Profiling exports - for performance analysis
 export { analyzeIR } from './analyze.js';

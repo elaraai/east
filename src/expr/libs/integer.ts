@@ -69,6 +69,74 @@ export default {
     )
   }),
 
+
+    /**
+     * Formats a float as currency with comma separators and 2 decimal places.
+     *
+     * @param x - The float value to format as currency
+     * @returns A formatted currency string (e.g., `"$1,234.56"`)
+     * @throws {Error} When `x` is NaN, Infinity, or -Infinity
+     *
+     * @example
+     * ```ts
+     * const formatCurrency = East.function([IntegerType], StringType, ($, x) => {
+     *   $.return(East.Integer.printCurrency(x));
+     * });
+     * const compiled = East.compile(formatCurrency.toIR(), []);
+     * compiled(1234n);   // "$1,234"
+     * compiled(-42n);      // "-$42"
+     * compiled(1000000n);    // "$1,000,000"
+     * ```
+     */
+    printCurrency: Expr.function([IntegerType], StringType, ($, x) => {
+      // Check for NaN/Infinity
+      const negative = $.let(Expr.less(x, 0n));
+      const abs_x = $.let(x.abs());
+  
+      // Round to cents
+      const shifted = $.let(abs_x.multiply(100.0).add(0.5));
+      const cents_total_float = $.let(shifted.subtract(shifted.remainder(1.0)));
+      const cents_total = $.let(cents_total_float.toInteger());
+      const dollars = $.let(cents_total.divide(100n));
+      const cents = $.let(cents_total.remainder(100n));
+  
+      // Format dollars with commas
+      const dollars_with_commas = $.let(dollars);
+      const comma_ret = $.let("");
+  
+      $.while(Expr.greater(dollars_with_commas, 999n), $ => {
+        const z = $.let(dollars_with_commas.remainder(1000n));
+  
+        $.if(
+          Expr.less(z, 10n),
+          $ => {
+            $.assign(comma_ret, Expr.str`,00${z}${comma_ret}`);
+          }
+        ).else(
+          $ => {
+            $.if(
+              Expr.less(z, 100n),
+              $ => {
+                $.assign(comma_ret, Expr.str`,0${z}${comma_ret}`);
+              }
+            ).else(
+              $ => {
+                $.assign(comma_ret, Expr.str`,${z}${comma_ret}`);
+              }
+            )
+          }
+        )
+  
+        $.assign(dollars_with_commas, dollars_with_commas.divide(1000n));
+      });
+  
+      const dollars_str = $.let(Expr.str`${dollars_with_commas}${comma_ret}`);
+  
+      const result = $.let(Expr.str`${dollars_str}`);
+  
+      $.return(negative.ifElse(() => Expr.str`-$${result}`, () => Expr.str`$${result}`));
+    }),
+
   /**
    * Formats an integer in compact form with business unit suffixes.
    *

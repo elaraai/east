@@ -100,6 +100,118 @@ await describe("Function", (test) => {
         $(assert.equal(multiplyByThree(4n), 12n));
     });
 
+    test("closure with captured variable used in loop", $ => {
+        // This tests that closures work correctly when the captured variable
+        // is accessed inside a ForArray loop
+        const items = $.const([1n, 2n, 3n, 4n, 5n]);
+        const target = $.const(10n);
+
+        // Function captures items and target, uses them in a loop
+        const sumAndCompare = East.function([ArrayType(IntegerType)], IntegerType, ($, selection) => {
+            const sum = $.let(0n);
+            $.for(selection, ($, idx) => {
+                // Access captured 'items' array inside the loop using the index value
+                $.assign(sum, sum.add(items.get(idx)));
+            });
+            // Compare sum to captured 'target'
+            $.if(East.equal(sum, target), $ => {
+                $.return(1n);  // Found match
+            });
+            return 0n;  // No match
+        });
+
+        // Selection [0, 3] means items[0] + items[3] = 1 + 4 = 5, not 10
+        $(assert.equal(sumAndCompare([0n, 3n]), 0n));
+        // Selection [1, 2, 4] means items[1] + items[2] + items[4] = 2 + 3 + 5 = 10
+        $(assert.equal(sumAndCompare([1n, 2n, 4n]), 1n));
+    });
+
+    test("closure capturing multiple variables", $ => {
+        const offset = $.const(100n);
+        const multiplier = $.const(3n);
+        const divisor = $.const(2n);
+
+        // Function captures three variables
+        const transform = East.function([IntegerType], IntegerType, ($, x) => {
+            // (x * multiplier + offset) / divisor
+            const scaled = $.let(x.multiply(multiplier));
+            const shifted = $.let(scaled.add(offset));
+            return shifted.divide(divisor);
+        });
+
+        // (10 * 3 + 100) / 2 = 130 / 2 = 65
+        $(assert.equal(transform(10n), 65n));
+        // (0 * 3 + 100) / 2 = 100 / 2 = 50
+        $(assert.equal(transform(0n), 50n));
+    });
+
+    test("closure capturing array and iterating over it", $ => {
+        const weights = $.const([2n, 3n, 5n, 7n]);
+
+        // Function that computes weighted sum of input values
+        const weightedSum = East.function([ArrayType(IntegerType)], IntegerType, ($, values) => {
+            const sum = $.let(0n);
+            $.for(values, ($, val, i) => {
+                // Access captured 'weights' array using loop index
+                const weight = $.let(weights.get(i));
+                $.assign(sum, sum.add(val.multiply(weight)));
+            });
+            return sum;
+        });
+
+        // 1*2 + 2*3 + 3*5 + 4*7 = 2 + 6 + 15 + 28 = 51
+        $(assert.equal(weightedSum([1n, 2n, 3n, 4n]), 51n));
+    });
+
+    test("closure used as callback in higher-order function", $ => {
+        const factor = $.const(3n);
+
+        // Higher-order function that applies a transform to each element
+        const mapArray = East.function(
+            [ArrayType(IntegerType), FunctionType([IntegerType], IntegerType)],
+            ArrayType(IntegerType),
+            ($, arr, fn) => {
+                const result = $.let([] as bigint[], ArrayType(IntegerType));
+                $.for(arr, ($, val) => {
+                    $(result.pushLast(fn(val)));
+                });
+                return result;
+            }
+        );
+
+        // Closure that captures 'factor' from outer scope
+        const multiplyByFactor = East.function([IntegerType], IntegerType, ($, x) => {
+            return x.multiply(factor);
+        });
+
+        const input = $.const([1n, 2n, 3n, 4n]);
+        const output = $.let(mapArray(input, multiplyByFactor));
+
+        // Each element multiplied by 3
+        $(assert.equal(output.get(0n), 3n));
+        $(assert.equal(output.get(1n), 6n));
+        $(assert.equal(output.get(2n), 9n));
+        $(assert.equal(output.get(3n), 12n));
+    });
+
+    test("closure with captured variable modified in loop", $ => {
+        // Test that captured mutable variables work correctly with loops
+        const threshold = $.const(5n);
+
+        const countAboveThreshold = East.function([ArrayType(IntegerType)], IntegerType, ($, arr) => {
+            const count = $.let(0n);
+            $.for(arr, ($, val) => {
+                $.if(East.greater(val, threshold), $ => {
+                    $.assign(count, count.add(1n));
+                });
+            });
+            return count;
+        });
+
+        // Values above 5: 7, 8, 9, 10 = 4 values
+        $(assert.equal(countAboveThreshold([1n, 7n, 3n, 8n, 5n, 9n, 2n, 10n]), 4n));
+    });
+
     test("function with string argument and return", $ => {
         const greet = East.function([StringType], StringType, ($, name) => {
             return East.str`Hello, ${name}!`;

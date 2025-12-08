@@ -62,6 +62,8 @@ export abstract class Expr<T = any> {
     return expr[AstSymbol] as AST & { type: T };
   }
 
+  
+
   /** Create an expression from a JavaScript value (optionally providing the type). */
   static from<T>(value: SubtypeExprOrValue<NoInfer<T>>, type: T): ExprType<T>
   static from<T>(value: T): ExprType<TypeOf<T>>

@@ -22,7 +22,7 @@ const platform = [
     time_ns.implement(() => process.hrtime.bigint()),
 ];
 
-const fetchStatusCompiled = fetchStatus.toIR().compile(platform);
+const fetchStatusCompiled = East.compileAsync(fetchStatus, platform);
 const increment_ir = fetchStatus.toIR().ir;  // Extract raw IR from wrapper
 
 // Serialize IR to JSON using East's serialization

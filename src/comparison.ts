@@ -22,7 +22,7 @@ export function isFor(type: EastTypeValue | EastType, typeCtx: TypeContext = [])
   }
 
   if (type.type === "Never") {
-    return (_x: unknown, _y: unknown, _ctx?: ValueContext) => { throw new Error(`Attempted to compare values of type .Never`)};
+    return (_x: unknown, _y: unknown, _ctx?: ValueContext) => { throw new Error(`Attempted to compare values of type .Never`) };
   } else if (type.type === "Null") {
     return (_x: null, _y: null, _ctx?: ValueContext) => true;
   } else if (type.type === "Boolean") {
@@ -115,7 +115,7 @@ export function equalFor(type: EastTypeValue | EastType, typeCtx: TypeContext = 
   }
 
   if (type.type === "Never") {
-    return (_x: unknown, _y: unknown, _ctx?: ValueContext) => { throw new Error(`Attempted to compare values of type .Never`)};
+    return (_x: unknown, _y: unknown, _ctx?: ValueContext) => { throw new Error(`Attempted to compare values of type .Never`) };
   } else if (type.type === "Null") {
     return (_x: null, _y: null, _ctx?: ValueContext) => true;
   } else if (type.type === "Boolean") {
@@ -331,9 +331,13 @@ export function equalFor(type: EastTypeValue | EastType, typeCtx: TypeContext = 
     }
     return ret;
   } else if (type.type === "Function") {
-    throw new Error(`Attempted to compare values of type .Function`);
+    return (_x: any, _y: any, _ctx?: ValueContext) => {
+      return true; // Functions are always considered equal
+    }
   } else if (type.type === "AsyncFunction") {
-    throw new Error(`Attempted to compare values of type .AsyncFunction`);
+    return (_x: any, _y: any, _ctx?: ValueContext) => {
+      return true; // Functions are always considered equal
+    }
   } else {
     throw new Error(`Unhandled type ${(type satisfies never as EastTypeValue).type}`);
   }
@@ -627,7 +631,7 @@ export function greaterEqualFor<T extends EastType>(type: T): (x: ValueTypeOf<T>
 export function greaterEqualFor(type: EastTypeValue | EastType, typeCtx: TypeContext = []): (x: any, y: any, ctx?: ValueContext) => boolean {
   const cmp = compareFor(type as any, typeCtx);
   return (x: any, y: any, ctx?: ValueContext) => cmp(x, y, ctx) !== -1;
-  
+
   // // Convert EastType to EastTypeValue if necessary
   // if (!isVariant(type)) {
   //   type = toEastTypeValue(type);
@@ -723,7 +727,7 @@ export function greaterFor<T extends EastType>(type: T): (x: ValueTypeOf<T>, y: 
 export function greaterFor(type: EastTypeValue | EastType, typeCtx: TypeContext = []): (x: any, y: any, ctx?: ValueContext) => boolean {
   const cmp = compareFor(type as any, typeCtx);
   return (x: any, y: any, ctx?: ValueContext) => cmp(x, y, ctx) === 1;
-  
+
   // // Convert EastType to EastTypeValue if necessary
   // if (!isVariant(type)) {
   //   type = toEastTypeValue(type);
@@ -823,7 +827,7 @@ export function compareFor(type: EastTypeValue | EastType, typeCtx: TypeContext 
   }
 
   if (type.type === "Never") {
-    return (_x: unknown, _y: unknown, _ctx?: ValueContext) => { throw new Error(`Attempted to compare values of type .Never`)};
+    return (_x: unknown, _y: unknown, _ctx?: ValueContext) => { throw new Error(`Attempted to compare values of type .Never`) };
   } else if (type.type === "Null") {
     return (_x: null, _y: null, _ctx?: ValueContext) => 0;
   } else if (type.type === "Boolean") {
@@ -1021,9 +1025,13 @@ export function compareFor(type: EastTypeValue | EastType, typeCtx: TypeContext 
     }
     return ret;
   } else if (type.type === "Function") {
-    throw new Error(`Attempted to compare values of type .Function`);
+    return (_x: any, _y: any, _ctx?: ValueContext | undefined) => {
+      return 0; // Functions are always considered equal
+    };
   } else if (type.type === "AsyncFunction") {
-    throw new Error(`Attempted to compare values of type .AsyncFunction`);
+    return (_x: any, _y: any, _ctx?: ValueContext | undefined) => {
+      return 0; // Functions are always considered equal
+    };
   } else {
     throw new Error(`Unhandled type ${(type satisfies never as EastTypeValue).type}`);
   }

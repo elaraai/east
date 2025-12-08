@@ -64,13 +64,13 @@ const calculateRevenue = East.function(
         // Group sales by product and sum revenue (quantity × price)
         const revenueByProduct = sales.groupSum(
             // Group by product name
-            ($, sale) => sale.product,          
+            ($, sale) => sale.product,
             // Sum quantity × price    
-            ($, sale) => sale.quantity.multiply(sale.price)  
+            ($, sale) => sale.quantity.multiply(sale.price)
         );
 
         // Log revenue for each product
-         $(log(East.str`Total Revenue: ${revenueByProduct.sum()}`));
+        $(log(East.str`Total Revenue: ${East.Integer.printCurrency(revenueByProduct.sum())}`));
 
         $.return(revenueByProduct);
     }
@@ -85,9 +85,8 @@ const sales = [
     { product: "Widget", quantity: 3n, price: 50n }
 ];
 
-const result = compiled(sales);
-// Result: Map { "Widget" => 650n, "Gadget" => 500n }
-// Logs: "Gadget: $500" and "Widget: $650"
+compiled(sales);
+// Total Revenue: $1,150
 ```
 
 ## Type System

@@ -72,6 +72,7 @@ console.log(compiled(47n));       // "47 = 47, rounded to 50th"
 | `East.Integer.printCompactComputing(x: IntegerExpr \| bigint): StringExpr` | Binary units (1024): `"1.5Mi"`, `"21ki"` | `East.Integer.printCompactComputing(21504n)` |
 | `East.Integer.printOrdinal(x: IntegerExpr \| bigint): StringExpr` | Ordinal: `"1st"`, `"2nd"`, `"3rd"` | `East.Integer.printOrdinal(1n)` |
 | `East.Integer.printPercentage(x: IntegerExpr \| bigint): StringExpr` | Format as percentage: `"45%"` | `East.Integer.printPercentage(45n)` |
+| `East.Float.printCurrency(x: IntegerExpr \| bigint): StringExpr` | Format as comma seperated currency with $ | `East.Integer.printCurrency(1234n)` → `"$1,234"` |
 | **Utilities** |
 | `East.Integer.digitCount(x: IntegerExpr \| bigint): IntegerExpr` | Count decimal digits (excluding sign) | `East.Integer.digitCount(1234n)` |
 | **Rounding** |
@@ -131,7 +132,7 @@ console.log(compiled(1234567.89));
 | `East.Float.approxEqual(x: FloatExpr \| number, y: FloatExpr \| number, epsilon: FloatExpr \| number): BooleanExpr` | Check if two floats are approximately equal within tolerance | `East.Float.approxEqual(0.1, 0.10001, 0.001)` → `true` |
 | **Formatting** |
 | `East.Float.printCommaSeperated(x: FloatExpr \| number, decimals: IntegerExpr \| bigint): StringExpr` | Format with comma separators | `East.Float.printCommaSeperated(1234.567, 2n)` → `"1,234.57"` |
-| `East.Float.printCurrency(x: FloatExpr \| number): StringExpr` | Format as currency with $ and 2 decimals | `East.Float.printCurrency(1234.567)` → `"$1234.57"` |
+| `East.Float.printCurrency(x: FloatExpr \| number): StringExpr` | Format comma separators as currency with $ and 2 decimals | `East.Float.printCurrency(1234.567)` → `"$1234.57"` |
 | `East.Float.printFixed(x: FloatExpr \| number, decimals: IntegerExpr \| bigint): StringExpr` | Format with fixed decimal places | `East.Float.printFixed(3.1, 3n)` → `"3.100"` |
 | `East.Float.printCompact(x: FloatExpr \| number): StringExpr` | Business units: `"21.5K"`, `"1.82M"`, `"314B"` | `East.Float.printCompact(1500000.0)` → `"1.5M"` |
 | `East.Float.printPercentage(x: FloatExpr \| number, decimals: IntegerExpr \| bigint): StringExpr` | Format as percentage | `East.Float.printPercentage(0.452, 1n)` → `"45.2%"` |

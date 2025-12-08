@@ -525,3 +525,77 @@ function expandTypeValueImpl(type: EastTypeValue, root: EastTypeValue, depth: bi
     return type;
   }
 }
+
+/**
+ * Checks if an EastTypeValue represents a data type (serializable, no functions).
+ *
+ * This is the {@link EastTypeValue} version of {@link isDataType}.
+ * Data types have a total ordering, can be fully serialized and transmitted between runtimes.
+ *
+ * @param type - The type value to check
+ * @param depth - Internal parameter for tracking recursion depth
+ * @returns `true` if the type is a data type (no functions), `false` otherwise
+ */
+export function isDataTypeValue(
+  type: EastTypeValue,
+  depth: number = 0,
+): boolean {
+  // Handle recursive type references - back-reference means we've already
+  // checked this type in the current path, so it's safe (would have returned
+  // false already if it contained functions)
+  if (type.type === "Recursive") {
+    return true;
+  }
+
+  // Function types are not data types
+  if (type.type === "Function" || type.type === "AsyncFunction") {
+    return false;
+  }
+
+  // Primitive types are data types
+  if (type.type === "Never" || type.type === "Null" || type.type === "Boolean" ||
+      type.type === "Integer" || type.type === "Float" || type.type === "String" ||
+      type.type === "DateTime" || type.type === "Blob") {
+    return true;
+  }
+
+  // Container types - recursively check contents
+  if (type.type === "Ref") {
+    return isDataTypeValue(type.value, depth + 1);
+  }
+
+  if (type.type === "Array") {
+    return isDataTypeValue(type.value, depth + 1);
+  }
+
+  if (type.type === "Set") {
+    // Set keys are checked at construction time to be immutable data types
+    return true;
+  }
+
+  if (type.type === "Dict") {
+    // Dict keys are checked at construction time
+    return isDataTypeValue(type.value.value, depth + 1);
+  }
+
+  if (type.type === "Struct") {
+    for (const field of type.value) {
+      if (!isDataTypeValue(field.type, depth + 1)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  if (type.type === "Variant") {
+    for (const case_ of type.value) {
+      if (!isDataTypeValue(case_.type, depth + 1)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  // Unknown type - assume it's a data type (shouldn't happen)
+  return true;
+}

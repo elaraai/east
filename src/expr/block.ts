@@ -22,12 +22,12 @@ import { SetExpr } from "./set.js";
 import { DictExpr } from "./dict.js";
 import { StructExpr } from "./struct.js";
 import { VariantExpr } from "./variant.js";
-import { type CallableFunctionExpr, createFunctionExpr } from "./function.js";
+import { type CallableFunctionExpr, createFunctionExpr, FunctionExpr } from "./function.js";
 import { valueOrExprToAst, valueOrExprToAstTyped } from "./ast.js";
 import type { PlatformFunction } from "../platform.js";
 import { toEastTypeValue } from "../type_of_type.js";
 import { RefExpr } from "./ref.js";
-import { createAsyncFunctionExpr, type CallableAsyncFunctionExpr } from "./asyncfunction.js";
+import { AsyncFunctionExpr, createAsyncFunctionExpr, type CallableAsyncFunctionExpr } from "./asyncfunction.js";
 
 /** A factory function to help build `Expr` from AST.
  * We inject this into each concrete `Expr` type so they can create new expressions recursively, without having circular dependencies between JavaScript modules.
@@ -78,6 +78,29 @@ export function fromAst<T extends AST>(ast: T): Expr<T["type"]> {
   } else {
     throw new Error(`fromAst not implemented for type ${printType(ast.type satisfies never)} at ${printLocation(ast.location)}`);
   }
+}
+
+
+/**
+ * Compile a function expression into a JavaScript function.
+ * 
+ * @param f the function expression to compile
+ * @param platform the platform functions available during compilation
+ * @returns the compiled function
+ */
+export function compile<I extends EastType[], O extends EastType, F extends FunctionExpr<I, O>>(f: F, platform: PlatformFunction[]): (...inputs: { [K in keyof I]: ValueTypeOf<I[K]> }) => ValueTypeOf<O>  {
+  return f.toIR().compile(platform);
+}
+
+/**
+ * Compile an async function expression into a JavaScript function.
+ * 
+ * @param f the async function expression to compile
+ * @param platform the platform functions available during compilation
+ * @returns the compiled async function
+ */
+export function compileAsync<I extends EastType[], O extends EastType, F extends AsyncFunctionExpr<I, O>>(f: F, platform: PlatformFunction[]): (...inputs: { [K in keyof I]: ValueTypeOf<I[K]> }) => Promise<ValueTypeOf<O>>  {
+  return f.toIR().compile(platform);
 }
 
 /**

@@ -28,7 +28,7 @@ export { type CallableFunctionExpr, FunctionExpr } from './function.js';
 export { type CallableAsyncFunctionExpr, AsyncFunctionExpr } from './asyncfunction.js';
 
 // Import factory implementation
-import { from, equal, notEqual, less, lessEqual, print, is, greaterEqual, greater, func, str, platform, asyncFunction, asyncPlatform } from './block.js';
+import { from, equal, notEqual, less, lessEqual, print, is, greaterEqual, greater, func, str, platform, asyncFunction, asyncPlatform, compile, compileAsync } from './block.js';
 export { BlockBuilder, type AsyncPlatformDefinition, type PlatformDefinition } from './block.js';
 
 // Import standard libraries
@@ -92,6 +92,46 @@ export type { ToExpr as ExprFactory } from './expr.js';
  */
 export const East = {
   // Expr factories
+
+  /** 
+   * Compiles an East function into JavaScript function. 
+   * 
+   * @param f the function expression to compile
+   * @param platform the platform functions available during compilation
+   * @returns the compiled function
+   * 
+   * @example
+   * ```ts
+   * const add = East.function(
+   *  [IntegerType, IntegerType],
+   *  IntegerType,
+   *  ($, a, b) => $.return(a.add(b))
+   * );
+   * const compiledAdd = East.compile(add, []);
+   * console.log(compiledAdd(2n, 3n));
+   * 
+   **/
+  compile: compile,
+
+  /** 
+   * Compiles an asyncronous East function into an asynchronous JavaScript function. 
+   * 
+   * @param f the async function expression to compile
+   * @param platform the platform functions available during compilation
+   * @returns the compiled async function
+   * 
+   * @example
+   * ```ts
+   * const add = East.asyncFunction(
+   *  [IntegerType, IntegerType],
+   *  IntegerType,
+   *  ($, a, b) => $.return(a.add(b))
+   * );
+   * const compiledAdd = East.compileAsync(add, []);
+   * console.log(await compiledAdd(2n, 3n));
+   * 
+   **/
+  compileAsync: compileAsync,
 
   /**
    * Creates an East expression from a JavaScript value.

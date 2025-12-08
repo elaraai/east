@@ -203,24 +203,24 @@ describe('Comparison of EAST values', () => {
         const type = FunctionType([], NullType);
 
         assert.throws(() => isFor(type), /Attempted to compare values of type \.Function/);
-        assert.throws(() => equalFor(type), /Attempted to compare values of type \.Function/);
-        assert.throws(() => notEqualFor(type), /Attempted to compare values of type \.Function/);
-        assert.throws(() => lessFor(type), /Attempted to compare values of type \.Function/);
-        assert.throws(() => lessEqualFor(type), /Attempted to compare values of type \.Function/);
-        assert.throws(() => greaterFor(type), /Attempted to compare values of type \.Function/);
-        assert.throws(() => greaterEqualFor(type), /Attempted to compare values of type \.Function/);
+        assert.doesNotThrow(() => equalFor(type));
+        assert.doesNotThrow(() => notEqualFor(type));
+        assert.doesNotThrow(() => lessFor(type));
+        assert.doesNotThrow(() => lessEqualFor(type));
+        assert.doesNotThrow(() => greaterFor(type));
+        assert.doesNotThrow(() => greaterEqualFor(type));
     });
 
     test('should handle AsyncFunction type comparisons', () => {
         const type = AsyncFunctionType([], NullType);
 
         assert.throws(() => isFor(type), /Attempted to compare values of type \.AsyncFunction/);
-        assert.throws(() => equalFor(type), /Attempted to compare values of type \.AsyncFunction/);
-        assert.throws(() => notEqualFor(type), /Attempted to compare values of type \.AsyncFunction/);
-        assert.throws(() => lessFor(type), /Attempted to compare values of type \.AsyncFunction/);
-        assert.throws(() => lessEqualFor(type), /Attempted to compare values of type \.AsyncFunction/);
-        assert.throws(() => greaterFor(type), /Attempted to compare values of type \.AsyncFunction/);
-        assert.throws(() => greaterEqualFor(type), /Attempted to compare values of type \.AsyncFunction/);
+        assert.doesNotThrow(() => equalFor(type));
+        assert.doesNotThrow(() => notEqualFor(type));
+        assert.doesNotThrow(() => lessFor(type));
+        assert.doesNotThrow(() => lessEqualFor(type));
+        assert.doesNotThrow(() => greaterFor(type));
+        assert.doesNotThrow(() => greaterEqualFor(type));
     });
 
     test('should handle Float NaN edge cases', () => {

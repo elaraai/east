@@ -17,7 +17,7 @@ const platform = [
         return input.add(1n);
     });
 
-    const f_compiled = f.toIR().compile(platform);
+    const f_compiled = East.compile(f, platform);
 
     const result = f_compiled(1n);
 
@@ -35,7 +35,7 @@ const platform = [
         // return y;
     });
 
-    const f_compiled = f.toIR().compile(platform);
+    const f_compiled = East.compile(f, platform);
 
     const result = f_compiled();
 
@@ -54,7 +54,7 @@ const platform = [
         return x.add(y).add(z);
     });
 
-    const f_compiled = f.toIR().compile(platform);
+    const f_compiled = East.compile(f, platform);
 
     const result = f_compiled();
 
@@ -72,7 +72,7 @@ const platform = [
         return ret;
     });
 
-    const f_compiled = f.toIR().compile(platform);
+    const f_compiled = East.compile(f, platform);
 
     const result = f_compiled();
 
@@ -90,7 +90,7 @@ const platform = [
         return ret;
     });
 
-    const f_compiled = f.toIR().compile(platform);
+    const f_compiled = East.compile(f, platform);
 
     const result = f_compiled();
 
@@ -108,7 +108,7 @@ const platform = [
         return ret;
     });
 
-    const f_compiled = f.toIR().compile(platform);
+    const f_compiled = East.compile(f, platform);
 
     const result = f_compiled();
 
@@ -124,7 +124,7 @@ const platform = [
         $(array.forEach(($, x) => $(log(East.print(x)))));
     });
 
-    const f_compiled = f.toIR().compile(platform);
+    const f_compiled = East.compile(f, platform);
 
     const result = f_compiled();
 
@@ -147,7 +147,7 @@ const platform = [
         return ret;
     });
 
-    const f_compiled = f.toIR().compile(platform);
+    const f_compiled = East.compile(f, platform);
 
     const result = f_compiled();
 
@@ -166,7 +166,7 @@ const platform = [
         })
     });
 
-    const f_compiled = f.toIR().compile(platform);
+    const f_compiled = East.compile(f, platform);
 
     const result = f_compiled();
 
@@ -183,7 +183,7 @@ const platform = [
         $(array.forEach(($, x) => $(log(East.print(x)))))
     });
 
-    const f_compiled = f.toIR().compile(platform);
+    const f_compiled = East.compile(f, platform);
 
     const result = f_compiled();
 
@@ -200,7 +200,7 @@ const platform = [
         return 0n;
     });
 
-    const f_compiled = f.toIR().compile(platform);
+    const f_compiled = East.compile(f, platform);
 
     const result = f_compiled();
 
@@ -216,7 +216,7 @@ const platform = [
         return 42n;
     });
 
-    const f_compiled = f.toIR().compile(platform);
+    const f_compiled = East.compile(f, platform);
 
     const result = f_compiled();
 
@@ -232,7 +232,7 @@ const platform = [
         $.return(0n);
     });
 
-    const f_compiled = f.toIR().compile(platform);
+    const f_compiled = East.compile(f, platform);
 
     const result = f_compiled();
 
@@ -249,7 +249,7 @@ const platform = [
         return y;
     });
 
-    const f_compiled = f.toIR().compile(platform);
+    const f_compiled = East.compile(f, platform);
 
     const result = f_compiled();
 
@@ -266,7 +266,7 @@ const platform = [
         return y;
     });
 
-    const f_compiled = f.toIR().compile(platform);
+    const f_compiled = East.compile(f, platform);
 
     try {
         f_compiled();
@@ -288,7 +288,7 @@ const platform = [
         return array.get(4n);
     });
 
-    const f_compiled = f.toIR().compile(platform);
+    const f_compiled = East.compile(f, platform);
 
     try {
         f_compiled();
@@ -314,7 +314,7 @@ const platform = [
         return y;
     });
 
-    const f_compiled = f.toIR().compile(platform);
+    const f_compiled = East.compile(f, platform);
 
     const result = f_compiled();
 
@@ -335,7 +335,7 @@ const platform = [
         return g(3n); // Oops, out-of-bounds access
     });
 
-    const f_compiled = f.toIR().compile(platform);
+    const f_compiled = East.compile(f, platform);
 
     try {
         const result = f_compiled();
@@ -364,7 +364,7 @@ const platform = [
         });
     });
 
-    const f_compiled = f.toIR().compile(platform);
+    const f_compiled = East.compile(f, platform);
 
     try {
         const result = f_compiled();
