@@ -98,8 +98,7 @@ export default {
       const cents_total_float = $.let(shifted.subtract(shifted.remainder(1.0)));
       const cents_total = $.let(cents_total_float.toInteger());
       const dollars = $.let(cents_total.divide(100n));
-      const cents = $.let(cents_total.remainder(100n));
-  
+      
       // Format dollars with commas
       const dollars_with_commas = $.let(dollars);
       const comma_ret = $.let("");

@@ -187,6 +187,7 @@ await describe("Integer", (test) => {
         $(assert.equal(printCompactComputing(-1234567890123456789n), "-1.07Ei"));
         $(assert.equal(printCompactComputing(-9223372036854775807n), "-7.99Ei"));
         $(assert.equal(printCompactComputing(-9223372036854775808n), "-7.99Ei"));
+
     });
 
     test("Comparisons", $ => {
@@ -311,6 +312,12 @@ await describe("Integer", (test) => {
         $(assert.equal(printPercentage(100n), "100%"));
         $(assert.equal(printPercentage(-25n), "-25%"));
         $(assert.equal(printPercentage(1234n), "1234%"));
+
+        
+        $(assert.equal(East.Integer.printCurrency(1234n), "$1,234"));
+        $(assert.equal(East.Integer.printCurrency(1234n), "$1,234"));
+        $(assert.equal(East.Integer.printCurrency(-12345n), "-$12,345"));
+        $(assert.equal(East.Integer.printCurrency(0n), "$0"));
     });
 
     test("Min, Max, and Clamp functions", $ => {
