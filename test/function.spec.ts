@@ -353,6 +353,517 @@ await describe("Function", (test) => {
         $(assert.equal(result, 64n));
     });
 
+    // =========================================================================
+    // Recursive Types in Function Input/Output
+    // =========================================================================
+
+    test("function taking recursive type as input", $ => {
+        // Define a linked list type
+        const ListType = RecursiveType(self => VariantType({
+            nil: NullType,
+            cons: StructType({ head: IntegerType, tail: self })
+        }));
+
+        // Function that sums all elements in the list
+        const sumList = East.function([ListType], IntegerType, ($, list) => {
+            const sum = $.let(0n);
+            const current = $.let(list, ListType);
+
+            $.while(true, ($, label) => {
+                $.match(current, {
+                    nil: $ => {
+                        $.break(label);
+                    },
+                    cons: ($, node) => {
+                        $.assign(sum, sum.add(node.head));
+                        $.assign(current, node.tail);
+                    },
+                });
+            });
+            return sum;
+        });
+
+        // Create list: 1 -> 2 -> 3 -> nil
+        const nil = East.value(variant("nil"), ListType);
+        const list = East.value(variant("cons", {
+            head: 1n,
+            tail: East.value(variant("cons", {
+                head: 2n,
+                tail: East.value(variant("cons", {
+                    head: 3n,
+                    tail: nil
+                }), ListType)
+            }), ListType)
+        }), ListType);
+
+        $(assert.equal(sumList(list), 6n));
+    });
+
+    test("function returning recursive type as output", $ => {
+        // Define a linked list type
+        const ListType = RecursiveType(self => VariantType({
+            nil: NullType,
+            cons: StructType({ head: IntegerType, tail: self })
+        }));
+
+        // Function that creates a list with n elements: n -> n-1 -> ... -> 1 -> nil
+        const makeList = East.function([IntegerType], ListType, ($, n) => {
+            const nil = East.value(variant("nil"), ListType);
+            const result = $.let(nil, ListType);
+            const i = $.let(1n);
+
+            $.while(East.lessEqual(i, n), $ => {
+                $.assign(result, East.value(variant("cons", {
+                    head: i,
+                    tail: result
+                }), ListType));
+                $.assign(i, i.add(1n));
+            });
+
+            return result;
+        });
+
+        // Sum function to verify the list
+        const sumList = East.function([ListType], IntegerType, ($, list) => {
+            const sum = $.let(0n);
+            const current = $.let(list, ListType);
+            $.while(true, ($, label) => {
+                $.match(current, {
+                    nil: $ => $.break(label),
+                    cons: ($, node) => {
+                        $.assign(sum, sum.add(node.head));
+                        $.assign(current, node.tail);
+                    },
+                });
+            });
+            return sum;
+        });
+
+        // makeList(3) creates 3 -> 2 -> 1 -> nil, sum = 6
+        $(assert.equal(sumList(makeList(3n)), 6n));
+        // makeList(5) creates 5 -> 4 -> 3 -> 2 -> 1 -> nil, sum = 15
+        $(assert.equal(sumList(makeList(5n)), 15n));
+    });
+
+    test("function taking and returning recursive type", $ => {
+        // Linked list type (simpler for iteration)
+        const ListType = RecursiveType(self => VariantType({
+            nil: NullType,
+            cons: StructType({ head: IntegerType, tail: self })
+        }));
+
+        // Function that doubles all values in the list (iterative)
+        const doubleList = East.function([ListType], ListType, ($, list) => {
+            // First pass: collect doubled values into array
+            const values = $.let([] as bigint[], ArrayType(IntegerType));
+            const current = $.let(list, ListType);
+            $.while(true, ($, label) => {
+                $.match(current, {
+                    nil: $ => $.break(label),
+                    cons: ($, node) => {
+                        $(values.pushLast(node.head.multiply(2n)));
+                        $.assign(current, node.tail);
+                    },
+                });
+            });
+
+            // Build result list in reverse
+            const result = $.let(East.value(variant("nil"), ListType), ListType);
+            const i = $.let(values.size().subtract(1n));
+            $.while(East.greaterEqual(i, 0n), $ => {
+                $.assign(result, East.value(variant("cons", {
+                    head: values.get(i),
+                    tail: result
+                }), ListType));
+                $.assign(i, i.subtract(1n));
+            });
+            return result;
+        });
+
+        // Function that sums all values in list (iterative)
+        const sumList = East.function([ListType], IntegerType, ($, list) => {
+            const sum = $.let(0n);
+            const current = $.let(list, ListType);
+            $.while(true, ($, label) => {
+                $.match(current, {
+                    nil: $ => $.break(label),
+                    cons: ($, node) => {
+                        $.assign(sum, sum.add(node.head));
+                        $.assign(current, node.tail);
+                    },
+                });
+            });
+            return sum;
+        });
+
+        // Create list: 1 -> 2 -> 3 -> nil
+        const nil = East.value(variant("nil"), ListType);
+        const list = East.value(variant("cons", {
+            head: 1n,
+            tail: East.value(variant("cons", {
+                head: 2n,
+                tail: East.value(variant("cons", {
+                    head: 3n,
+                    tail: nil
+                }), ListType)
+            }), ListType)
+        }), ListType);
+
+        // Sum of original: 1 + 2 + 3 = 6
+        $(assert.equal(sumList(list), 6n));
+        // Sum of doubled: 2 + 4 + 6 = 12
+        $(assert.equal(sumList(doubleList(list)), 12n));
+    });
+
+    test("struct containing function with recursive input/output", $ => {
+        const ListType = RecursiveType(self => VariantType({
+            nil: NullType,
+            cons: StructType({ head: IntegerType, tail: self })
+        }));
+
+        // Struct with list operations
+        const ListOpsType = StructType({
+            prepend: FunctionType([ListType, IntegerType], ListType),
+            sum: FunctionType([ListType], IntegerType),
+        });
+
+        const listOps = $.const({
+            prepend: East.function([ListType, IntegerType], ListType, ($, list, val) => {
+                return East.value(variant("cons", { head: val, tail: list }), ListType);
+            }),
+            sum: East.function([ListType], IntegerType, ($, list) => {
+                const sum = $.let(0n);
+                const current = $.let(list, ListType);
+                $.while(true, ($, label) => {
+                    $.match(current, {
+                        nil: $ => $.break(label),
+                        cons: ($, node) => {
+                            $.assign(sum, sum.add(node.head));
+                            $.assign(current, node.tail);
+                        },
+                    });
+                });
+                return sum;
+            }),
+        }, ListOpsType);
+
+        const nil = East.value(variant("nil"), ListType);
+        const list1 = $.let(listOps.prepend(nil, 1n), ListType);
+        const list2 = $.let(listOps.prepend(list1, 2n), ListType);
+        const list3 = $.let(listOps.prepend(list2, 3n), ListType);
+
+        // list3 is 3 -> 2 -> 1 -> nil
+        $(assert.equal(listOps.sum(list3), 6n));
+    });
+
+    test("option containing function with recursive type", $ => {
+        const ListType = RecursiveType(self => VariantType({
+            nil: NullType,
+            cons: StructType({ head: IntegerType, tail: self })
+        }));
+
+        const MaybeTransformType = OptionType(FunctionType([ListType], IntegerType));
+
+        // Some case with a sum function
+        const someSum = $.const(
+            variant("some", East.function([ListType], IntegerType, ($, list) => {
+                const sum = $.let(0n);
+                const current = $.let(list, ListType);
+                $.while(true, ($, label) => {
+                    $.match(current, {
+                        nil: $ => $.break(label),
+                        cons: ($, node) => {
+                            $.assign(sum, sum.add(node.head));
+                            $.assign(current, node.tail);
+                        },
+                    });
+                });
+                return sum;
+            })),
+            MaybeTransformType
+        );
+
+        const nil = East.value(variant("nil"), ListType);
+        const list = East.value(variant("cons", {
+            head: 5n,
+            tail: East.value(variant("cons", { head: 3n, tail: nil }), ListType)
+        }), ListType);
+
+        const result = $.let(-1n);
+        $.match(someSum, {
+            some: ($, fn) => {
+                $.assign(result, fn(list));
+            },
+            none: $ => {
+                $.assign(result, 0n);
+            },
+        });
+
+        $(assert.equal(result, 8n)); // 5 + 3 = 8
+    });
+
+    test("recursive type with function returning self", $ => {
+        // Type where each node has a "next" function that returns the next node
+        const ChainType = RecursiveType(self => VariantType({
+            end: IntegerType,
+            link: StructType({
+                value: IntegerType,
+                next: FunctionType([], self)
+            })
+        }));
+
+        // Create chain: link(1, -> link(2, -> end(3)))
+        const endNode = East.value(variant("end", 3n), ChainType);
+        const link2 = East.value(variant("link", {
+            value: 2n,
+            next: East.function([], ChainType, _$ => endNode)
+        }), ChainType);
+        const link1 = East.value(variant("link", {
+            value: 1n,
+            next: East.function([], ChainType, _$ => link2)
+        }), ChainType);
+
+        // Traverse the chain and sum values
+        const sum = $.let(0n);
+        const current = $.let(link1, ChainType);
+
+        $.while(true, ($, label) => {
+            $.match(current, {
+                end: ($, val) => {
+                    $.assign(sum, sum.add(val));
+                    $.break(label);
+                },
+                link: ($, node) => {
+                    $.assign(sum, sum.add(node.value));
+                    $.assign(current, node.next());
+                },
+            });
+        });
+
+        $(assert.equal(sum, 6n)); // 1 + 2 + 3 = 6
+    });
+
+    test("recursive type with function taking self as input", $ => {
+        // A type where nodes can "merge" with other nodes
+        const TreeType = RecursiveType(self => VariantType({
+            leaf: IntegerType,
+            branch: StructType({
+                left: self,
+                right: self,
+                combine: FunctionType([self, self], self)
+            })
+        }));
+
+        // Create a simple tree
+        const leaf1 = East.value(variant("leaf", 1n), TreeType);
+        const leaf2 = East.value(variant("leaf", 2n), TreeType);
+        const leaf3 = East.value(variant("leaf", 3n), TreeType);
+        const leaf4 = East.value(variant("leaf", 4n), TreeType);
+
+        // Placeholder combiner for struct
+        const placeholderCombiner = East.function([TreeType, TreeType], TreeType, ($, a, _b) => a);
+
+        // Combine function that creates a new branch
+        const combiner = East.function([TreeType, TreeType], TreeType, ($, a, b) => {
+            return East.value(variant("branch", {
+                left: a,
+                right: b,
+                combine: placeholderCombiner
+            }), TreeType);
+        });
+
+        // Test that combiner works and returns correct type
+        const branch1 = $.let(combiner(leaf1, leaf2), TreeType);
+        const branch2 = $.let(combiner(leaf3, leaf4), TreeType);
+
+        // Verify leaf values can be extracted
+        const leafVal = $.let(0n);
+        $.match(leaf1, {
+            leaf: ($, val) => {
+                $.assign(leafVal, val);
+            },
+            branch: $ => {},
+        });
+        $(assert.equal(leafVal, 1n));
+
+        // Verify branch structure - extract left leaf value
+        const branchLeftVal = $.let(0n);
+        $.match(branch1, {
+            leaf: $ => {},
+            branch: ($, b) => {
+                $.match(b.left, {
+                    leaf: ($, val) => {
+                        $.assign(branchLeftVal, val);
+                    },
+                    branch: $ => {},
+                });
+            },
+        });
+        $(assert.equal(branchLeftVal, 1n));
+
+        // Test the combine function stored in branch
+        // placeholderCombiner returns the first argument, so combine(leaf3, leaf4) returns leaf3
+        const combinedTree = $.let(East.value(variant("leaf", 0n), TreeType), TreeType);
+        $.match(branch1, {
+            leaf: $ => {},
+            branch: ($, b) => {
+                // Call the stored combine function
+                $.assign(combinedTree, b.combine(leaf3, leaf4));
+            },
+        });
+        // combinedTree should be leaf3 (since placeholderCombiner returns first arg)
+        const combinedVal = $.let(0n);
+        $.match(combinedTree, {
+            leaf: ($, val) => {
+                $.assign(combinedVal, val);
+            },
+            branch: $ => {},
+        });
+        $(assert.equal(combinedVal, 3n));
+    });
+
+    test("higher-order function with recursive type parameters", $ => {
+        const ListType = RecursiveType(self => VariantType({
+            nil: NullType,
+            cons: StructType({ head: IntegerType, tail: self })
+        }));
+
+        // fold function: applies fn to accumulator and each element
+        const fold = East.function(
+            [ListType, IntegerType, FunctionType([IntegerType, IntegerType], IntegerType)],
+            IntegerType,
+            ($, list, init, fn) => {
+                const acc = $.let(init);
+                const current = $.let(list, ListType);
+
+                $.while(true, ($, label) => {
+                    $.match(current, {
+                        nil: $ => $.break(label),
+                        cons: ($, node) => {
+                            $.assign(acc, fn(acc, node.head));
+                            $.assign(current, node.tail);
+                        },
+                    });
+                });
+                return acc;
+            }
+        );
+
+        const nil = East.value(variant("nil"), ListType);
+        const list = East.value(variant("cons", {
+            head: 1n,
+            tail: East.value(variant("cons", {
+                head: 2n,
+                tail: East.value(variant("cons", {
+                    head: 3n,
+                    tail: nil
+                }), ListType)
+            }), ListType)
+        }), ListType);
+
+        // Sum using fold
+        const add = East.function([IntegerType, IntegerType], IntegerType, ($, a, b) => a.add(b));
+        $(assert.equal(fold(list, 0n, add), 6n));
+
+        // Product using fold
+        const mul = East.function([IntegerType, IntegerType], IntegerType, ($, a, b) => a.multiply(b));
+        $(assert.equal(fold(list, 1n, mul), 6n)); // 1 * 2 * 3 = 6
+    });
+
+    test("closure capturing recursive type value", $ => {
+        const ListType = RecursiveType(self => VariantType({
+            nil: NullType,
+            cons: StructType({ head: IntegerType, tail: self })
+        }));
+
+        // Captured list
+        const nil = East.value(variant("nil"), ListType);
+        const capturedList = $.const(East.value(variant("cons", {
+            head: 10n,
+            tail: East.value(variant("cons", {
+                head: 20n,
+                tail: nil
+            }), ListType)
+        }), ListType), ListType);
+
+        // Function that prepends a value to the captured list
+        const prependToCaptured = East.function([IntegerType], ListType, ($, val) => {
+            return East.value(variant("cons", { head: val, tail: capturedList }), ListType);
+        });
+
+        // Sum function
+        const sumList = East.function([ListType], IntegerType, ($, list) => {
+            const sum = $.let(0n);
+            const current = $.let(list, ListType);
+            $.while(true, ($, label) => {
+                $.match(current, {
+                    nil: $ => $.break(label),
+                    cons: ($, node) => {
+                        $.assign(sum, sum.add(node.head));
+                        $.assign(current, node.tail);
+                    },
+                });
+            });
+            return sum;
+        });
+
+        // Prepend 5 to captured list [10, 20] -> [5, 10, 20]
+        const newList = $.let(prependToCaptured(5n), ListType);
+        $(assert.equal(sumList(newList), 35n)); // 5 + 10 + 20 = 35
+    });
+
+    test("async function with recursive input/output", $ => {
+        const ListType = RecursiveType(self => VariantType({
+            nil: NullType,
+            cons: StructType({ head: IntegerType, tail: self })
+        }));
+
+        // Async function that reverses a list
+        const reverseList = East.asyncFunction([ListType], ListType, ($, list) => {
+            const nil = East.value(variant("nil"), ListType);
+            const result = $.let(nil, ListType);
+            const current = $.let(list, ListType);
+
+            $.while(true, ($, label) => {
+                $.match(current, {
+                    nil: $ => $.break(label),
+                    cons: ($, node) => {
+                        $.assign(result, East.value(variant("cons", {
+                            head: node.head,
+                            tail: result
+                        }), ListType));
+                        $.assign(current, node.tail);
+                    },
+                });
+            });
+            return result;
+        });
+
+        // Create list 1 -> 2 -> 3 -> nil
+        const nil = East.value(variant("nil"), ListType);
+        const list = East.value(variant("cons", {
+            head: 1n,
+            tail: East.value(variant("cons", {
+                head: 2n,
+                tail: East.value(variant("cons", {
+                    head: 3n,
+                    tail: nil
+                }), ListType)
+            }), ListType)
+        }), ListType);
+
+        // Reverse and check first element (should be 3)
+        const reversed = $.let(reverseList(list), ListType);
+        const first = $.let(0n);
+        $.match(reversed, {
+            nil: $ => {},
+            cons: ($, node) => {
+                $.assign(first, node.head);
+            },
+        });
+        $(assert.equal(first, 3n));
+    });
+
     test("simple async function returns resolved promise", $ => {
         const asyncGreet = East.asyncFunction([], StringType, _$ => {
             return "Hello, async!";

@@ -11,6 +11,9 @@ await describe("Array", (test) => {
         $(assert.equal(East.value([], ArrayType(IntegerType)).size(), 0n))
         $(assert.equal(East.value([1n, 2n, 3n]).size(), 3n))
 
+        $(assert.equal(East.value([], ArrayType(IntegerType)).length(), 0n))
+        $(assert.equal(East.value([1n, 2n, 3n]).length(), 3n))
+
         $(assert.equal(East.value([10n, 20n, 30n]).has(-1n), false))
         $(assert.equal(East.value([10n, 20n, 30n]).has(0n), true))
         $(assert.equal(East.value([10n, 20n, 30n]).has(1n), true))

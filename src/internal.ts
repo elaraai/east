@@ -18,6 +18,7 @@ export * from './expr/block.js';
 export * from './expr/function.js';
 export * from './error.js';
 export * from './ir.js';
+export { OutOfScopeException } from './ast_to_ir.js';
 export * from './type_of_type.js';
 export * from './types.js';
 export { decodeBeast2For, encodeBeast2For } from './serialization/beast2.js';

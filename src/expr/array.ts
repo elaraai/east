@@ -81,6 +81,33 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     }) as IntegerExpr;
   }
 
+  
+  /**
+   * Returns the length of the array (an alias for size).
+   *
+   * @returns An IntegerExpr representing the number of elements
+   *
+   * @example
+   * ```ts
+   * const getLength = East.function([ArrayType(IntegerType)], IntegerType, ($, arr) => {
+   *   $.return(arr.length());
+   * });
+   * const compiled = East.compile(getLength.toIR(), []);
+   * compiled([1n, 2n, 3n]);  // 3n
+   * compiled([]);            // 0n
+   * ```
+   */
+  length(): IntegerExpr {
+    return this[FactorySymbol]({
+      ast_type: "Builtin",
+      type: IntegerType,
+      location: get_location(2),
+      builtin: "ArraySize",
+      type_parameters: [this.value_type as EastType],
+      arguments: [this[AstSymbol]],
+    }) as IntegerExpr;
+  }
+
   /**
    * Checks if an element exists at the specified index (i.e., if the index is in bounds).
    *
