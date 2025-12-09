@@ -10,6 +10,14 @@ import { ArrayType, DictType, type EastType, FunctionType, isSubtype, isTypeEqua
 import { variant } from "./containers/variant.js";
 import { applyTypeParameters, Builtins } from "./builtins.js";
 
+
+/** @internal An exception throw for the purpose of early loop continue */
+export class OutOfScopeException extends Error {
+  constructor(public definedLocation: Location) {
+    super(`Variable defined at ${printLocation(definedLocation)} is out of scope here`);
+  }
+}
+
 type Ctx = {
   local_ctx: Map<VariableAST, VariableIR>,
   parent_ctx: Map<VariableAST, VariableIR>,
@@ -48,7 +56,7 @@ export function ast_to_ir(ast: AST, ctx: Ctx = { local_ctx: new Map(), parent_ct
           ctx.captures.add(ir);
           return ir;
         } else {
-          throw new Error(`Variable defined at ${printLocation(ast.location)} not in scope`)
+          throw new OutOfScopeException(ast.location);
         }
       }
     } else if (ast.ast_type === "Let") {

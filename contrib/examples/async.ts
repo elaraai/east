@@ -8,7 +8,7 @@ const time_ns = East.platform("time_ns", [], IntegerType);
 const fetchStatus = East.asyncFunction([StringType], NullType, ($, url) => {
     $(log(str`Fetching URL: ${url}`));
     const t1 = $.let(time_ns());
-    const response = $(fetch_status(url));
+    const response = $.let(fetch_status(url));
     const t2 = $.let(time_ns());
     $(log(str`Response status: ${response} - fetched in ${t2.subtract(t1).multiply(1e-6)} ms`));
 });

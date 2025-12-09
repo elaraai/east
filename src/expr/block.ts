@@ -1137,7 +1137,7 @@ export function asyncPlatform<const Inputs extends EastType[], Output extends Ea
  * Methods like `let`, `if`, `for` etc are available on the builder.
  * You can also add expressions (having side effects) directly by calling the builder as a function.
  */
-export type BlockBuilder<Ret> = (<T extends Expr>(expr: T) => T) & {
+export type BlockBuilder<Ret> = ((expr: Expr) => void) & {
   /** @internal */
   statements: AST[],
 
@@ -1181,10 +1181,9 @@ export type BlockBuilder<Ret> = (<T extends Expr>(expr: T) => T) & {
 export const BlockBuilder = <Ret>(return_type: Ret): BlockBuilder<Ret> => {
   const statements: AST[] = [];
 
-  const $: BlockBuilder<Ret> = (<T extends Expr>(expr: T): T => {
+  const $: BlockBuilder<Ret> = ((expr: Expr): void => {
     const ast = Expr.ast(expr)
     statements.push(ast);
-    return expr;
   }) as any;
 
   $.statements = statements;

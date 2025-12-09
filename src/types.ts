@@ -266,11 +266,11 @@ function validateNotMutuallyRecursive(type: EastType | string, allowedMarker: Re
       check(t.key, false);
       check(t.value, allowed);
     } else if (t.type === "Function") {
-      t.inputs.forEach(input => check(input, false));
-      check(t.output, false);
+      t.inputs.forEach(input => check(input, allowed));
+      check(t.output, allowed);
     } else if (t.type === "AsyncFunction") {
-      t.inputs.forEach(input => check(input, false));
-      check(t.output, false);
+      t.inputs.forEach(input => check(input, allowed));
+      check(t.output, allowed);
     }
     // Primitive types don't need recursion
   }
