@@ -440,9 +440,12 @@ const process = East.function([ArrayType(IntegerType)], IntegerType, ($, prices)
 |-----------|-------------|---------|
 | **Read Operations** |
 | `size(): IntegerExpr` | Array length | `array.size()` |
+| `length(): IntegerExpr` | Array length (alias for `size`) | `array.length()` |
 | `has(index: IntegerExpr \| bigint): BooleanExpr` | Check if index valid | `array.has(5n)` |
 | `get<V extends EastType>(index: IntegerExpr \| bigint): ExprType<V>` **❗** | Get element | `array.get(0n)` |
 | `get<V extends EastType>(index: IntegerExpr \| bigint, defaultFn: FunctionType<[IntegerType], V>): ExprType<V>` | Get or compute default | `array.get(10n, East.function([IntegerType], IntegerType, ($, i) => 0n))` |
+| `at<V extends EastType>(index: IntegerExpr \| bigint): ExprType<V>` **❗** | Get element (alias for `get`) | `array.at(0n)` |
+| `at<V extends EastType>(index: IntegerExpr \| bigint, defaultFn: FunctionType<[IntegerType], V>): ExprType<V>` | Get or compute default (alias for `get`) | `array.at(10n, ($, i) => 0n)` |
 | `tryGet<V extends EastType>(index: IntegerExpr \| bigint): OptionExpr<V>` | Safe get returning Option | `array.tryGet(0n)` |
 | **Mutation Operations** |
 | `update<V extends EastType>(index: IntegerExpr \| bigint, value: ExprType<V> \| ValueTypeOf<V>): NullExpr` **❗** | Replace element | `array.update(0n, 42n)` |
@@ -692,17 +695,17 @@ const process = East.function([OptionType], IntegerType, ($, opt) => {
 });
 
 const compiled = East.compile(process, []);
-compiled(variant("Some", 41n));  // 42n
-compiled(variant("None", null)); // 0n
+compiled(variant("some", 41n));  // 42n
+compiled(variant("none", null)); // 0n
 ```
 
 | Signature | Description | Example |
 |-----------|-------------|---------|
-| `match(cases: { [K]: ($, data) => Expr }): ExprType<T>` | Pattern match on all cases | `opt.match({ Some: ($, x) => x, None: $ => 0n })` |
-| `unwrap(tag?: string): ExprType<Cases[tag]>` **❗** | Extract value (errors if wrong tag) | `opt.unwrap("Some")` |
-| `unwrap(tag: string, defaultFn: ($) => Expr): ExprType<Cases[tag]>` | Extract or compute default | `opt.unwrap("Some", $ => 0n)` |
+| `match(handlers: { [K]?: ($, data) => Expr }, defaultFn: ($) => Expr): ExprType<T>` | Partial match with default | `opt.match({ Some: ($, x) => x }, $ => 0n)` |
+| `unwrap(tag?: string): ExprType<Cases[tag]>` **❗** | Extract value (errors if wrong tag) | `opt.unwrap("some")` |
+| `unwrap(tag: string, defaultFn: ($) => Expr): ExprType<Cases[tag]>` | Extract or compute default | `opt.unwrap("some", $ => 0n)` |
 | `getTag(): StringExpr` | Get tag as string | `opt.getTag()` |
-| `hasTag(tag: string): BooleanExpr` | Check if has tag | `opt.hasTag("Some")` |
+| `hasTag(tag: string): BooleanExpr` | Check if has tag | `opt.hasTag("some")` |
 
 ---
 

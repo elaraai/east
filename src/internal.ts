@@ -22,7 +22,10 @@ export { OutOfScopeException } from './ast_to_ir.js';
 export * from './type_of_type.js';
 export * from './types.js';
 export { decodeBeast2For, encodeBeast2For } from './serialization/beast2.js';
-
+export * from './datetime_format/types.js';
+export * from './datetime_format/tokenize.js';
+export * from './datetime_format/print.js';
+export * from './datetime_format/parse.js';
 // Profiling exports - for performance analysis
 export { analyzeIR } from './analyze.js';
 export { compile_internal } from './compile.js';
