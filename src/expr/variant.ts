@@ -152,4 +152,73 @@ export class VariantExpr<Cases extends Record<string, any>> extends Expr<Variant
     const handlers = Object.fromEntries(Object.keys(this.cases).map(caseName => [caseName, caseName === name ? (_$: BlockBuilder<NeverType>, data: any) => data : ($: BlockBuilder<NeverType>, _data: any) => onOther($)] as const)) as Record<keyof Cases, () => any>;
     return Expr.match(this, handlers) as any;
   }
+
+  /**
+   * Pattern match on this variant, handling specific cases with a default fallback.
+   *
+   * This method allows partial matching where you only need to handle the cases you care about,
+   * with a required default handler for any unmatched cases. This is more ergonomic than
+   * exhaustive matching when you only need to handle a subset of cases.
+   *
+   * @typeParam Handlers - Partial record of case handlers
+   * @typeParam Default - Type of the default handler function
+   * @param handlers - Object mapping case names to handler functions (not all cases required)
+   * @param defaultHandler - Required handler for any unmatched cases
+   * @returns Expression of the union type of all handler return types and default return type
+   *
+   * @see {@link Expr.match} for exhaustive pattern matching requiring all cases
+   * @see {@link unwrap} for extracting a single case value
+   *
+   * @example
+   * ```ts
+   * const OptionType = VariantType({ some: IntegerType, none: NullType });
+   *
+   * // Handle only the 'some' case, use default for 'none'
+   * const getOrZero = East.function([OptionType], IntegerType, ($, opt) => {
+   *   $.return(opt.match({
+   *     some: ($, val) => val
+   *   }, ($) => 0n));
+   * });
+   * const compiled = East.compile(getOrZero.toIR(), []);
+   * compiled(Expr.variant("some", 42n));   // 42n
+   * compiled(Expr.variant("none", null));  // 0n
+   * ```
+   *
+   * @example
+   * ```ts
+   * const ResultType = VariantType({ ok: IntegerType, error: StringType, pending: NullType });
+   *
+   * // Handle multiple cases with a default for the rest
+   * const handleResult = East.function([ResultType], IntegerType, ($, result) => {
+   *   $.return(result.match({
+   *     ok: ($, val) => val,
+   *     error: ($, _msg) => -1n
+   *   }, ($) => 0n));  // pending -> 0
+   * });
+   * const compiled = East.compile(handleResult.toIR(), []);
+   * compiled(Expr.variant("ok", 100n));       // 100n
+   * compiled(Expr.variant("error", "fail"));  // -1n
+   * compiled(Expr.variant("pending", null));  // 0n
+   * ```
+   */
+  match<
+    Handlers extends { [K in keyof Cases]?: ($: BlockBuilder<NeverType>, data: ExprType<Cases[K]>) => any },
+    Default extends ($: BlockBuilder<NeverType>) => any
+  >(
+    handlers: Handlers,
+    defaultHandler: Default
+  ): ExprType<TypeUnion<
+    TypeOf<{ [K in keyof Handlers]: ReturnType<NonNullable<Handlers[K]>> }[keyof Handlers]>,
+    TypeOf<ReturnType<Default>>
+  >> {
+    // Build complete handler set by filling unhandled cases with default
+    const completeHandlers = Object.fromEntries(
+      Object.keys(this.cases).map(caseName => [
+        caseName,
+        (handlers as Record<string, any>)[caseName] ?? (($: BlockBuilder<NeverType>, _data: any) => defaultHandler($))
+      ])
+    ) as Record<keyof Cases, ($: BlockBuilder<NeverType>, data: any) => any>;
+
+    return Expr.match(this, completeHandlers) as any;
+  }
 }

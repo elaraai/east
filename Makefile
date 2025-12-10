@@ -1,4 +1,4 @@
-.PHONY: install build test example coverage release-patch release-minor release-major release-prepatch release-preminor release-premajor release-prerelease
+.PHONY: install build test example lint clean 
 
 build:
 	. ${NVM_DIR}/nvm.sh && nvm use && npm run build

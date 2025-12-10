@@ -189,6 +189,59 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     }
   }
 
+  
+  /**
+   * Gets the element at the specified index (alias for get).
+   *
+   * @param key - The zero-based index
+   * @param defaultFn - Optional function to provide a default value for out-of-bounds indices
+   * @returns An expression of the array's element type
+   *
+   * @throws East runtime error if index is out of bounds and no defaultFn is provided
+   *
+   * @example
+   * ```ts
+   * const getElement = East.function([ArrayType(IntegerType), IntegerType], IntegerType, ($, arr, index) => {
+   *   $.return(arr.get(index));
+   * });
+   * const compiled = East.compile(getElement.toIR(), []);
+   * compiled([10n, 20n, 30n], 1n);  // 20n
+   * // compiled([10n, 20n, 30n], 5n) would throw error
+   *
+   * // With default value
+   * const getOrDefault = East.function([ArrayType(IntegerType), IntegerType], IntegerType, ($, arr, index) => {
+   *   $.return(arr.get(index, ($, i) => -1n));
+   * });
+   * compiled = East.compile(getOrDefault.toIR(), []);
+   * compiled([10n, 20n, 30n], 5n);  // -1n (out of bounds)
+   * ```
+   */
+  at(key: Expr<IntegerType> | bigint, defaultFn?: SubtypeExprOrValue<FunctionType<[IntegerType], T>>): ExprType<T> {
+    const keyAst = valueOrExprToAstTyped(key, IntegerType);
+
+    if (defaultFn !== undefined) {
+      const defaultFnAst = valueOrExprToAstTyped(defaultFn, FunctionType([IntegerType], this.value_type as EastType));
+      return this[FactorySymbol]({
+        ast_type: "Builtin",
+        type: this.value_type as EastType,
+        location: get_location(2),
+        builtin: "ArrayGetOrDefault",
+        type_parameters: [this.value_type as EastType],
+        arguments: [this[AstSymbol], keyAst, defaultFnAst],
+      }) as ExprType<T>;
+    } else {
+      return this[FactorySymbol]({
+        ast_type: "Builtin",
+        type: this.value_type as EastType,
+        location: get_location(2),
+        builtin: "ArrayGet",
+        type_parameters: [this.value_type as EastType],
+        arguments: [this[AstSymbol], keyAst],
+      }) as ExprType<T>;
+    }
+  }
+
+
   /**
    * Safely gets the element at the specified index, returning an Option variant.
    *
