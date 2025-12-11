@@ -3,29 +3,41 @@ name: Publish to npm
 on:
   workflow_dispatch:
     inputs:
+      release_type:
+        description: 'Release type'
+        required: true
+        default: 'prerelease'
+        type: choice
+        options:
+          - prerelease   # 0.0.1-beta.7 -> 0.0.1-beta.8 (npm tag: beta)
+          - prepatch     # 0.0.1-beta.8 -> 0.0.2-beta.0 (npm tag: beta)
+          - preminor     # 0.0.1-beta.8 -> 0.1.0-beta.0 (npm tag: beta)
+          - premajor     # 0.0.1-beta.8 -> 1.0.0-beta.0 (npm tag: beta)
+          - patch        # 0.0.1 -> 0.0.2 (npm tag: latest)
+          - minor        # 0.0.1 -> 0.1.0 (npm tag: latest)
+          - major        # 0.0.1 -> 1.0.0 (npm tag: latest)
       dry_run:
         description: 'Dry run (skip actual publish)'
         required: false
         default: false
         type: boolean
-      npm_tag:
-        description: 'npm tag (latest for stable, beta for prerelease)'
-        required: true
-        default: 'beta'
-        type: choice
-        options:
-          - latest
-          - beta
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write  # Need write to push version bump and tag
       id-token: write  # Required for npm trusted publishing with OIDC
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Use Node.js 22.x
         uses: actions/setup-node@v4
@@ -49,10 +61,49 @@ jobs:
       - name: Run tests
         run: npm test
 
+      - name: Determine npm tag
+        id: npm_tag
+        run: |
+          if [[ "${{ inputs.release_type }}" == pre* ]]; then
+            echo "tag=beta" >> $GITHUB_OUTPUT
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "tag=latest" >> $GITHUB_OUTPUT
+            echo "prerelease=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Bump version
+        id: version
+        run: |
+          if [[ "${{ inputs.release_type }}" == pre* ]]; then
+            NEW_VERSION=$(npm version ${{ inputs.release_type }} --preid=beta --no-git-tag-version)
+          else
+            NEW_VERSION=$(npm version ${{ inputs.release_type }} --no-git-tag-version)
+          fi
+          echo "new_version=${NEW_VERSION}" >> $GITHUB_OUTPUT
+          echo "Bumped to ${NEW_VERSION}"
+
+      - name: Commit and tag
+        if: ${{ !inputs.dry_run }}
+        run: |
+          git add package.json package-lock.json
+          git commit -m "chore: bump version to ${{ steps.version.outputs.new_version }}"
+          git tag ${{ steps.version.outputs.new_version }}
+          git push origin HEAD --tags
+
       - name: Publish to npm (dry run)
         if: ${{ inputs.dry_run }}
-        run: npm publish --access public --provenance --tag ${{ inputs.npm_tag }} --dry-run
+        run: npm publish --access public --provenance --tag ${{ steps.npm_tag.outputs.tag }} --dry-run
 
       - name: Publish to npm
         if: ${{ !inputs.dry_run }}
-        run: npm publish --access public --provenance --tag ${{ inputs.npm_tag }}
+        run: npm publish --access public --provenance --tag ${{ steps.npm_tag.outputs.tag }}
+
+      - name: Create GitHub Release
+        if: ${{ !inputs.dry_run }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.new_version }}
+          name: ${{ steps.version.outputs.new_version }}
+          generate_release_notes: true
+          prerelease: ${{ steps.npm_tag.outputs.prerelease == 'true' }}
