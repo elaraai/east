@@ -1894,6 +1894,129 @@ await describe("Blob", (test) => {
   });
 
   // =========================================================================
+  // Beast v2 - Backreference Tests (Mutable Aliasing)
+  // =========================================================================
+
+  test("Beast v2 - Backreference - same array appearing twice", $ => {
+    // Create a struct where both fields reference the same array
+    const sharedArray = $.let(East.value([1n, 2n, 3n], ArrayType(IntegerType)));
+    const structType = StructType({
+      first: ArrayType(IntegerType),
+      second: ArrayType(IntegerType),
+    });
+    const value = $.let({
+      first: sharedArray,
+      second: sharedArray,
+    });
+
+    // Encode and decode
+    const encoded = $.let(East.Blob.encodeBeast(value, 'v2'));
+    const decoded = $.let(encoded.decodeBeast(structType, 'v2'));
+
+    // Values should be equal
+    $(assert.equal(decoded.first, East.value([1n, 2n, 3n], ArrayType(IntegerType))));
+    $(assert.equal(decoded.second, East.value([1n, 2n, 3n], ArrayType(IntegerType))));
+
+    // Both should reference the same array (backreference preserved identity)
+    $(assert.is(decoded.first, decoded.second));
+  });
+
+  test("Beast v2 - Backreference - same set appearing twice", $ => {
+    const sharedSet = $.let(East.value(new Set(["a", "b", "c"]), SetType(StringType)));
+    const structType = StructType({
+      first: SetType(StringType),
+      second: SetType(StringType),
+    });
+    const value = $.let({
+      first: sharedSet,
+      second: sharedSet,
+    });
+
+    const encoded = $.let(East.Blob.encodeBeast(value, 'v2'));
+    const decoded = $.let(encoded.decodeBeast(structType, 'v2'));
+
+    // Both should reference the same set
+    $(assert.is(decoded.first, decoded.second));
+  });
+
+  test("Beast v2 - Backreference - same dict appearing twice", $ => {
+    const sharedDict = $.let(East.value(new Map([["key", 42n]]), DictType(StringType, IntegerType)));
+    const structType = StructType({
+      first: DictType(StringType, IntegerType),
+      second: DictType(StringType, IntegerType),
+    });
+    const value = $.let({
+      first: sharedDict,
+      second: sharedDict,
+    });
+
+    const encoded = $.let(East.Blob.encodeBeast(value, 'v2'));
+    const decoded = $.let(encoded.decodeBeast(structType, 'v2'));
+
+    // Both should reference the same dict
+    $(assert.is(decoded.first, decoded.second));
+  });
+
+  test("Beast v2 - Backreference - same ref appearing twice", $ => {
+    const sharedRef = $.let(East.value(ref(42n), RefType(IntegerType)));
+    const structType = StructType({
+      first: RefType(IntegerType),
+      second: RefType(IntegerType),
+    });
+    const value = $.let({
+      first: sharedRef,
+      second: sharedRef,
+    });
+
+    const encoded = $.let(East.Blob.encodeBeast(value, 'v2'));
+    const decoded = $.let(encoded.decodeBeast(structType, 'v2'));
+
+    // Both should reference the same ref
+    $(assert.is(decoded.first, decoded.second));
+  });
+
+  test("Beast v2 - Backreference - deeply nested shared arrays", $ => {
+    const sharedInner = $.let(East.value([100n], ArrayType(IntegerType)));
+    const innerStructType = StructType({ nested: ArrayType(IntegerType) });
+    const structType = StructType({
+      a: innerStructType,
+      b: innerStructType,
+    });
+    const value = $.let({
+      a: { nested: sharedInner },
+      b: { nested: sharedInner },
+    });
+
+    const encoded = $.let(East.Blob.encodeBeast(value, 'v2'));
+    const decoded = $.let(encoded.decodeBeast(structType, 'v2'));
+
+    // The nested arrays should be the same reference
+    $(assert.is(decoded.a.nested, decoded.b.nested));
+  });
+
+  test("Beast v2 - Backreference - mutation affects both references", $ => {
+    // This test verifies that backreferences truly share identity by testing mutation
+    const sharedRef = $.let(East.value(ref(10n), RefType(IntegerType)));
+    const structType = StructType({
+      first: RefType(IntegerType),
+      second: RefType(IntegerType),
+    });
+    const value = $.let({
+      first: sharedRef,
+      second: sharedRef,
+    });
+
+    const encoded = $.let(East.Blob.encodeBeast(value, 'v2'));
+    const decoded = $.let(encoded.decodeBeast(structType, 'v2'));
+
+    // Mutate through first reference
+    $(decoded.first.update(East.value(99n)));
+
+    // Second reference should see the mutation
+    $(assert.equal(decoded.second.get(), 99n));
+  });
+
+  // =========================================================================
   // Format Overhead and Size Tests
   // =========================================================================
 
