@@ -7,13 +7,14 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import {
   NullType, BooleanType, IntegerType, FloatType, StringType, DateTimeType, BlobType,
-  ArrayType, SetType, DictType, StructType, VariantType,
+  ArrayType, SetType, DictType, StructType, VariantType, RefType,
   type EastType,
 } from "../types.js";
 import { encodeBeast2For, decodeBeast2, encodeBeast2ValueFor, decodeBeast2ValueFor } from "./beast2.js";
 import { toEastTypeValue, type EastTypeValue } from "../type_of_type.js";
 import { isTypeValueEqual } from "../compile.js";
 import { variant } from "../containers/variant.js";
+import { ref } from "../containers/ref.js";
 
 function assertTypeEquals(actual: EastTypeValue, expected: EastType): void {
   assert.ok(isTypeValueEqual(actual, toEastTypeValue(expected)));
@@ -452,5 +453,133 @@ describe("Cross-mode consistency", () => {
 
     assert.deepStrictEqual(rawDecoded, value);
     assert.deepStrictEqual(beastDecoded, value);
+  });
+});
+
+// =============================================================================
+// Backreference tests (mutable aliasing)
+// =============================================================================
+
+describe("Backreference round-trip", () => {
+  test("same array appearing twice should round-trip", () => {
+    // Create a structure where the same array object appears twice
+    const sharedArray = [1n, 2n, 3n];
+    const structType = StructType({
+      first: ArrayType(IntegerType),
+      second: ArrayType(IntegerType),
+    });
+    const value = {
+      first: sharedArray,
+      second: sharedArray, // Same object reference - encoder will use backreference
+    };
+
+    const decoded = roundTrip(structType, value, "raw");
+    assert.deepStrictEqual(decoded.first, [1n, 2n, 3n]);
+    assert.deepStrictEqual(decoded.second, [1n, 2n, 3n]);
+    // After decoding, both should reference the same array (backreference preserved identity)
+    assert.strictEqual(decoded.first, decoded.second);
+  });
+
+  test("same set appearing twice should round-trip", () => {
+    const sharedSet = new Set(["a", "b", "c"]);
+    const structType = StructType({
+      first: SetType(StringType),
+      second: SetType(StringType),
+    });
+    const value = {
+      first: sharedSet,
+      second: sharedSet,
+    };
+
+    const decoded = roundTrip(structType, value, "raw");
+    assert.deepStrictEqual([...decoded.first].sort(), ["a", "b", "c"]);
+    assert.deepStrictEqual([...decoded.second].sort(), ["a", "b", "c"]);
+    assert.strictEqual(decoded.first, decoded.second);
+  });
+
+  test("same dict appearing twice should round-trip", () => {
+    const sharedDict = new Map([["key", 42n]]);
+    const structType = StructType({
+      first: DictType(StringType, IntegerType),
+      second: DictType(StringType, IntegerType),
+    });
+    const value = {
+      first: sharedDict,
+      second: sharedDict,
+    };
+
+    const decoded = roundTrip(structType, value, "raw");
+    assert.equal(decoded.first.get("key"), 42n);
+    assert.equal(decoded.second.get("key"), 42n);
+    assert.strictEqual(decoded.first, decoded.second);
+  });
+
+  test("deeply nested shared arrays should round-trip", () => {
+    const sharedInner = [100n];
+    const structType = StructType({
+      a: StructType({ nested: ArrayType(IntegerType) }),
+      b: StructType({ nested: ArrayType(IntegerType) }),
+    });
+    const value = {
+      a: { nested: sharedInner },
+      b: { nested: sharedInner },
+    };
+
+    const decoded = roundTrip(structType, value, "raw");
+    assert.deepStrictEqual(decoded.a.nested, [100n]);
+    assert.deepStrictEqual(decoded.b.nested, [100n]);
+    assert.strictEqual(decoded.a.nested, decoded.b.nested);
+  });
+
+  test("shared array in beast mode should round-trip", () => {
+    const sharedArray = [1n, 2n];
+    const structType = StructType({
+      first: ArrayType(IntegerType),
+      second: ArrayType(IntegerType),
+    });
+    const value = {
+      first: sharedArray,
+      second: sharedArray,
+    };
+
+    // This tests the full beast2 format with type schema + value section
+    const decoded = roundTrip(structType, value, "beast");
+    assert.deepStrictEqual(decoded.first, [1n, 2n]);
+    assert.deepStrictEqual(decoded.second, [1n, 2n]);
+    assert.strictEqual(decoded.first, decoded.second);
+  });
+
+  test("same ref appearing twice should round-trip", () => {
+    const sharedRef = ref(42n);
+    const structType = StructType({
+      first: RefType(IntegerType),
+      second: RefType(IntegerType),
+    });
+    const value = {
+      first: sharedRef,
+      second: sharedRef,
+    };
+
+    const decoded = roundTrip(structType, value, "raw");
+    assert.equal(decoded.first.value, 42n);
+    assert.equal(decoded.second.value, 42n);
+    assert.strictEqual(decoded.first, decoded.second);
+  });
+
+  test("same ref in beast mode should round-trip", () => {
+    const sharedRef = ref("hello");
+    const structType = StructType({
+      first: RefType(StringType),
+      second: RefType(StringType),
+    });
+    const value = {
+      first: sharedRef,
+      second: sharedRef,
+    };
+
+    const decoded = roundTrip(structType, value, "beast");
+    assert.equal(decoded.first.value, "hello");
+    assert.equal(decoded.second.value, "hello");
+    assert.strictEqual(decoded.first, decoded.second);
   });
 });

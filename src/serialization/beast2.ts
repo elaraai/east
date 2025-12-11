@@ -255,7 +255,7 @@ export function decodeBeast2ValueFor(type: EastTypeValue | EastType, typeCtx: Be
       }
       // Inline ref
       const result: ref<any> = ref(undefined);
-      ctx.refs.set(offset, result);
+      ctx.refs.set(newOffset, result);
       const [value, nextOffset] = valueDecoder(buffer, newOffset, ctx);
       result.value = value;
       return [result, nextOffset];
@@ -278,7 +278,7 @@ export function decodeBeast2ValueFor(type: EastTypeValue | EastType, typeCtx: Be
       }
       // Inline array
       const result: any[] = [];
-      ctx.refs.set(offset, result);
+      ctx.refs.set(newOffset, result);
       const [length, lengthOffset] = readVarint(buffer, newOffset);
       let currentOffset = lengthOffset;
       for (let i = 0; i < length; i++) {
@@ -306,7 +306,7 @@ export function decodeBeast2ValueFor(type: EastTypeValue | EastType, typeCtx: Be
       }
       // Inline set
       const result = new Set<any>();
-      ctx.refs.set(offset, result);
+      ctx.refs.set(newOffset, result);
       const [length, lengthOffset] = readVarint(buffer, newOffset);
       let currentOffset = lengthOffset;
       for (let i = 0; i < length; i++) {
@@ -331,7 +331,7 @@ export function decodeBeast2ValueFor(type: EastTypeValue | EastType, typeCtx: Be
       }
       // Inline dict
       const result = new Map<any, any>();
-      ctx.refs.set(offset, result);
+      ctx.refs.set(newOffset, result);
       const [length, lengthOffset] = readVarint(buffer, newOffset);
       let currentOffset = lengthOffset;
       for (let i = 0; i < length; i++) {
