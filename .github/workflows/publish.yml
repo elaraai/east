@@ -76,9 +76,9 @@ jobs:
         id: version
         run: |
           if [[ "${{ inputs.release_type }}" == pre* ]]; then
-            NEW_VERSION=$(npm version ${{ inputs.release_type }} --preid=beta --no-git-tag-version)
+            NEW_VERSION=$(npm version ${{ inputs.release_type }} --preid=beta --no-git-tag-version | sed 's/^v//')
           else
-            NEW_VERSION=$(npm version ${{ inputs.release_type }} --no-git-tag-version)
+            NEW_VERSION=$(npm version ${{ inputs.release_type }} --no-git-tag-version | sed 's/^v//')
           fi
           echo "new_version=${NEW_VERSION}" >> $GITHUB_OUTPUT
           echo "Bumped to ${NEW_VERSION}"
