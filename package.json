@@ -1,6 +1,6 @@
 {
   "name": "@elaraai/east",
-  "version": "0.0.1-beta.11",
+  "version": "0.0.1-beta.12",
   "description": "East is a simple and fast language used by Elara AI Pty Ltd.",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
