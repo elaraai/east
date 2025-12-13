@@ -283,6 +283,19 @@ export function ast_to_ir(ast: AST, ctx: Ctx = { local_ctx: new Map(), parent_ct
       ctx.n_vars = ctx2.n_vars;
       ctx.n_loops = ctx2.n_loops;
 
+      // Propagate captures: if this function captured something from ctx.parent_ctx,
+      // then the enclosing function also needs to capture it
+      for (const capturedVar of captures) {
+        // Check if this variable came from our parent context (not defined locally in enclosing function)
+        for (const [_astVar, ir] of ctx.parent_ctx) {
+          if (ir === capturedVar) {
+            // This capture came from an outer scope, so enclosing function must also capture it
+            ctx.captures.add(capturedVar);
+            break;
+          }
+        }
+      }
+
       return variant("Function", {
         type: toEastTypeValue(ast.type),
         location: toLocationValue(ast.location),
@@ -312,6 +325,19 @@ export function ast_to_ir(ast: AST, ctx: Ctx = { local_ctx: new Map(), parent_ct
 
       ctx.n_vars = ctx2.n_vars;
       ctx.n_loops = ctx2.n_loops;
+
+      // Propagate captures: if this function captured something from ctx.parent_ctx,
+      // then the enclosing function also needs to capture it
+      for (const capturedVar of captures) {
+        // Check if this variable came from our parent context (not defined locally in enclosing function)
+        for (const [_astVar, ir] of ctx.parent_ctx) {
+          if (ir === capturedVar) {
+            // This capture came from an outer scope, so enclosing function must also capture it
+            ctx.captures.add(capturedVar);
+            break;
+          }
+        }
+      }
 
       return variant("AsyncFunction", {
         type: toEastTypeValue(ast.type),

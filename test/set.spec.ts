@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Elara AI Pty Ltd
  * Dual-licensed under AGPL-3.0 and commercial license. See LICENSE for details.
  */
-import { East, Expr, IntegerType, SetType, StringType, some, none, DictType, BooleanType } from "../src/index.js";
+import { East, Expr, IntegerType, SetType, StringType, some, none, DictType, BooleanType, StructType } from "../src/index.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
 
 await describe("Set", (test) => {
@@ -384,6 +384,26 @@ await describe("Set", (test) => {
         // toSet
         $(assert.equal(s1.toSet((_$, x) => x.add(1n)), new Set([2n, 3n, 4n])))
         $(assert.equal(s1.toSet((_$, _x) => 1n), new Set([1n]))) // mapping function not unique
+    });
+
+    test("Set toSet with type change", $ => {
+        // Test toSet projection to a different type (verifies bug fix for type_parameters)
+        const PersonType = StructType({ name: StringType, age: IntegerType });
+        const people = $.let(new Set([
+            { name: "Alice", age: 30n },
+            { name: "Bob", age: 25n },
+            { name: "Charlie", age: 30n }
+        ]), SetType(PersonType));
+
+        // Project Struct → String (extract names)
+        $(assert.equal(people.toSet(($, p) => p.name), new Set(["Alice", "Bob", "Charlie"])));
+
+        // Project Struct → Integer (extract ages, with duplicates collapsed)
+        $(assert.equal(people.toSet(($, p) => p.age), new Set([30n, 25n])));
+
+        // Project Integer → String
+        const nums = $.let(new Set([1n, 2n, 3n]), SetType(IntegerType));
+        $(assert.equal(nums.toSet(($, n) => East.print(n)), new Set(["1", "2", "3"])));
     });
 
     test("Set flattenToArray/flattenToDict/flatenToSet", $ => {

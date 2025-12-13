@@ -4,7 +4,7 @@
  */
 import type { AST } from "../ast.js";
 import { get_location } from "../location.js";
-import { SetType, BooleanType, FunctionType, IntegerType, type EastType, NullType, NeverType, DictType, printType, FloatType, isTypeEqual, ArrayType, VariantType } from "../types.js";
+import { SetType, BooleanType, FunctionType, IntegerType, type EastType, NullType, NeverType, DictType, printType, FloatType, isTypeEqual, ArrayType, VariantType, StringType } from "../types.js";
 import { valueOrExprToAst, valueOrExprToAstTyped } from "./ast.js";
 import type { BooleanExpr } from "./boolean.js";
 import type { IntegerExpr } from "./integer.js";
@@ -832,7 +832,7 @@ export class SetExpr<K extends any> extends Expr<SetType<K>> {
    */
   toArray<T2>(fn: Expr<FunctionType<[K], T2>>): ArrayExpr<T2>;
   toArray<F extends (($: BlockBuilder<NeverType>, key: ExprType<K>) => any)>(fn: F): ArrayExpr<TypeOf<ReturnType<F>>>;
-  toArray(): K extends IntegerType | FloatType | BooleanType | NullType | string ? ArrayExpr<K> : never;
+  toArray(): K extends IntegerType | FloatType | BooleanType | NullType | StringType ? ArrayExpr<K> : never;
   toArray(fn?: any): ArrayExpr<any> {
     let fnExpr: Expr<FunctionType>;
     if (fn === undefined) {
@@ -898,7 +898,7 @@ export class SetExpr<K extends any> extends Expr<SetType<K>> {
       type: SetType(keyType),
       location: get_location(2),
       builtin: "SetToSet",
-      type_parameters: [this.key_type as EastType, this.key_type as EastType],
+      type_parameters: [this.key_type as EastType, keyType as EastType],
       arguments: [this[AstSymbol], keyFnAst],
     }) as SetExpr<any>;
   }

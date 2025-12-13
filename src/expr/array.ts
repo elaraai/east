@@ -1243,7 +1243,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
    * compiled([{ name: "Alice", age: 30n }, { name: "Bob", age: 15n }]);  // [{ name: "Alice", age: 30n }]
    * ```
    */
-  filter(predicate: SubtypeExprOrValue<FunctionType<[T, IntegerType], BooleanType>>): Expr<ArrayType<T>> {
+  filter(predicate: SubtypeExprOrValue<FunctionType<[T, IntegerType], BooleanType>>): ArrayExpr<T> {
     if (!(predicate instanceof Expr)) {
       predicate = Expr.function([this.value_type, IntegerType], BooleanType, predicate);
     }
@@ -1271,7 +1271,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
         builtin: "ArrayFilter",
         type_parameters: [this.value_type as EastType],
         arguments: [this[AstSymbol], predicate[AstSymbol]],
-      });
+      }) as ArrayExpr<any>;
     } else {
       throw new Error(`Expected Function to have 2 inputs, got ${functionType.inputs.length} inputs`);
     }

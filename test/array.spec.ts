@@ -275,6 +275,9 @@ await describe("Array", (test) => {
         $(assert.equal(East.value([10n, 20n, 30n]).filter(($, x) => East.equal(x.remainder(20n), 0n)), [20n]))
         $(assert.equal(East.value([10n, 20n, 30n]).filter(($, x) => East.equal(x.remainder(10n), 0n)), [10n, 20n, 30n]))
 
+        // Test that filter returns ArrayExpr and can chain .length()
+        $(assert.equal(East.value([1n, 2n, 3n, 4n, 5n, 6n]).filter(($, x) => East.equal(x.remainder(2n), 0n)).length(), 3n))
+
         $(assert.equal(East.value([1n, 2n, 3n, 4n, 5n, 6n]).filterMap(($, x) => East.equal(x.remainder(2n), 1n).ifElse(() => some(Expr.print(x)), () => none)), ["1", "3", "5"]))
     });
 
@@ -1169,5 +1172,120 @@ await describe("Array", (test) => {
         const decoded = $.let(encoded.decodeCsv(T));
 
         $(assert.equal(decoded, original));
+    });
+
+    // =========================================================================
+    // Nested closure capture tests - these test that closures inside .some(),
+    // .filter(), etc. can correctly capture variables from outer scopes
+    // =========================================================================
+
+    test(".some() captures outer variable", $ => {
+        const threshold = $.const(5n);
+        const arr = $.const([1n, 2n, 3n, 6n, 7n]);
+        // .some() callback captures 'threshold' from outer scope
+        const result = $.let(arr.some(($, v) => East.greater(v, threshold)));
+        $(assert.equal(result, true)); // 6 > 5
+    });
+
+    test(".filter() captures outer variable", $ => {
+        const threshold = $.const(3n);
+        const arr = $.const([1n, 2n, 3n, 4n, 5n]);
+        // .filter() callback captures 'threshold' from outer scope
+        const result = $.let(arr.filter(($, v) => East.greater(v, threshold)));
+        $(assert.equal(result, [4n, 5n]));
+    });
+
+    test(".some() with .or() nested closure capture", $ => {
+        const lower = $.const(0n);
+        const upper = $.const(10n);
+        const arr = $.const([5n, 15n, 3n]);
+        // .some() callback uses .or() which creates another closure
+        // Both closures need to capture 'lower' and 'upper'
+        const result = $.let(arr.some(($, v) =>
+            East.less(v, lower).or($ => East.greater(v, upper))
+        ));
+        $(assert.equal(result, true)); // 15 > 10
+    });
+
+    test(".filter() with .and() nested closure capture", $ => {
+        const lower = $.const(2n);
+        const upper = $.const(8n);
+        const arr = $.const([1n, 3n, 5n, 7n, 9n]);
+        // .filter() callback uses .and() which creates another closure
+        const result = $.let(arr.filter(($, v) =>
+            East.greater(v, lower).and($ => East.less(v, upper))
+        ));
+        $(assert.equal(result, [3n, 5n, 7n])); // 2 < v < 8
+    });
+
+    test(".some() inside loop captures outer loop variable", $ => {
+        const bounds = $.const([5n, 10n, 15n]); // lower bounds per iteration
+        const values = $.const([3n, 12n, 20n]);
+        const found_any = $.let(false);
+
+        // Outer loop defines 'bound', inner .some() captures it
+        $.for(bounds, ($, bound, i) => {
+            $.if(values.some(($, v) => East.greater(v, bound)), $ => {
+                $.assign(found_any, true);
+            });
+        });
+        $(assert.equal(found_any, true));
+    });
+
+    test("Nested .some() with multiple captured variables", $ => {
+        const multiplier = $.const(2n);
+        const offset = $.const(10n);
+        const threshold = $.const(25n);
+        const arr = $.const([5n, 10n, 15n]);
+        // .some() callback captures multiplier, offset, threshold
+        // and uses them in a complex expression
+        const result = $.let(arr.some(($, v) =>
+            East.greater(v.multiply(multiplier).add(offset), threshold)
+        ));
+        $(assert.equal(result, true)); // 15*2+10 = 40 > 25
+    });
+
+    test(".map() inside nested East.function captures from outer function", $ => {
+        // This tests the pattern where:
+        // - Outer function defines a variable
+        // - Inner East.function is defined inside outer
+        // - .map() callback inside inner function captures variable from OUTER function
+        // This crosses TWO East.function boundaries
+        const multiplier = $.const(2n);
+        const arr = $.const([1n, 2n, 3n]);
+
+        // Inner function that uses .map() capturing 'multiplier' from outer scope
+        const inner_fn = East.function(
+            [ArrayType(IntegerType)],
+            ArrayType(IntegerType),
+            ($, input) => {
+                // .map() callback captures 'multiplier' from the OUTER test function
+                const result = $.let(input.map(($, v) => v.multiply(multiplier)));
+                return $.return(result);
+            }
+        );
+
+        const result = $.let(inner_fn(arr));
+        $(assert.equal(result, [2n, 4n, 6n]));
+    });
+
+    test(".map() inside nested East.function captures multiple outer variables", $ => {
+        // More complex case: multiple variables captured across function boundaries
+        const scale = $.const(10n);
+        const offset = $.const(5n);
+        const arr = $.const([1n, 2n, 3n]);
+
+        const transform_fn = East.function(
+            [ArrayType(IntegerType)],
+            ArrayType(IntegerType),
+            ($, input) => {
+                // Captures both 'scale' and 'offset' from outer function
+                const result = $.let(input.map(($, v) => v.multiply(scale).add(offset)));
+                return $.return(result);
+            }
+        );
+
+        const result = $.let(transform_fn(arr));
+        $(assert.equal(result, [15n, 25n, 35n])); // 1*10+5, 2*10+5, 3*10+5
     });
 });

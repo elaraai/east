@@ -528,6 +528,66 @@ await describe("Block", (test) => {
         $(assert.equal(sum, 12n)); // 1 + 2 + 4 + 5 = 12
     });
 
+    // =========================================================================
+    // Nested loop break/continue tests - these test that break/continue with
+    // labels work correctly when called from nested loops
+    // =========================================================================
+
+    test("break outer loop from inner loop", $ => {
+        const outer = $.const([1n, 2n, 3n]);
+        const inner = $.const([10n, 20n, 30n]);
+        const sum = $.let(0n);
+
+        $.for(outer, ($, o, _oi, outer_label) => {
+            $.for(inner, ($, i) => {
+                $.if(East.equal(o, 2n).bitAnd(East.equal(i, 20n)), $ => {
+                    $.break(outer_label); // Break outer loop from inner
+                });
+                $.assign(sum, sum.add(i));
+            });
+            $.assign(sum, sum.add(o));
+        });
+        // o=1: inner adds 10+20+30=60, outer adds 1 -> 61
+        // o=2: inner adds 10, then breaks outer
+        $(assert.equal(sum, 71n));
+    });
+
+    test("continue outer loop from inner loop", $ => {
+        const outer = $.const([1n, 2n, 3n]);
+        const inner = $.const([10n, 20n, 30n]);
+        const sum = $.let(0n);
+
+        $.for(outer, ($, o, _oi, outer_label) => {
+            $.for(inner, ($, i) => {
+                $.if(East.equal(o, 2n).bitAnd(East.equal(i, 20n)), $ => {
+                    $.continue(outer_label); // Continue outer loop from inner
+                });
+                $.assign(sum, sum.add(i));
+            });
+            $.assign(sum, sum.add(o));
+        });
+        // o=1: inner adds 10+20+30=60, outer adds 1 -> 61
+        // o=2: inner adds 10, then continues outer (skips rest of inner and outer body)
+        // o=3: inner adds 10+20+30=60, outer adds 3 -> 134
+        $(assert.equal(sum, 134n));
+    });
+
+    test("continue outer loop from deeply nested scope", $ => {
+        const arr = $.const([1n, 2n, 3n, 4n, 5n]);
+        const sum = $.let(0n);
+
+        $.for(arr, ($, value, _key, outer_label) => {
+            // Nested $.if inside $.if
+            $.if(East.greater(value, 0n), $ => {
+                $.if(East.equal(value, 3n), $ => {
+                    $.continue(outer_label); // Skip 3
+                });
+            });
+            $.assign(sum, sum.add(value));
+        });
+        $(assert.equal(sum, 12n)); // 1 + 2 + 4 + 5 = 12
+    });
+
     test("return() from function", $ => {
         const fn = East.function([IntegerType], IntegerType, ($, x) => {
             $.if(East.equal(x, 0n), $ => {

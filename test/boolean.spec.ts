@@ -68,4 +68,51 @@ await describe("Boolean", (test) => {
         $(assert.equal(East.value("false").parse(BooleanType), false));
         $(assert.throws(East.value("maybe").parse(BooleanType)));
     });
+
+    test("Short-circuit .and() basic", $ => {
+        // Basic short-circuit and
+        $(assert.equal(East.value(true).and($ => true), true));
+        $(assert.equal(East.value(true).and($ => false), false));
+        $(assert.equal(East.value(false).and($ => true), false));
+        $(assert.equal(East.value(false).and($ => false), false));
+    });
+
+    test("Short-circuit .or() basic", $ => {
+        // Basic short-circuit or
+        $(assert.equal(East.value(true).or($ => true), true));
+        $(assert.equal(East.value(true).or($ => false), true));
+        $(assert.equal(East.value(false).or($ => true), true));
+        $(assert.equal(East.value(false).or($ => false), false));
+    });
+
+    test("Short-circuit .and() captures outer variable", $ => {
+        const threshold = $.const(5n);
+        const value = $.const(3n);
+        // .and() closure captures 'threshold' from outer scope
+        const result = $.let(East.greater(value, 0n).and($ => East.less(value, threshold)));
+        $(assert.equal(result, true));
+    });
+
+    test("Short-circuit .or() captures outer variable", $ => {
+        const lower = $.const(0n);
+        const upper = $.const(10n);
+        const value = $.const(15n);
+        // .or() closure captures 'upper' from outer scope
+        const result = $.let(East.less(value, lower).or($ => East.greater(value, upper)));
+        $(assert.equal(result, true));
+    });
+
+    test("Nested .and()/.or() captures variables from multiple scopes", $ => {
+        const a = $.const(5n);
+        const b = $.const(10n);
+        const c = $.const(15n);
+        const x = $.const(7n);
+        // Nested: .and() inside .or(), both capturing outer variables
+        const result = $.let(
+            East.less(x, a).or($ =>
+                East.greater(x, a).and($ => East.less(x, b))
+            )
+        );
+        $(assert.equal(result, true)); // 7 > 5 && 7 < 10
+    });
 });
