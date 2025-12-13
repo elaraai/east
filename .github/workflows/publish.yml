@@ -76,12 +76,11 @@ jobs:
         id: version
         run: |
           if [[ "${{ inputs.release_type }}" == pre* ]]; then
-            NEW_VERSION=$(npm version ${{ inputs.release_type }} --preid=beta --no-git-tag-version | sed 's/^v//')
+            npm version ${{ inputs.release_type }} --preid=beta --no-git-tag-version
           else
-            NEW_VERSION=$(npm version ${{ inputs.release_type }} --no-git-tag-version | sed 's/^v//')
+            npm version ${{ inputs.release_type }} --no-git-tag-version
           fi
-          echo "new_version=${NEW_VERSION}" >> $GITHUB_OUTPUT
-          echo "Bumped to ${NEW_VERSION}"
+          echo "new_version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
 
       - name: Commit and tag
         if: ${{ !inputs.dry_run }}
