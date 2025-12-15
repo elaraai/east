@@ -18,9 +18,16 @@ import type { DateTimeFormatToken } from "./datetime_format/types.js";
 import { EastTypeValueType, isTypeValueEqual, type EastTypeValue, expandTypeValue, type DictTypeValue, type SetTypeValue, type ArrayTypeValue } from "./type_of_type.js";
 import type { AnalyzedIR } from "./analyze.js";
 import { ref } from "./containers/ref.js";
+import type { PlatformFunction } from "./platform.js";
 
 export { isTypeValueEqual };
 export const printTypeValue = printFor(EastTypeValueType) as (type: EastTypeValue) => string;
+
+/**
+ * Symbol used to attach source IR to compiled functions.
+ * This enables serialization of free functions (functions with no captures).
+ */
+export const EAST_IR_SYMBOL = Symbol.for("east.ir");
 
 /** @internal Track iteration locks to prevent concurrent modification */
 const iterationLocks = new WeakMap<any, number>();
@@ -63,7 +70,7 @@ class BreakException {
 *
 * @internal
 */
-export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeValue>, platform: Record<string, (...args: any[]) => any>, asyncPlatformFns: Set<string>, fresh_ctx: boolean = true, compilingNodes: Set<IR> = new Set()): (ctx: Record<string, any>) => any {
+export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeValue>, platform: Record<string, (...args: any[]) => any>, asyncPlatformFns: Set<string>, platformDef: PlatformFunction[], fresh_ctx: boolean = true, compilingNodes: Set<IR> = new Set()): (ctx: Record<string, any>) => any {
   // The IR is checked prior to compilation, so we can assume it's valid here.
   // The compiler needs to take care that Promises are properly awaited, so most IR nodes need both sync and async implementations.
   // We assume unnecessary `async` functions degrade performance but unnecessary `await`s are not too bad, so while we could be more "specific" in our awaits we do not bother
@@ -74,7 +81,7 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
     const v = ir.value.value.value;
     return (_ctx: Record<string, any>) => v;
   } else if (ir.type === "Error") {
-    const message_compiled = compile_internal(ir.value.message, ctx, platform, asyncPlatformFns, false, compilingNodes);
+    const message_compiled = compile_internal(ir.value.message, ctx, platform, asyncPlatformFns, platformDef, false, compilingNodes);
     const location = ir.value.location;
     if (ir.value.isAsync) {
       return async (ctx: Record<string, any>) => { throw new EastError(await message_compiled(ctx), { location: location }); };
@@ -82,17 +89,17 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
       return (ctx: Record<string, any>) => { throw new EastError(message_compiled(ctx), { location: location }); };
     }
   } else if (ir.type === "TryCatch") {
-    const try_body = compile_internal(ir.value.try_body, Object.create(ctx), platform, asyncPlatformFns, true, compilingNodes);
+    const try_body = compile_internal(ir.value.try_body, Object.create(ctx), platform, asyncPlatformFns, platformDef, true, compilingNodes);
 
     const new_ctx = Object.create(ctx);
     const message_name = ir.value.message.value.name;
     const stack_name = ir.value.stack.value.name;
     new_ctx[message_name] = ir.value.message.value.type;
     new_ctx[stack_name] = ir.value.stack.value.type;
-    const catch_body = compile_internal(ir.value.catch_body, new_ctx, platform, asyncPlatformFns, true, compilingNodes);
+    const catch_body = compile_internal(ir.value.catch_body, new_ctx, platform, asyncPlatformFns, platformDef, true, compilingNodes);
 
     // Don't include finally unless necessary (Value nodes are effect free)
-    const finally_body = ir.value.finally_body.type === "Value" ? undefined : compile_internal(ir.value.finally_body, Object.create(ctx), platform, asyncPlatformFns, true, compilingNodes);
+    const finally_body = ir.value.finally_body.type === "Value" ? undefined : compile_internal(ir.value.finally_body, Object.create(ctx), platform, asyncPlatformFns, platformDef, true, compilingNodes);
 
     if (ir.value.isAsync) {
       if (finally_body === undefined) {
@@ -172,7 +179,7 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
       return (ctx: Record<string, any>) => ctx[name];
     }
   } else if (ir.type === "Let") {
-    const compiled_statement = compile_internal(ir.value.value, ctx, platform, asyncPlatformFns, false, compilingNodes);
+    const compiled_statement = compile_internal(ir.value.value, ctx, platform, asyncPlatformFns, platformDef, false, compilingNodes);
     const name = ir.value.variable.value.name;
     ctx[name] = ir.value.variable.value.type;
     if (ir.value.variable.value.mutable && ir.value.variable.value.captured) {
@@ -202,7 +209,7 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
     }
   } else if (ir.type === "Assign") {
     const name = ir.value.variable.value.name;
-    const compiled_statement = compile_internal(ir.value.value, ctx, platform, asyncPlatformFns, false, compilingNodes);
+    const compiled_statement = compile_internal(ir.value.value, ctx, platform, asyncPlatformFns, platformDef, false, compilingNodes);
     if (ir.value.variable.value.mutable && ir.value.variable.value.captured) {
       if (ir.value.isAsync) {
         return async (ctx: Record<string, any>) => {
@@ -239,15 +246,15 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
   } else if (ir.type === "As") {
     // in dynamically typed runtimes like Javascript, this is a no-op
     // (for statically typed runtimes this assists in unifying types in branches)
-    return compile_internal(ir.value.value, ctx, platform, asyncPlatformFns, fresh_ctx, compilingNodes);
+    return compile_internal(ir.value.value, ctx, platform, asyncPlatformFns, platformDef, fresh_ctx, compilingNodes);
   } else if (ir.type === "UnwrapRecursive") {
     // in dynamically typed runtimes like Javascript, this is a no-op
     // (for statically typed runtimes this assists in e.g. typing a reference or pointer)
-    return compile_internal(ir.value.value, ctx, platform, asyncPlatformFns, fresh_ctx, compilingNodes);
+    return compile_internal(ir.value.value, ctx, platform, asyncPlatformFns, platformDef, fresh_ctx, compilingNodes);
   } else if (ir.type === "WrapRecursive") {
     // in dynamically typed runtimes like Javascript, this is a no-op
     // (for statically typed runtimes this assists in e.g. typing a heap allocation)
-    return compile_internal(ir.value.value, ctx, platform, asyncPlatformFns, false, compilingNodes);
+    return compile_internal(ir.value.value, ctx, platform, asyncPlatformFns, platformDef, false, compilingNodes);
   } else if (ir.type === "Function") {
     const ctx2: Record<string, any> = {};
     for (const variable of ir.value.captures) {
@@ -258,21 +265,35 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
       ctx2[parameter_name] = parameter.value.type;
     }
 
-    const compiled_body = compile_internal(ir.value.body, ctx2, platform, asyncPlatformFns, true, compilingNodes);
+    const compiled_body = compile_internal(ir.value.body, ctx2, platform, asyncPlatformFns, platformDef, true, compilingNodes);
 
     const capture_names = ir.value.captures.map(v => v.value.name);
-    const parameter_names = ir.value.parameters.map(v => v.value.name)
+    const parameter_names = ir.value.parameters.map(v => v.value.name);
+
+    // Store original IR for potential serialization
+    const originalIR = ir;
+
     return (ctx: Record<string, any>) => {
       const ctx2: Record<string, any> = {};
       for (const name of capture_names) {
         ctx2[name] = ctx[name];
       }
 
-      return (...args: any) => {
+      const fn = (...args: any) => {
         const ctx3 = { ...ctx2 };
         parameter_names.forEach((name, i) => ctx3[name] = args[i]);
         return compiled_body(ctx3);
-      }
+      };
+
+      // Attach IR to function for serialization support
+      Object.defineProperty(fn, EAST_IR_SYMBOL, {
+        value: originalIR,
+        writable: false,
+        enumerable: false,
+        configurable: false
+      });
+
+      return fn;
     }
   } else if (ir.type === "AsyncFunction") {
     const ctx2: Record<string, any> = {};
@@ -284,25 +305,39 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
       ctx2[parameter_name] = parameter.value.type;
     }
 
-    const compiled_body = compile_internal(ir.value.body, ctx2, platform, asyncPlatformFns, true, compilingNodes);
+    const compiled_body = compile_internal(ir.value.body, ctx2, platform, asyncPlatformFns, platformDef, true, compilingNodes);
 
     const capture_names = ir.value.captures.map(v => v.value.name);
-    const parameter_names = ir.value.parameters.map(v => v.value.name)
+    const parameter_names = ir.value.parameters.map(v => v.value.name);
+
+    // Store original IR for potential serialization
+    const originalIR = ir;
+
     return (ctx: Record<string, any>) => {
       const ctx2: Record<string, any> = {};
       for (const name of capture_names) {
         ctx2[name] = ctx[name];
       }
 
-      return (...args: any) => {
+      const fn = (...args: any) => {
         const ctx3 = { ...ctx2 };
         parameter_names.forEach((name, i) => ctx3[name] = args[i]);
         return compiled_body(ctx3); // Promise can pass through in tail position
-      }
+      };
+
+      // Attach IR to function for serialization support
+      Object.defineProperty(fn, EAST_IR_SYMBOL, {
+        value: originalIR,
+        writable: false,
+        enumerable: false,
+        configurable: false
+      });
+
+      return fn;
     }
   } else if (ir.type === "Call") {
-    const compiled_f = compile_internal(ir.value.function, ctx, platform, asyncPlatformFns, false, compilingNodes);
-    const compiled_args = ir.value.arguments.map(argument => compile_internal(argument, ctx, platform, asyncPlatformFns, false, compilingNodes));
+    const compiled_f = compile_internal(ir.value.function, ctx, platform, asyncPlatformFns, platformDef, false, compilingNodes);
+    const compiled_args = ir.value.arguments.map(argument => compile_internal(argument, ctx, platform, asyncPlatformFns, platformDef, false, compilingNodes));
     const location = ir.value.location;
 
     if (ir.value.isAsync) {
@@ -350,8 +385,8 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
       }
     }
   } else if (ir.type === "CallAsync") {
-    const compiled_f = compile_internal(ir.value.function, ctx, platform, asyncPlatformFns, false, compilingNodes);
-    const compiled_args = ir.value.arguments.map(argument => compile_internal(argument, ctx, platform, asyncPlatformFns, false, compilingNodes));
+    const compiled_f = compile_internal(ir.value.function, ctx, platform, asyncPlatformFns, platformDef, false, compilingNodes);
+    const compiled_args = ir.value.arguments.map(argument => compile_internal(argument, ctx, platform, asyncPlatformFns, platformDef, false, compilingNodes));
     const location = ir.value.location;
 
     return async (ctx: Record<string, any>) => {
@@ -387,11 +422,11 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
         asyncPredicate = true;
       }
       ifs.push({
-        predicate: compile_internal(predicate, ctx, platform, asyncPlatformFns, false, compilingNodes),
-        body: compile_internal(body, Object.create(ctx), platform, asyncPlatformFns, true, compilingNodes),
+        predicate: compile_internal(predicate, ctx, platform, asyncPlatformFns, platformDef, false, compilingNodes),
+        body: compile_internal(body, Object.create(ctx), platform, asyncPlatformFns, platformDef, true, compilingNodes),
       });
     }
-    const else_body = compile_internal(ir.value.else_body, Object.create(ctx), platform, asyncPlatformFns, true, compilingNodes);
+    const else_body = compile_internal(ir.value.else_body, Object.create(ctx), platform, asyncPlatformFns, platformDef, true, compilingNodes);
 
     if (ir.value.isAsync) {
       if (asyncPredicate) {
@@ -424,7 +459,7 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
       };
     }
   } else if (ir.type === "Match") {
-    const compiled_variant = compile_internal(ir.value.variant, ctx, platform, asyncPlatformFns, false, compilingNodes);
+    const compiled_variant = compile_internal(ir.value.variant, ctx, platform, asyncPlatformFns, platformDef, false, compilingNodes);
     const compiled_cases: Record<string, (ctx: Record<string, any>) => any> = {};
     const data_names: Record<string, string> = {};
 
@@ -433,7 +468,7 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
       const data_name = variable.value.name;
       data_names[k] = data_name;
       ctx2[data_name] = variable.value.type;
-      compiled_cases[k] = compile_internal(body, ctx2, platform, asyncPlatformFns, true, compilingNodes);
+      compiled_cases[k] = compile_internal(body, ctx2, platform, asyncPlatformFns, platformDef, true, compilingNodes);
     }
 
     if (ir.value.isAsync) {
@@ -461,9 +496,9 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
       };
     }
   } else if (ir.type === "While") {
-    const compiled_predicate = compile_internal(ir.value.predicate, ctx, platform, asyncPlatformFns, false, compilingNodes);
+    const compiled_predicate = compile_internal(ir.value.predicate, ctx, platform, asyncPlatformFns, platformDef, false, compilingNodes);
     const ctx2 = Object.create(ctx);
-    const compiled_body = compile_internal(ir.value.body, ctx2, platform, asyncPlatformFns, true, compilingNodes);
+    const compiled_body = compile_internal(ir.value.body, ctx2, platform, asyncPlatformFns, platformDef, true, compilingNodes);
     const label = ir.value.label.name;
 
     if (ir.value.isAsync) {
@@ -505,13 +540,13 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
     }
   } else if (ir.type === "ForArray") {
     const value_type = (expandTypeValue(ir.value.array.value.type) as ArrayTypeValue).value;
-    const compiled_array = compile_internal(ir.value.array, ctx, platform, asyncPlatformFns, false, compilingNodes);
+    const compiled_array = compile_internal(ir.value.array, ctx, platform, asyncPlatformFns, platformDef, false, compilingNodes);
     const ctx2 = Object.create(ctx);
     const key_name = ir.value.key.value.name;
     const value_name = ir.value.value.value.name;
     ctx2[key_name] = variant("Integer", null);
     ctx2[value_name] = value_type;
-    const compiled_body = compile_internal(ir.value.body, ctx2, platform, asyncPlatformFns, true, compilingNodes);
+    const compiled_body = compile_internal(ir.value.body, ctx2, platform, asyncPlatformFns, platformDef, true, compilingNodes);
     const label = ir.value.label.name;
 
     if (ir.value.isAsync) {
@@ -569,11 +604,11 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
     }
   } else if (ir.type === "ForSet") {
     const key_type = (expandTypeValue(ir.value.set.value.type) as SetTypeValue).value;
-    const compiled_set = compile_internal(ir.value.set, ctx, platform, asyncPlatformFns, false, compilingNodes);
+    const compiled_set = compile_internal(ir.value.set, ctx, platform, asyncPlatformFns, platformDef, false, compilingNodes);
     const ctx2 = Object.create(ctx);
     const key_name = ir.value.key.value.name;
     ctx2[key_name] = key_type;
-    const compiled_body = compile_internal(ir.value.body, ctx2, platform, asyncPlatformFns, true, compilingNodes);
+    const compiled_body = compile_internal(ir.value.body, ctx2, platform, asyncPlatformFns, platformDef, true, compilingNodes);
     const label = ir.value.label.name;
 
     if (ir.value.isAsync) {
@@ -630,13 +665,13 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
   } else if (ir.type === "ForDict") {
     const key_type = (expandTypeValue(ir.value.dict.value.type) as DictTypeValue).value.key;
     const value_type = (expandTypeValue(ir.value.dict.value.type) as DictTypeValue).value.value;
-    const compiled_dict = compile_internal(ir.value.dict, ctx, platform, asyncPlatformFns, false, compilingNodes);
+    const compiled_dict = compile_internal(ir.value.dict, ctx, platform, asyncPlatformFns, platformDef, false, compilingNodes);
     const ctx2 = Object.create(ctx);
     const key_name = ir.value.key.value.name;
     const value_name = ir.value.value.value.name;
     ctx2[key_name] = key_type;
     ctx2[value_name] = value_type;
-    const compiled_body = compile_internal(ir.value.body, ctx2, platform, asyncPlatformFns, true, compilingNodes);
+    const compiled_body = compile_internal(ir.value.body, ctx2, platform, asyncPlatformFns, platformDef, true, compilingNodes);
     const label = ir.value.label.name;
 
     if (ir.value.isAsync) {
@@ -698,7 +733,7 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
     if (fresh_ctx) {
       const compiled_statements: ((ctx: Record<string, any>) => any)[] = [];
       for (const statement of ir.value.statements) {
-        const compiled_statement = compile_internal(statement, ctx, platform, asyncPlatformFns, true, compilingNodes);
+        const compiled_statement = compile_internal(statement, ctx, platform, asyncPlatformFns, platformDef, true, compilingNodes);
         compiled_statements.push(compiled_statement);
       }
       if (ir.value.isAsync) {
@@ -722,7 +757,7 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
       const ctx2 = Object.create(ctx);
       const compiled_statements: ((ctx: Record<string, any>) => any)[] = [];
       for (const statement of ir.value.statements) {
-        const compiled_statement = compile_internal(statement, ctx2, platform, asyncPlatformFns, true, compilingNodes);
+        const compiled_statement = compile_internal(statement, ctx2, platform, asyncPlatformFns, platformDef, true, compilingNodes);
         compiled_statements.push(compiled_statement);
       }
       if (ir.value.isAsync) {
@@ -746,7 +781,7 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
       }
     }
   } else if (ir.type === "GetField") {
-    const struct = compile_internal(ir.value.struct, ctx, platform, asyncPlatformFns, false, compilingNodes);
+    const struct = compile_internal(ir.value.struct, ctx, platform, asyncPlatformFns, platformDef, false, compilingNodes);
     const field = ir.value.field;
     if (ir.value.isAsync) {
       return async (ctx: Record<string, any>) => (await struct(ctx))[field];
@@ -755,7 +790,7 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
     }
   } else if (ir.type === "Struct") {
     const fields = ir.value.fields.map(f => {
-      return compile_internal(f.value, ctx, platform, asyncPlatformFns, false, compilingNodes);
+      return compile_internal(f.value, ctx, platform, asyncPlatformFns, platformDef, false, compilingNodes);
     });
     const keys = ir.value.fields.map(f => f.name);
     if (ir.value.isAsync) {
@@ -771,14 +806,14 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
     }
   } else if (ir.type === "Variant") {
     const k = ir.value.case;
-    const v = compile_internal(ir.value.value, ctx, platform, asyncPlatformFns, false, compilingNodes);
+    const v = compile_internal(ir.value.value, ctx, platform, asyncPlatformFns, platformDef, false, compilingNodes);
     if (ir.value.isAsync) {
       return async (ctx: Record<string, any>) => variant(k, await v(ctx));
     } else {
       return (ctx: Record<string, any>) => variant(k, v(ctx));
     }
   } else if (ir.type === "NewRef") {
-    const value = compile_internal(ir.value.value, ctx, platform, asyncPlatformFns, false, compilingNodes);
+    const value = compile_internal(ir.value.value, ctx, platform, asyncPlatformFns, platformDef, false, compilingNodes);
     if (ir.value.isAsync) {
       return async (ctx: Record<string, any>) => ref(await value(ctx));
     } else {
@@ -786,7 +821,7 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
     }
   } else if (ir.type === "NewArray") {
     const values = ir.value.values.map(a => {
-      return compile_internal(a, ctx, platform, asyncPlatformFns, false, compilingNodes)
+      return compile_internal(a, ctx, platform, asyncPlatformFns, platformDef, false, compilingNodes)
     });
     if (ir.value.isAsync) {
       return async (ctx: Record<string, any>) => {
@@ -801,7 +836,7 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
     }
   } else if (ir.type === "NewSet") {
     const values = ir.value.values.map(a => {
-      return compile_internal(a, ctx, platform, asyncPlatformFns, false, compilingNodes)
+      return compile_internal(a, ctx, platform, asyncPlatformFns, platformDef, false, compilingNodes)
     });
     const keyComparer = compareFor(ir.value.type.value);
     if (ir.value.isAsync) {
@@ -817,7 +852,7 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
     }
   } else if (ir.type === "NewDict") {
     const values = ir.value.values.map(({key, value}) => {
-      return [compile_internal(key, ctx, platform, asyncPlatformFns, false, compilingNodes), compile_internal(value, ctx, platform, asyncPlatformFns, false, compilingNodes)] as const;
+      return [compile_internal(key, ctx, platform, asyncPlatformFns, platformDef, false, compilingNodes), compile_internal(value, ctx, platform, asyncPlatformFns, platformDef, false, compilingNodes)] as const;
     });
     const keyComparer = compareFor(ir.value.type.value.key);
     if (ir.value.isAsync) {
@@ -832,7 +867,7 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
       return (ctx: Record<string, any>) => new SortedMap(values.map(([k, v]) => [k(ctx), v(ctx)]), keyComparer);
     }
   } else if (ir.type === "Return") {
-    const compiled_value = compile_internal(ir.value.value, ctx, platform, asyncPlatformFns, false, compilingNodes);
+    const compiled_value = compile_internal(ir.value.value, ctx, platform, asyncPlatformFns, platformDef, false, compilingNodes);
     if (ir.value.isAsync) {
       return async (ctx: Record<string, any>) => {
         throw new ReturnException(await compiled_value(ctx));
@@ -859,7 +894,7 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
         argsAsync = true;
       }
 
-      return compile_internal(a, ctx, platform, asyncPlatformFns, false, compilingNodes)
+      return compile_internal(a, ctx, platform, asyncPlatformFns, platformDef, false, compilingNodes)
     });
 
     // Special optimization for regex builtins with literal pattern/flags
@@ -1030,7 +1065,7 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
       }
     }
 
-    const evaluator = builtin_evaluators[ir.value.builtin](ir.value.location, ...ir.value.type_parameters);
+    const evaluator = builtin_evaluators[ir.value.builtin](ir.value.location, platformDef, ...ir.value.type_parameters);
     if (argsAsync) {
       return async (ctx: Record<string, any>) => {
         const args_resolved: any[] = [];
@@ -1049,7 +1084,7 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
         argsAsync = true;
       }
 
-      return compile_internal(a, ctx, platform, asyncPlatformFns, false, compilingNodes)
+      return compile_internal(a, ctx, platform, asyncPlatformFns, platformDef, false, compilingNodes)
     });
     const evaluator = platform[ir.value.name];
     if (evaluator === undefined) {
@@ -1093,14 +1128,14 @@ function call_function(location: LocationValue, compiled_f: (...args: any[]) => 
 
 
 /** @internal */
-const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_types: any[]) => (...args: any[]) => any> = {
-  Is: (_location: LocationValue, T: EastTypeValue) => isFor(T),
-  Equal: (_location: LocationValue, T: EastTypeValue) => equalFor(T),
-  NotEqual: (_location: LocationValue, T: EastTypeValue) => notEqualFor(T),
-  Less: (_location: LocationValue, T: EastTypeValue) => lessFor(T),
-  LessEqual: (_location: LocationValue, T: EastTypeValue) => lessEqualFor(T),
-  Greater: (_location: LocationValue, T: EastTypeValue) => greaterFor(T),
-  GreaterEqual: (_location: LocationValue, T: EastTypeValue) => greaterEqualFor(T),
+const builtin_evaluators: Record<BuiltinName, (location: LocationValue, platformDef: PlatformFunction[], ...arg_types: any[]) => (...args: any[]) => any> = {
+  Is: (_location: LocationValue, _platformDef: PlatformFunction[], T: EastTypeValue) => isFor(T),
+  Equal: (_location: LocationValue, _platformDef: PlatformFunction[], T: EastTypeValue) => equalFor(T),
+  NotEqual: (_location: LocationValue, _platformDef: PlatformFunction[], T: EastTypeValue) => notEqualFor(T),
+  Less: (_location: LocationValue, _platformDef: PlatformFunction[], T: EastTypeValue) => lessFor(T),
+  LessEqual: (_location: LocationValue, _platformDef: PlatformFunction[], T: EastTypeValue) => lessEqualFor(T),
+  Greater: (_location: LocationValue, _platformDef: PlatformFunction[], T: EastTypeValue) => greaterFor(T),
+  GreaterEqual: (_location: LocationValue, _platformDef: PlatformFunction[], T: EastTypeValue) => greaterEqualFor(T),
   BooleanNot: (_location: LocationValue) => (x: boolean) => !x,
   BooleanOr: (_location: LocationValue) => (x: boolean, y: boolean) => x || y,
   BooleanAnd: (_location: LocationValue) => (x: boolean, y: boolean) => x && y,
@@ -1154,10 +1189,10 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
   FloatCos: (_location: LocationValue) => (value: number) => Math.cos(value),
   FloatTan: (_location: LocationValue) => (value: number) => Math.tan(value),
   
-  Print: (_location: LocationValue, T: EastTypeValue) => {
+  Print: (_location: LocationValue, _platformDef: PlatformFunction[], T: EastTypeValue) => {
     return printFor(T);
   },
-  Parse: (location: LocationValue, T: EastTypeValue) => {
+  Parse: (location: LocationValue, _platformDef: PlatformFunction[], T: EastTypeValue) => {
     const p = parseFor(T);
     return (x: string) => {
       const result = p(x);
@@ -1353,7 +1388,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       return buffer.toUint8Array();
     };
   },
-  StringParseJSON: (location: LocationValue, type: EastTypeValue) => {
+  StringParseJSON: (location: LocationValue, _platformDef: PlatformFunction[], type: EastTypeValue) => {
     const fromJSON = fromJSONFor(type);
     return (x: string) => {
       let parsed: any;
@@ -1369,7 +1404,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       }
     }
   },
-  StringPrintJSON: (_location: LocationValue, type: EastTypeValue) => {
+  StringPrintJSON: (_location: LocationValue, _platformDef: PlatformFunction[], type: EastTypeValue) => {
     const toJSON = toJSONFor(type);
     return (x: any) => JSON.stringify(toJSON(x));
   },
@@ -1444,13 +1479,13 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       }
     };
   },
-  BlobEncodeBeast: (_location: LocationValue, type: EastTypeValue) => {
+  BlobEncodeBeast: (_location: LocationValue, _platformDef: PlatformFunction[], type: EastTypeValue) => {
     const encodeBeast = encodeBeastFor(type);
     return (value: any) => {
       return encodeBeast(value);
     }
   },
-  BlobDecodeBeast: (location: LocationValue, type: EastTypeValue) => {
+  BlobDecodeBeast: (location: LocationValue, _platformDef: PlatformFunction[], type: EastTypeValue) => {
     const decodeBeast = decodeBeastFor(type);
     return (data: Uint8Array) => {
       try {
@@ -1460,14 +1495,14 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       }
     }
   },
-  BlobEncodeBeast2: (_location: LocationValue, type: EastTypeValue) => {
+  BlobEncodeBeast2: (_location: LocationValue, _platformDef: PlatformFunction[], type: EastTypeValue) => {
     const encodeBeast2 = encodeBeast2For(type);
     return (value: any) => {
       return encodeBeast2(value);
     }
   },
-  BlobDecodeBeast2: (location: LocationValue, type: EastTypeValue) => {
-    const decodeBeast2 = decodeBeast2For(type);
+  BlobDecodeBeast2: (location: LocationValue, platformDef: PlatformFunction[], type: EastTypeValue) => {
+    const decodeBeast2 = decodeBeast2For(type, { platform: platformDef });
     return (data: Uint8Array) => {
       try {
         return decodeBeast2(data);
@@ -1476,7 +1511,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       }
     }
   },
-  BlobDecodeCsv: (location: LocationValue, structType: EastTypeValue, _configType: EastTypeValue) => {
+  BlobDecodeCsv: (location: LocationValue, _platformDef: PlatformFunction[], structType: EastTypeValue, _configType: EastTypeValue) => {
     return (data: Uint8Array, config: any) => {
       try {
         const decoder = decodeCsvFor(structType, config);
@@ -1486,7 +1521,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       }
     }
   },
-  ArrayEncodeCsv: (location: LocationValue, structType: EastTypeValue, _configType: EastTypeValue) => {
+  ArrayEncodeCsv: (location: LocationValue, _platformDef: PlatformFunction[], structType: EastTypeValue, _configType: EastTypeValue) => {
     return (data: any[], config: any) => {
       try {
         const encoder = encodeCsvFor(structType, config);
@@ -1497,17 +1532,17 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
     }
   },
 
-  RefGet: (_location: LocationValue, _T: EastTypeValue) => (ref: ref<any>) => {
+  RefGet: (_location: LocationValue, _platformDef: PlatformFunction[], _T: EastTypeValue) => (ref: ref<any>) => {
     return ref.value;
   },
-  RefUpdate: (location: LocationValue, _T: EastTypeValue) => (ref: ref<any>, value: any) => {
+  RefUpdate: (location: LocationValue, _platformDef: PlatformFunction[], _T: EastTypeValue) => (ref: ref<any>, value: any) => {
     if (Object.isFrozen(ref)) {
       throw new EastError("Cannot modify frozen Ref", { location });
     }
     ref.value = value;
     return null;
   },
-  RefMerge: (location: LocationValue, _T: EastTypeValue) => (ref: ref<any>, value: any, merger: (existing: any, value: any) => any) => {
+  RefMerge: (location: LocationValue, _platformDef: PlatformFunction[], _T: EastTypeValue) => (ref: ref<any>, value: any, merger: (existing: any, value: any) => any) => {
     if (Object.isFrozen(ref)) {
       throw new EastError("Cannot modify frozen Ref", { location });
     }
@@ -1516,7 +1551,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
     return null;
   },
   
-  ArrayGenerate: (location: LocationValue, _T: EastTypeValue) => (size: bigint, f: (i: bigint) => any) => {
+  ArrayGenerate: (location: LocationValue, _platformDef: PlatformFunction[], _T: EastTypeValue) => (size: bigint, f: (i: bigint) => any) => {
     const result: any[] = [];
     for (let i = 0n; i < size; i += 1n) {
       const v = call_function(location, f, i);
@@ -1553,12 +1588,12 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
     }
     return result;
   },
-  ArraySize: (_location: LocationValue, _T: EastTypeValue) => (array: any[]) => BigInt(array.length),
-  ArrayHas: (_location: LocationValue, _T: EastTypeValue) => (array: any[], key: bigint) => {
+  ArraySize: (_location: LocationValue, _platformDef: PlatformFunction[], _T: EastTypeValue) => (array: any[]) => BigInt(array.length),
+  ArrayHas: (_location: LocationValue, _platformDef: PlatformFunction[], _T: EastTypeValue) => (array: any[], key: bigint) => {
     const i = Number(key);
     return i >= 0 && i < array.length;
   },
-  ArrayGet: (location: LocationValue, _T: EastTypeValue) => (array: any[], key: bigint) => {
+  ArrayGet: (location: LocationValue, _platformDef: PlatformFunction[], _T: EastTypeValue) => (array: any[], key: bigint) => {
     const i = Number(key);
     if (i < 0 || i >= array.length) {
       throw new EastError(`Array index ${key} out of bounds`, { location });
@@ -1566,7 +1601,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       return array[i];
     }
   },
-  ArrayGetOrDefault: (location: LocationValue, _T: EastTypeValue) => (array: any[], key: bigint, defaultFn: (key: bigint) => any) => {
+  ArrayGetOrDefault: (location: LocationValue, _platformDef: PlatformFunction[], _T: EastTypeValue) => (array: any[], key: bigint, defaultFn: (key: bigint) => any) => {
     const i = Number(key);
     if (i < 0 || i >= array.length) {
       return call_function(location, defaultFn, key);
@@ -1574,7 +1609,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       return array[i];
     }
   },
-  ArrayTryGet: (_location: LocationValue, _T: EastTypeValue) => (array: any[], key: bigint) => {
+  ArrayTryGet: (_location: LocationValue, _platformDef: PlatformFunction[], _T: EastTypeValue) => (array: any[], key: bigint) => {
     const i = Number(key);
     if (i < 0 || i >= array.length) {
       return variant("none", null);
@@ -1582,7 +1617,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       return variant("some", array[i]);
     }
   },
-  ArrayUpdate: (location: LocationValue, _T: EastTypeValue) => (array: any[], key: bigint, value: any) => {
+  ArrayUpdate: (location: LocationValue, _platformDef: PlatformFunction[], _T: EastTypeValue) => (array: any[], key: bigint, value: any) => {
     if (Object.isFrozen(array)) {
       throw new EastError("Cannot modify frozen Array", { location });
     }
@@ -1594,7 +1629,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       return null;
     }
   },
-  ArrayMerge: (location: LocationValue, _T: EastTypeValue) => (array: any[], key: bigint, value: any, merger: (existing: any, value: any, key: bigint) => any) => {
+  ArrayMerge: (location: LocationValue, _platformDef: PlatformFunction[], _T: EastTypeValue) => (array: any[], key: bigint, value: any, merger: (existing: any, value: any, key: bigint) => any) => {
     if (Object.isFrozen(array)) {
       throw new EastError("Cannot modify frozen Array", { location });
     }
@@ -1607,7 +1642,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       return null;
     }
   },
-  ArrayPushLast: (location: LocationValue, _T: EastTypeValue) => (array: any[], value: any) => {
+  ArrayPushLast: (location: LocationValue, _platformDef: PlatformFunction[], _T: EastTypeValue) => (array: any[], value: any) => {
     if (Object.isFrozen(array)) {
       throw new EastError("Cannot modify frozen Array", { location });
     }
@@ -1617,7 +1652,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
     array.push(value);
     return null;
   },
-  ArrayPopLast: (location: LocationValue, _T: EastTypeValue) => (array: any[]) => {
+  ArrayPopLast: (location: LocationValue, _platformDef: PlatformFunction[], _T: EastTypeValue) => (array: any[]) => {
     if (Object.isFrozen(array)) {
       throw new EastError("Cannot modify frozen Array", { location });
     }
@@ -1630,7 +1665,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       return array.pop();
     }
   },
-  ArrayPushFirst: (location: LocationValue, _T: EastTypeValue) => (array: any[], value: any) => {
+  ArrayPushFirst: (location: LocationValue, _platformDef: PlatformFunction[], _T: EastTypeValue) => (array: any[], value: any) => {
     if (Object.isFrozen(array)) {
       throw new EastError("Cannot modify frozen Array", { location });
     }
@@ -1640,7 +1675,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
     array.unshift(value);
     return null;
   },
-  ArrayPopFirst: (location: LocationValue, _T: EastTypeValue) => (array: any[]) => {
+  ArrayPopFirst: (location: LocationValue, _platformDef: PlatformFunction[], _T: EastTypeValue) => (array: any[]) => {
     if (Object.isFrozen(array)) {
       throw new EastError("Cannot modify frozen Array", { location });
     }
@@ -1653,7 +1688,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       return array.shift();
     }
   },
-  ArrayAppend: (location: LocationValue, _T: EastTypeValue) => (array: any[], other: any[]) => {
+  ArrayAppend: (location: LocationValue, _platformDef: PlatformFunction[], _T: EastTypeValue) => (array: any[], other: any[]) => {
     if (Object.isFrozen(array)) {
       throw new EastError("Cannot modify frozen Array", { location });
     }
@@ -1663,7 +1698,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
     array.push(...other);
     return null;
   },
-  ArrayPrepend: (location: LocationValue, _T: EastTypeValue) => (array: any[], other: any[]) => {
+  ArrayPrepend: (location: LocationValue, _platformDef: PlatformFunction[], _T: EastTypeValue) => (array: any[], other: any[]) => {
     if (Object.isFrozen(array)) {
       throw new EastError("Cannot modify frozen Array", { location });
     }
@@ -1673,7 +1708,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
     array.unshift(...other);
     return null;
   },
-  ArrayMergeAll: (location: LocationValue, _T: EastTypeValue, _T2: EastTypeValue) => (array: any[], other: any[], merger: (v1: any, v2: any, key: bigint) => any) => {
+  ArrayMergeAll: (location: LocationValue, _platformDef: PlatformFunction[], _T: EastTypeValue, _T2: EastTypeValue) => (array: any[], other: any[], merger: (v1: any, v2: any, key: bigint) => any) => {
     if (Object.isFrozen(array)) {
       throw new EastError("Cannot modify frozen Array", { location });
     }
@@ -1695,7 +1730,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
     }
     return null;
   },
-  ArrayClear: (location: LocationValue, _T: EastTypeValue) => (array: any[]) => {
+  ArrayClear: (location: LocationValue, _platformDef: PlatformFunction[], _T: EastTypeValue) => (array: any[]) => {
     if (Object.isFrozen(array)) {
       throw new EastError("Cannot modify frozen Array", { location });
     }
@@ -1705,7 +1740,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
     array.length = 0;
     return null;
   },
-  ArraySortInPlace: (location: LocationValue, T: EastTypeValue, T2: EastTypeValue) => (array: any[], by: (a: any) => any) => {
+  ArraySortInPlace: (location: LocationValue, _platformDef: PlatformFunction[], T: EastTypeValue, T2: EastTypeValue) => (array: any[], by: (a: any) => any) => {
     if (Object.isFrozen(array)) {
       throw new EastError("Cannot modify frozen Array", { location });
     }
@@ -1725,7 +1760,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
     }
     return null;
   },
-  ArrayReverseInPlace: (location: LocationValue, _T: EastTypeValue) => (array: any[]) => {
+  ArrayReverseInPlace: (location: LocationValue, _platformDef: PlatformFunction[], _T: EastTypeValue) => (array: any[]) => {
     if (Object.isFrozen(array)) {
       throw new EastError("Cannot modify frozen Array", { location });
     }
@@ -1735,7 +1770,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
     array.reverse();
     return null;
   },
-  ArraySort: (location: LocationValue, T: EastTypeValue, T2: EastTypeValue) => (array: any[], by: (a: any) => any) => {
+  ArraySort: (location: LocationValue, _platformDef: PlatformFunction[], T: EastTypeValue, T2: EastTypeValue) => (array: any[], by: (a: any) => any) => {
     const cmp = compareFor(T2);
     const newArray = [...array];
     newArray.sort((a, b) => {
@@ -1745,12 +1780,12 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
     });
     return newArray;
   },
-  ArrayReverse: (_location: LocationValue, _T: EastTypeValue) => (array: any[]) => {
+  ArrayReverse: (_location: LocationValue, _platformDef: PlatformFunction[], _T: EastTypeValue) => (array: any[]) => {
     const newArray = [...array];
     newArray.reverse();
     return newArray;
   },
-  ArrayIsSorted: (location: LocationValue, T: EastTypeValue, T2: EastTypeValue) => {
+  ArrayIsSorted: (location: LocationValue, _platformDef: PlatformFunction[], T: EastTypeValue, T2: EastTypeValue) => {
     const cmp = compareFor(T2);
     return (array: any[], by: (a: any) => any) => {
       if (array.length < 2) return true;
@@ -1774,7 +1809,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       return true;
     };
   },
-  ArrayFindSortedFirst: (location: LocationValue, T: EastTypeValue, T2: EastTypeValue) => {
+  ArrayFindSortedFirst: (location: LocationValue, _platformDef: PlatformFunction[], T: EastTypeValue, T2: EastTypeValue) => {
     const cmp = compareFor(T2);
     return (array: any[], key: any, by: (a: any) => any) => {
       let low = 0;
@@ -1799,7 +1834,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       return BigInt(low);
     };
   },
-  ArrayFindSortedLast: (location: LocationValue, T: EastTypeValue, T2: EastTypeValue) => {
+  ArrayFindSortedLast: (location: LocationValue, _platformDef: PlatformFunction[], T: EastTypeValue, T2: EastTypeValue) => {
     const cmp = compareFor(T2);
     return (array: any[], key: any, by: (a: any) => any) => {
       let low = 0;
@@ -1824,7 +1859,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       return BigInt(low);
     };
   },
-  ArrayFindSortedRange: (location: LocationValue, T: EastTypeValue, T2: EastTypeValue) => {
+  ArrayFindSortedRange: (location: LocationValue, _platformDef: PlatformFunction[], T: EastTypeValue, T2: EastTypeValue) => {
     const cmp = compareFor(T2);
     return (array: any[], key: any, by: (a: any) => any) => {
       let lo = -1;
@@ -1887,7 +1922,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       return { start: BigInt(lo + 1), end: BigInt(lo + 1) };
     };
   },
-  ArrayFindFirst: (location: LocationValue, T: EastTypeValue, T2: EastTypeValue) => {
+  ArrayFindFirst: (location: LocationValue, _platformDef: PlatformFunction[], T: EastTypeValue, T2: EastTypeValue) => {
     const cmp = compareFor(T2);
     return (array: any[], value: any, by: (a: any) => any) => {
       lockForIteration(array);
@@ -1904,15 +1939,15 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       }
     };
   },
-  ArrayConcat: (_location: LocationValue, _T: EastTypeValue) => (a1: any[], a2: any[]) => {
+  ArrayConcat: (_location: LocationValue, _platformDef: PlatformFunction[], _T: EastTypeValue) => (a1: any[], a2: any[]) => {
     return [...a1, ...a2];
   },
-  ArraySlice: (_location: LocationValue, _T: EastTypeValue) => (array: any[], start: bigint, end: bigint) => {
+  ArraySlice: (_location: LocationValue, _platformDef: PlatformFunction[], _T: EastTypeValue) => (array: any[], start: bigint, end: bigint) => {
     const startNum = Number(start);
     const endNum = Number(end);
     return array.slice(startNum, endNum);
   },
-  ArrayGetKeys: (location: LocationValue, _T: EastTypeValue) => (array: any[], keys: bigint[], onMissing: (key: bigint) => any) => {
+  ArrayGetKeys: (location: LocationValue, _platformDef: PlatformFunction[], _T: EastTypeValue) => (array: any[], keys: bigint[], onMissing: (key: bigint) => any) => {
     return keys.map(k => {
       const i = Number(k);
       if (i < 0 || i >= array.length) {
@@ -1922,7 +1957,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       }
     });
   },
-  ArrayForEach: (location: LocationValue, _T: EastTypeValue, _T2) => (array: any[], f: (x: any, i: bigint) => any) => {
+  ArrayForEach: (location: LocationValue, _platformDef: PlatformFunction[], _T: EastTypeValue, _T2: EastTypeValue) => (array: any[], f: (x: any, i: bigint) => any) => {
     lockForIteration(array);
     try {
       array.forEach((x, i) => {
@@ -1933,10 +1968,10 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       unlockForIteration(array);
     }
   },
-  ArrayCopy: (_location: LocationValue, _T: EastTypeValue) => (array: any[]) => {
+  ArrayCopy: (_location: LocationValue, _platformDef: PlatformFunction[], _T: EastTypeValue) => (array: any[]) => {
     return [...array];
   },
-  ArrayMap: (location: LocationValue, _T: EastTypeValue, _T2: EastTypeValue) => (array: any[], f: (x: any, i: bigint) => any) => {
+  ArrayMap: (location: LocationValue, _platformDef: PlatformFunction[], _T: EastTypeValue, _T2: EastTypeValue) => (array: any[], f: (x: any, i: bigint) => any) => {
     lockForIteration(array);
     try {
       return array.map((x, i) => {
@@ -1946,7 +1981,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       unlockForIteration(array);
     }
   },
-  ArrayFilter: (location: LocationValue, _T: EastTypeValue, _T2: EastTypeValue) => (array: any[], f: (x: any, i: bigint) => any) => {
+  ArrayFilter: (location: LocationValue, _platformDef: PlatformFunction[], _T: EastTypeValue, _T2: EastTypeValue) => (array: any[], f: (x: any, i: bigint) => any) => {
     lockForIteration(array);
     try {
       return array.filter((x, i) => {
@@ -1956,7 +1991,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       unlockForIteration(array);
     }
   },
-  ArrayFilterMap: (location: LocationValue, _T: EastTypeValue, _T2: EastTypeValue) => (array: any[], f: (x: any, i: bigint) => any) => {
+  ArrayFilterMap: (location: LocationValue, _platformDef: PlatformFunction[], _T: EastTypeValue, _T2: EastTypeValue) => (array: any[], f: (x: any, i: bigint) => any) => {
     lockForIteration(array);
     try {
       const result: any[] = [];
@@ -1971,7 +2006,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       unlockForIteration(array);
     }
   },
-  ArrayFirstMap: (location: LocationValue, _T: EastTypeValue, _T2: EastTypeValue) => (array: any[], f: (x: any, i: bigint) => any) => {
+  ArrayFirstMap: (location: LocationValue, _platformDef: PlatformFunction[], _T: EastTypeValue, _T2: EastTypeValue) => (array: any[], f: (x: any, i: bigint) => any) => {
     lockForIteration(array);
     try {
       for (let i = 0; i < array.length; i++) {
@@ -1985,7 +2020,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       unlockForIteration(array);
     }
   },
-  ArrayFold: (location: LocationValue, _T: EastTypeValue, _T2: EastTypeValue) => (array: any[], init: any, f: (acc: any, x: any, i: bigint) => any) => {
+  ArrayFold: (location: LocationValue, _platformDef: PlatformFunction[], _T: EastTypeValue, _T2: EastTypeValue) => (array: any[], init: any, f: (acc: any, x: any, i: bigint) => any) => {
     lockForIteration(array);
     try {
       return array.reduce((acc, x, i) => {
@@ -1995,7 +2030,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       unlockForIteration(array);
     }
   },
-  ArrayMapReduce: (location: LocationValue, _T: EastTypeValue, _T2: EastTypeValue) => (array: any[], mapFn: (x: any, i: bigint) => any, reduceFn: (x: any, y:any) => any) => {
+  ArrayMapReduce: (location: LocationValue, _platformDef: PlatformFunction[], _T: EastTypeValue, _T2: EastTypeValue) => (array: any[], mapFn: (x: any, i: bigint) => any, reduceFn: (x: any, y:any) => any) => {
     if (array.length === 0) {
       throw new EastError("Cannot reduce empty array with no initial value", { location });
     }
@@ -2011,8 +2046,8 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       unlockForIteration(array);
     }
   },
-  ArrayStringJoin: (_location: LocationValue) => (x: string[], y:string) => x.join(y),
-  ArrayToSet: (location: LocationValue, _T: EastTypeValue, T2: EastTypeValue) => {
+  ArrayStringJoin: (_location: LocationValue, _platformDef: PlatformFunction[]) => (x: string[], y:string) => x.join(y),
+  ArrayToSet: (location: LocationValue, _platformDef: PlatformFunction[], _T: EastTypeValue, T2: EastTypeValue) => {
     const compare = compareFor(T2);
     return (array: any[], f: (x: any, i: bigint) => any) => {
       lockForIteration(array);
@@ -2028,7 +2063,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       }
     }
   },
-  ArrayToDict: (location: LocationValue, _T: EastTypeValue, K2: EastTypeValue, _T2: EastTypeValue) => {
+  ArrayToDict: (location: LocationValue, _platformDef: PlatformFunction[], _T: EastTypeValue, K2: EastTypeValue, _T2: EastTypeValue) => {
     const compare = compareFor(K2);
     return (array: any[], keyFn: (v: any, i: bigint) => any, valueFn: (v: any, i: bigint) => any, onConflict: (v1: any, v2: any, k: any) => null) => {
       const result = new SortedMap([], compare);
@@ -2052,12 +2087,12 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       }
     }
   },
-  ArrayFlattenToArray: (location: LocationValue, _T: EastTypeValue) => (array: any[], fn: (value: any) => any[]) => {
+  ArrayFlattenToArray: (location: LocationValue, _platformDef: PlatformFunction[], _T: EastTypeValue) => (array: any[], fn: (value: any) => any[]) => {
     return array.flatMap(v => {
       return call_function(location, fn, v);
     });
   },
-  ArrayFlattenToSet: (location: LocationValue, _T: EastTypeValue, K2: EastTypeValue) => {
+  ArrayFlattenToSet: (location: LocationValue, _platformDef: PlatformFunction[], _T: EastTypeValue, K2: EastTypeValue) => {
     const compare = compareFor(K2);
     return (array: any[], fn: (value: any) => any[]) => {
       const result = new SortedSet([], compare);
@@ -2075,7 +2110,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       }
     }
   },
-  ArrayFlattenToDict: (location: LocationValue, _T: EastTypeValue, K2: EastTypeValue, _T2: EastTypeValue) => {
+  ArrayFlattenToDict: (location: LocationValue, _platformDef: PlatformFunction[], _T: EastTypeValue, K2: EastTypeValue, _T2: EastTypeValue) => {
     const compare = compareFor(K2);
     return (array: any[], fn: (value: any) => any[], onConflict: (v1: any, v2: any, k: any) => null) => {
       const result = new SortedMap([], compare);
@@ -2099,7 +2134,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       }
     }
   },
-  ArrayGroupFold: (location: LocationValue, _T: EastTypeValue, K2: EastTypeValue, _V2: EastTypeValue) => {
+  ArrayGroupFold: (location: LocationValue, _platformDef: PlatformFunction[], _T: EastTypeValue, K2: EastTypeValue, _V2: EastTypeValue) => {
     const compare = compareFor(K2);
     return (array: any[], keyFn: (v: any, i: bigint) => any, init: (k: any) => any, folder: (acc: any, v: any, i: bigint) => any) => {
       const result = new SortedMap([], compare);
@@ -2122,7 +2157,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
     }
   },
 
-  SetGenerate: (location: LocationValue, K: EastTypeValue) => {
+  SetGenerate: (location: LocationValue, _platformDef: PlatformFunction[], K: EastTypeValue) => {
     const keyComparer = compareFor(K);
     return (size: bigint, keyFn: (i: bigint) => any, onConflict: (key: any) => null) => {
       const result = new SortedSet([], keyComparer);
@@ -2137,9 +2172,9 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       return result;
     }
   },
-  SetSize: (_location: LocationValue, _K: EastTypeValue) => (s: Set<any>) => BigInt(s.size),
-  SetHas: (_location: LocationValue, _K: EastTypeValue) => (s: Set<any>, key: any) => s.has(key),
-  SetInsert: (location: LocationValue, K: EastTypeValue) => {
+  SetSize: (_location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue) => (s: Set<any>) => BigInt(s.size),
+  SetHas: (_location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue) => (s: Set<any>, key: any) => s.has(key),
+  SetInsert: (location: LocationValue, _platformDef: PlatformFunction[], K: EastTypeValue) => {
     const print = printFor(K);
     return (s: Set<any>, key: any) => {
       if (Object.isFrozen(s)) {
@@ -2156,7 +2191,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       return null;
     }
   },
-  SetTryInsert: (location: LocationValue, _K: EastTypeValue) => (s: Set<any>, key: any) => {
+  SetTryInsert: (location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue) => (s: Set<any>, key: any) => {
     if (Object.isFrozen(s)) {
       throw new EastError("Cannot modify frozen Set", { location });
     }
@@ -2167,7 +2202,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
     s.add(key);
     return s.size > size_before;
   },
-  SetDelete: (location: LocationValue, K: EastTypeValue) => {
+  SetDelete: (location: LocationValue, _platformDef: PlatformFunction[], K: EastTypeValue) => {
     const print = printFor(K);
     return (s: Set<any>, key: any) => {
       if (Object.isFrozen(s)) {
@@ -2182,7 +2217,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       return null;
     }
   },
-  SetTryDelete: (location: LocationValue, _K: EastTypeValue) => (s: Set<any>, key: any) => {
+  SetTryDelete: (location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue) => (s: Set<any>, key: any) => {
     if (Object.isFrozen(s)) {
       throw new EastError("Cannot modify frozen Set", { location });
     }
@@ -2191,7 +2226,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
     }
     return s.delete(key);
   },
-  SetClear: (location: LocationValue, _K: EastTypeValue) => (s: Set<any>) => {
+  SetClear: (location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue) => (s: Set<any>) => {
     if (Object.isFrozen(s)) {
       throw new EastError("Cannot modify frozen Set", { location });
     }
@@ -2201,7 +2236,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
     s.clear();
     return null
   },
-  SetUnionInPlace: (location: LocationValue, _K: EastTypeValue) => (s1: Set<any>, s2: Set<any>) => {
+  SetUnionInPlace: (location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue) => (s1: Set<any>, s2: Set<any>) => {
     if (Object.isFrozen(s1)) {
       throw new EastError("Cannot modify frozen Set", { location });
     }
@@ -2211,19 +2246,19 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
     s2.forEach(v => s1.add(v));
     return null;
   },
-  SetUnion: (_location: LocationValue, _K: EastTypeValue) => (s1: Set<any>, s2: Set<any>) => s1.union(s2),
-  SetIntersect: (_location: LocationValue, _K: EastTypeValue) => (s1: Set<any>, s2: Set<any>) => s1.intersection(s2),
-  SetDiff: (_location: LocationValue, _K: EastTypeValue) => (s1: Set<any>, s2: Set<any>) => s1.difference(s2),
-  SetSymDiff: (_location: LocationValue, _K: EastTypeValue) => (s1: Set<any>, s2: Set<any>) => s1.symmetricDifference(s2),
-  SetIsSubset: (_location: LocationValue, _K: EastTypeValue) => (s1: Set<any>, s2: Set<any>) => s1.isSubsetOf(s2),
-  SetIsDisjoint: (_location: LocationValue, _K: EastTypeValue) => (s1: Set<any>, s2: Set<any>) => s1.isDisjointFrom(s2),
-  SetCopy: (_location: LocationValue, K: EastTypeValue) => {
+  SetUnion: (_location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue) => (s1: Set<any>, s2: Set<any>) => s1.union(s2),
+  SetIntersect: (_location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue) => (s1: Set<any>, s2: Set<any>) => s1.intersection(s2),
+  SetDiff: (_location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue) => (s1: Set<any>, s2: Set<any>) => s1.difference(s2),
+  SetSymDiff: (_location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue) => (s1: Set<any>, s2: Set<any>) => s1.symmetricDifference(s2),
+  SetIsSubset: (_location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue) => (s1: Set<any>, s2: Set<any>) => s1.isSubsetOf(s2),
+  SetIsDisjoint: (_location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue) => (s1: Set<any>, s2: Set<any>) => s1.isDisjointFrom(s2),
+  SetCopy: (_location: LocationValue, _platformDef: PlatformFunction[], K: EastTypeValue) => {
     const compare = compareFor(K);
     return (s: SortedSet<any>) => {
       return new SortedSet([...s], compare);
     }
   },
-  SetForEach: (location: LocationValue, _K: EastTypeValue, _T2) => (s: Set<any>, f: (x: any) => any) => {
+  SetForEach: (location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue, _T2: EastTypeValue) => (s: Set<any>, f: (x: any) => any) => {
     lockForIteration(s);
     try {
       s.forEach(x => {
@@ -2234,7 +2269,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       unlockForIteration(s);
     }
   },
-  SetFilter: (location: LocationValue, K: EastTypeValue) => {
+  SetFilter: (location: LocationValue, _platformDef: PlatformFunction[], K: EastTypeValue) => {
     const compare = compareFor(K);
     return (s: SortedSet<any>, f: (x: any) => any) => {
       const result = new SortedSet([], compare);
@@ -2252,7 +2287,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       }
     }
   },
-  SetFilterMap: (location: LocationValue, K: EastTypeValue, _V2: EastTypeValue) => {
+  SetFilterMap: (location: LocationValue, _platformDef: PlatformFunction[], K: EastTypeValue, _V2: EastTypeValue) => {
     const compare = compareFor(K);
     return (s: SortedSet<any>, f: (k: any) => option<any>) => {
       const result = new SortedMap([], compare);
@@ -2270,7 +2305,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       }
     }
   },
-  SetFirstMap: (location: LocationValue, _K: EastTypeValue, _T2: EastTypeValue) => (s: SortedSet<any>, f: (k: any) => any) => {
+  SetFirstMap: (location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue, _T2: EastTypeValue) => (s: SortedSet<any>, f: (k: any) => any) => {
     lockForIteration(s);
     try {
       for (const k of s) {
@@ -2284,7 +2319,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       unlockForIteration(s);
     }
   },
-  SetMapReduce: (location: LocationValue, _K: EastTypeValue, _T2: EastTypeValue) => (s: SortedSet<any>, mapFn: (k: any) => any, reduceFn: (x: any, y: any) => any) => {
+  SetMapReduce: (location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue, _T2: EastTypeValue) => (s: SortedSet<any>, mapFn: (k: any) => any, reduceFn: (x: any, y: any) => any) => {
     if (s.size === 0) {
       throw new EastError("Cannot reduce empty set with no initial value", { location });
     }
@@ -2302,7 +2337,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       unlockForIteration(s);
     }
   },
-  SetMap: (location: LocationValue, K: EastTypeValue, _T2: EastTypeValue) => {
+  SetMap: (location: LocationValue, _platformDef: PlatformFunction[], K: EastTypeValue, _T2: EastTypeValue) => {
     const compare = compareFor(K);
     return (s: SortedSet<any>, f: (x: any) => any) => {
       const result = new SortedMap([], compare);
@@ -2318,7 +2353,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       }
     }
   },
-  SetReduce: (location: LocationValue, _K: EastTypeValue, _T2: EastTypeValue) => (s: Set<any>, f: (acc: any, x: any) => any, init: any) => {
+  SetReduce: (location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue, _T2: EastTypeValue) => (s: Set<any>, f: (acc: any, x: any) => any, init: any) => {
     let acc = init;
     lockForIteration(s);
     try {
@@ -2330,7 +2365,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       unlockForIteration(s);
     }
   },
-  SetToArray: (location: LocationValue, _K: EastTypeValue, _T2: EastTypeValue) => (s: Set<any>, valueFn: (key: any) => any) => {
+  SetToArray: (location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue, _T2: EastTypeValue) => (s: Set<any>, valueFn: (key: any) => any) => {
     const ret = [];
     lockForIteration(s);
     try {
@@ -2343,7 +2378,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       unlockForIteration(s);
     }
   },
-  SetToSet: (location: LocationValue, K: EastTypeValue, K2: EastTypeValue) => {
+  SetToSet: (location: LocationValue, _platformDef: PlatformFunction[], K: EastTypeValue, K2: EastTypeValue) => {
     const compare = compareFor(K2);
     return (s: SortedSet<any>, f: (x: any) => any) => {
       const result = new SortedSet([], compare);
@@ -2359,7 +2394,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       }
     }
   },
-  SetToDict: (location: LocationValue, K: EastTypeValue, K2: EastTypeValue, _V2: EastTypeValue) => {
+  SetToDict: (location: LocationValue, _platformDef: PlatformFunction[], K: EastTypeValue, K2: EastTypeValue, _V2: EastTypeValue) => {
     const compare = compareFor(K2);
     return (s: Set<any>, keyFn: (key: any) => any, valueFn: (key: any) => any, onConflict: (v1: any, v2: any, k: any) => null) => {
       const result = new SortedMap([], compare);
@@ -2382,7 +2417,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       }
     }
   },
-  SetFlattenToArray: (location: LocationValue, _K: EastTypeValue, _T2: EastTypeValue) => (s: Set<any>, fn: (value: any) => any[]) => {
+  SetFlattenToArray: (location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue, _T2: EastTypeValue) => (s: Set<any>, fn: (value: any) => any[]) => {
     const ret = [];
     lockForIteration(s);
     try {
@@ -2395,7 +2430,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       unlockForIteration(s);
     }
   },
-  SetFlattenToSet: (location: LocationValue, _K: EastTypeValue, K2: EastTypeValue) => {
+  SetFlattenToSet: (location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue, K2: EastTypeValue) => {
     const compare = compareFor(K2);
     return (s: Set<any>, fn: (value: any) => any[]) => {
       const result = new SortedSet([], compare);
@@ -2413,7 +2448,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       }
     }
   },
-  SetFlattenToDict: (location: LocationValue, _K: EastTypeValue, K2: EastTypeValue, _V2: EastTypeValue) => {
+  SetFlattenToDict: (location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue, K2: EastTypeValue, _V2: EastTypeValue) => {
     const compare = compareFor(K2);
     return (s: Set<any>, fn: (value: any) => any[], onConflict: (v1: any, v2: any, k: any) => null) => {
       const result = new SortedMap([], compare);
@@ -2437,7 +2472,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       }
     }
   },
-  SetGroupFold: (location: LocationValue, _K: EastTypeValue, K2: EastTypeValue, _T2: EastTypeValue) => {
+  SetGroupFold: (location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue, K2: EastTypeValue, _T2: EastTypeValue) => {
     const compare = compareFor(K2);
     return (s: Set<any>, keyFn: (k: any) => any, init: (k2: any) => any, folder: (acc: any, k: any) => any) => {
       const result = new SortedMap([], compare);
@@ -2459,7 +2494,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
     }
   },
 
-  DictGenerate: (location: LocationValue, K: EastTypeValue, _V: EastTypeValue) => {
+  DictGenerate: (location: LocationValue, _platformDef: PlatformFunction[], K: EastTypeValue, _V: EastTypeValue) => {
     const keyComparer = compareFor(K);
     return (size: bigint, keyFn: (i: bigint) => any, valueFn: (i: bigint) => any, onConflict: (v1: any, v2: any, key: any) => any) => {
       const result = new SortedMap([], keyComparer);
@@ -2477,9 +2512,9 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       return result;
     }
   },
-  DictSize: (_location: LocationValue, _K: EastTypeValue, _V: EastTypeValue) => (d: Map<any, any>) => BigInt(d.size),
-  DictHas: (_location: LocationValue, _K: EastTypeValue, _V: EastTypeValue) => (d: Map<any, any>, key: any) => d.has(key),
-  DictGet: (location: LocationValue, K: EastTypeValue, _V: EastTypeValue) => {
+  DictSize: (_location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue, _V: EastTypeValue) => (d: Map<any, any>) => BigInt(d.size),
+  DictHas: (_location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue, _V: EastTypeValue) => (d: Map<any, any>, key: any) => d.has(key),
+  DictGet: (location: LocationValue, _platformDef: PlatformFunction[], K: EastTypeValue, _V: EastTypeValue) => {
     const print = printFor(K);
     return (d: Map<any, any>, key: any) => {
       const result = d.get(key);
@@ -2490,7 +2525,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       }
     }
   },
-  DictGetOrDefault: (location: LocationValue, _K: EastTypeValue, _V: EastTypeValue) => (d: Map<any, any>, key: any, onMissingFn: (key: any) => any) => {
+  DictGetOrDefault: (location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue, _V: EastTypeValue) => (d: Map<any, any>, key: any, onMissingFn: (key: any) => any) => {
     const result = d.get(key);
     if (result === undefined) {
       return call_function(location, onMissingFn, key);
@@ -2498,7 +2533,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       return result;
     }
   },
-  DictTryGet: (_location: LocationValue, _K: EastTypeValue, _V: EastTypeValue) => (d: Map<any, any>, key: any) => {
+  DictTryGet: (_location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue, _V: EastTypeValue) => (d: Map<any, any>, key: any) => {
     const result = d.get(key);
     if (result === undefined) {
       return variant("none", null);
@@ -2506,7 +2541,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       return variant("some", result);
     }
   },
-  DictInsert: (location: LocationValue, K: EastTypeValue, _V: EastTypeValue) => {
+  DictInsert: (location: LocationValue, _platformDef: PlatformFunction[], K: EastTypeValue, _V: EastTypeValue) => {
     const print = printFor(K);
     return (d: Map<any, any>, key: any, value: any) => {
       if (Object.isFrozen(d)) {
@@ -2524,7 +2559,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       return null;
     }
   },
-  DictGetOrInsert: (location: LocationValue, _K: EastTypeValue, _V: EastTypeValue) => (d: Map<any, any>, key: any, onMissing: (key: any) => any) => {
+  DictGetOrInsert: (location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue, _V: EastTypeValue) => (d: Map<any, any>, key: any, onMissing: (key: any) => any) => {
     if (Object.isFrozen(d)) {
       throw new EastError("Cannot modify frozen Dict", { location });
     }
@@ -2540,7 +2575,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       return existing;
     }
   },
-  DictInsertOrUpdate: (location: LocationValue, _K: EastTypeValue, _V: EastTypeValue) => (d: Map<any, any>, key: any, value: any, onConflictFn: (existing: any, newValue: any, key: any) => any) => {
+  DictInsertOrUpdate: (location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue, _V: EastTypeValue) => (d: Map<any, any>, key: any, value: any, onConflictFn: (existing: any, newValue: any, key: any) => any) => {
     if (Object.isFrozen(d)) {
       throw new EastError("Cannot modify frozen Dict", { location });
     }
@@ -2556,7 +2591,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
     }
     return null;
   },
-  DictUpdate: (location: LocationValue, K: EastTypeValue, _V: EastTypeValue) => {
+  DictUpdate: (location: LocationValue, _platformDef: PlatformFunction[], K: EastTypeValue, _V: EastTypeValue) => {
     const print = printFor(K);
     return (d: Map<any, any>, key: any, value: any) => {
       if (Object.isFrozen(d)) {
@@ -2570,7 +2605,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       }
     }
   },
-  DictSwap: (location: LocationValue, K: EastTypeValue, _V: EastTypeValue) => {
+  DictSwap: (location: LocationValue, _platformDef: PlatformFunction[], K: EastTypeValue, _V: EastTypeValue) => {
     const print = printFor(K);
     return (d: Map<any, any>, key: any, value: any) => {
       if (Object.isFrozen(d)) {
@@ -2584,7 +2619,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       return existing;
     };
   },
-  DictMerge: (location: LocationValue, _K: EastTypeValue, _V: EastTypeValue) => (d: Map<any, any>, key: any, value: any, mergeFn: (existing: any, value: any, key: any) => any, initialFn: (key: any) => any) => {
+  DictMerge: (location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue, _V: EastTypeValue) => (d: Map<any, any>, key: any, value: any, mergeFn: (existing: any, value: any, key: any) => any, initialFn: (key: any) => any) => {
     if (Object.isFrozen(d)) {
       throw new EastError("Cannot modify frozen Dict", { location });
     }
@@ -2599,7 +2634,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
     d.set(key, new_value);
     return null;
   },
-  DictDelete: (location: LocationValue, K: EastTypeValue, _V: EastTypeValue) => {
+  DictDelete: (location: LocationValue, _platformDef: PlatformFunction[], K: EastTypeValue, _V: EastTypeValue) => {
     const print = printFor(K);
     return (d: Map<any, any>, key: any) => {
       if (Object.isFrozen(d)) {
@@ -2615,7 +2650,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       return null;
     }
   },
-  DictTryDelete: (location: LocationValue, _K: EastTypeValue, _V: EastTypeValue) => (d: Map<any, any>, key: any) => {
+  DictTryDelete: (location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue, _V: EastTypeValue) => (d: Map<any, any>, key: any) => {
     if (Object.isFrozen(d)) {
       throw new EastError("Cannot modify frozen Dict", { location });
     }
@@ -2624,7 +2659,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
     }
     return d.delete(key);
   },
-  DictPop: (location: LocationValue, K: EastTypeValue, _V: EastTypeValue) => {
+  DictPop: (location: LocationValue, _platformDef: PlatformFunction[], K: EastTypeValue, _V: EastTypeValue) => {
     const print = printFor(K);
     return (d: Map<any, any>, key: any) => {
       if (Object.isFrozen(d)) {
@@ -2642,7 +2677,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       }
     };
   },
-  DictClear: (location: LocationValue, _K: EastTypeValue, _V: EastTypeValue) => (d: Map<any, any>) => {
+  DictClear: (location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue, _V: EastTypeValue) => (d: Map<any, any>) => {
     if (Object.isFrozen(d)) {
       throw new EastError("Cannot modify frozen Dict", { location });
     }
@@ -2652,7 +2687,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
     d.clear();
     return null;
   },
-  DictUnionInPlace: (location: LocationValue, _K: EastTypeValue, _V: EastTypeValue) => (d1: Map<any, any>, d2: Map<any, any>, onConflict: (v1: any, v2: any, key: any) => any) => {
+  DictUnionInPlace: (location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue, _V: EastTypeValue) => (d1: Map<any, any>, d2: Map<any, any>, onConflict: (v1: any, v2: any, key: any) => any) => {
     if (Object.isFrozen(d1)) {
       throw new EastError("Cannot modify frozen Dict", { location });
     }
@@ -2670,7 +2705,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
     });
     return null;
   },
-  DictMergeAll: (location: LocationValue, _K: EastTypeValue, _V: EastTypeValue) => (d1: SortedMap<any, any>, d2: SortedMap<any, any>, mergeFn: (v1: any, v2: any, key: any) => any, initialFn: (key: any) => any) => {
+  DictMergeAll: (location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue, _V: EastTypeValue) => (d1: SortedMap<any, any>, d2: SortedMap<any, any>, mergeFn: (v1: any, v2: any, key: any) => any, initialFn: (key: any) => any) => {
     if (Object.isFrozen(d1)) {
       throw new EastError("Cannot modify frozen Dict", { location });
     }
@@ -2687,13 +2722,13 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
     });
     return null;
   },
-  DictKeys: (_location: LocationValue, K: EastTypeValue, _V: EastTypeValue) => {
+  DictKeys: (_location: LocationValue, _platformDef: PlatformFunction[], K: EastTypeValue, _V: EastTypeValue) => {
     const compare = compareFor(K);
     return (d: Map<any, any>) => {
       return new SortedSet([...d.keys()], compare);
     }
   },
-  DictGetKeys: (location: LocationValue, K: EastTypeValue, _V: EastTypeValue) => {
+  DictGetKeys: (location: LocationValue, _platformDef: PlatformFunction[], K: EastTypeValue, _V: EastTypeValue) => {
     const compare = compareFor(K);
     return (d: SortedMap<any, any>, keys: SortedSet<any>, onMissing: (key: any) => any) => {
       const result = new SortedMap([], compare);
@@ -2709,7 +2744,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       return result;
     }
   },
-  DictForEach: (location: LocationValue, _K: EastTypeValue, _V: EastTypeValue, _T2) => (d: Map<any, any>, f: (k: any, v: any) => any) => {
+  DictForEach: (location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue, _V: EastTypeValue, _T2) => (d: Map<any, any>, f: (k: any, v: any) => any) => {
     lockForIteration(d);
     try {
       d.forEach((v, k) => {
@@ -2720,13 +2755,13 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       unlockForIteration(d);
     }
   },
-  DictCopy: (_location: LocationValue, K: EastTypeValue, _V: EastTypeValue) => {
+  DictCopy: (_location: LocationValue, _platformDef: PlatformFunction[], K: EastTypeValue, _V: EastTypeValue) => {
     const compare = compareFor(K);
     return (d: SortedMap<any, any>) => {
       return new SortedMap([...d], compare);
     }
   },
-  DictMap: (location: LocationValue, K: EastTypeValue, _V: EastTypeValue, _V2: EastTypeValue) => {
+  DictMap: (location: LocationValue, _platformDef: PlatformFunction[], K: EastTypeValue, _V: EastTypeValue, _V2: EastTypeValue) => {
     const compare = compareFor(K);
     return (d: SortedMap<any, any>, f: (v: any, k: any) => any) => {
       const result = new SortedMap([], compare);
@@ -2742,7 +2777,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       }
     }
   },
-  DictFilter: (location: LocationValue, K: EastTypeValue, _V: EastTypeValue) => {
+  DictFilter: (location: LocationValue, _platformDef: PlatformFunction[], K: EastTypeValue, _V: EastTypeValue) => {
     const compare = compareFor(K);
     return (d: SortedMap<any, any>, f: (v: any, k: any) => any) => {
       const result = new SortedMap([], compare);
@@ -2760,7 +2795,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       }
     }
   },
-  DictFilterMap: (location: LocationValue, K: EastTypeValue, _V: EastTypeValue, _V2: EastTypeValue) => {
+  DictFilterMap: (location: LocationValue, _platformDef: PlatformFunction[], K: EastTypeValue, _V: EastTypeValue, _V2: EastTypeValue) => {
     const compare = compareFor(K);
     return (d: SortedMap<any, any>, f: (v: any, k: any) => option<any>) => {
       const result = new SortedMap([], compare);
@@ -2778,7 +2813,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       }
     }
   },
-  DictFirstMap: (location: LocationValue, _K: EastTypeValue, _V: EastTypeValue, _T2: EastTypeValue) => (d: Map<any, any>, f: (v: any, k: any) => option<any>) => {
+  DictFirstMap: (location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue, _V: EastTypeValue, _T2: EastTypeValue) => (d: Map<any, any>, f: (v: any, k: any) => option<any>) => {
     lockForIteration(d);
     try {
       for (const [k, v] of d) {
@@ -2792,7 +2827,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       unlockForIteration(d);
     }
   },
-  DictMapReduce: (location: LocationValue, _K: EastTypeValue, _V: EastTypeValue, _T2: EastTypeValue) => (d: Map<any, any>, mapFn: (v: any, k: any) => any, reduceFn: (x: any, y: any) => any) => {
+  DictMapReduce: (location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue, _V: EastTypeValue, _T2: EastTypeValue) => (d: Map<any, any>, mapFn: (v: any, k: any) => any, reduceFn: (x: any, y: any) => any) => {
     if (d.size === 0) {
       throw new EastError("Cannot reduce empty dictionary with no initial value", { location });
     }
@@ -2810,7 +2845,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       unlockForIteration(d);
     }
   },
-  DictReduce: (location: LocationValue, _K: EastTypeValue, _V: EastTypeValue, _T2: EastTypeValue) => (d: Map<any, any>, f: (acc: any, v: any, k: any) => any, init: any) => {
+  DictReduce: (location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue, _V: EastTypeValue, _T2: EastTypeValue) => (d: Map<any, any>, f: (acc: any, v: any, k: any) => any, init: any) => {
     let acc = init;
     lockForIteration(d);
     try {
@@ -2822,7 +2857,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       unlockForIteration(d);
     }
   },
-  DictToArray: (location: LocationValue, _K: EastTypeValue, _V: EastTypeValue, _T2: EastTypeValue) => (d: Map<any, any>, valueFn: (v: any, k: any) => any) => {
+  DictToArray: (location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue, _V: EastTypeValue, _T2: EastTypeValue) => (d: Map<any, any>, valueFn: (v: any, k: any) => any) => {
     const ret = [];
     lockForIteration(d);
     try {
@@ -2835,7 +2870,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       unlockForIteration(d);
     }
   },
-  DictToSet: (location: LocationValue, _K: EastTypeValue, _V: EastTypeValue, K2: EastTypeValue) => {
+  DictToSet: (location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue, _V: EastTypeValue, K2: EastTypeValue) => {
     const compare = compareFor(K2);
     return (d: SortedMap<any, any>, fn: (v: any, k: any) => any) => {
       const result = new SortedSet([], compare);
@@ -2851,7 +2886,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       }
     }
   },
-  DictToDict: (location: LocationValue, K: EastTypeValue, _V: EastTypeValue, K2: EastTypeValue, _V2: EastTypeValue) => {
+  DictToDict: (location: LocationValue, _platformDef: PlatformFunction[], K: EastTypeValue, _V: EastTypeValue, K2: EastTypeValue, _V2: EastTypeValue) => {
     const compare = compareFor(K2);
     return (d: Map<any, any>, keyFn: (v: any, k: any) => any, valueFn: (v: any, k: any) => any, onConflict: (v1: any, v2: any, k: any) => any) => {
       const result = new SortedMap([], compare);
@@ -2874,7 +2909,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       }
     }
   },
-  DictFlattenToArray: (location: LocationValue, _K: EastTypeValue, _V: EastTypeValue, _T2: EastTypeValue) => (d: Map<any, any>, fn: (key: any, value: any) => any[]) => {
+  DictFlattenToArray: (location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue, _V: EastTypeValue, _T2: EastTypeValue) => (d: Map<any, any>, fn: (key: any, value: any) => any[]) => {
     const ret = [];
     lockForIteration(d);
     try {
@@ -2889,7 +2924,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       unlockForIteration(d);
     }
   },
-  DictFlattenToSet: (location: LocationValue, _K: EastTypeValue, _V: EastTypeValue, K2: EastTypeValue) => {
+  DictFlattenToSet: (location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue, _V: EastTypeValue, K2: EastTypeValue) => {
     const compare = compareFor(K2);
     return (d: Map<any, any>, fn: (key: any, value: any) => any[]) => {
       const result = new SortedSet([], compare);
@@ -2907,7 +2942,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       }
     }
   },
-  DictFlattenToDict: (location: LocationValue, _K: EastTypeValue, _V: EastTypeValue, K2: EastTypeValue, _V2: EastTypeValue) => {
+  DictFlattenToDict: (location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue, _V: EastTypeValue, K2: EastTypeValue, _V2: EastTypeValue) => {
     const compare = compareFor(K2);
     return (d: Map<any, any>, fn: (key: any, value: any) => any[], onConflict: (v1: any, v2: any, k: any) => null) => {
       const result = new SortedMap([], compare);
@@ -2931,7 +2966,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, ...arg_t
       }
     }
   },
-  DictGroupFold: (location: LocationValue, _K: EastTypeValue, _V: EastTypeValue, K2: EastTypeValue, _T2: EastTypeValue) => {
+  DictGroupFold: (location: LocationValue, _platformDef: PlatformFunction[], _K: EastTypeValue, _V: EastTypeValue, K2: EastTypeValue, _T2: EastTypeValue) => {
     const compare = compareFor(K2);
     return (d: Map<any, any>, keyFn: (v: any, k: any) => any, init: (k2: any) => any, folder: (acc: any, v: any, k: any) => any) => {
       const result = new SortedMap([], compare);

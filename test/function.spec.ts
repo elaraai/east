@@ -674,7 +674,7 @@ await describe("Function", (test) => {
 
         // Test that combiner works and returns correct type
         const branch1 = $.let(combiner(leaf1, leaf2), TreeType);
-        const branch2 = $.let(combiner(leaf3, leaf4), TreeType);
+        const _branch2 = $.let(combiner(leaf3, leaf4), TreeType);
 
         // Verify leaf values can be extracted
         const leafVal = $.let(0n);
@@ -682,20 +682,20 @@ await describe("Function", (test) => {
             leaf: ($, val) => {
                 $.assign(leafVal, val);
             },
-            branch: $ => {},
+            branch: _$ => {},
         });
         $(assert.equal(leafVal, 1n));
 
         // Verify branch structure - extract left leaf value
         const branchLeftVal = $.let(0n);
         $.match(branch1, {
-            leaf: $ => {},
+            leaf: _$ => {},
             branch: ($, b) => {
                 $.match(b.left, {
                     leaf: ($, val) => {
                         $.assign(branchLeftVal, val);
                     },
-                    branch: $ => {},
+                    branch: _$ => {},
                 });
             },
         });
@@ -705,7 +705,7 @@ await describe("Function", (test) => {
         // placeholderCombiner returns the first argument, so combine(leaf3, leaf4) returns leaf3
         const combinedTree = $.let(East.value(variant("leaf", 0n), TreeType), TreeType);
         $.match(branch1, {
-            leaf: $ => {},
+            leaf: _$ => {},
             branch: ($, b) => {
                 // Call the stored combine function
                 $.assign(combinedTree, b.combine(leaf3, leaf4));
@@ -717,7 +717,7 @@ await describe("Function", (test) => {
             leaf: ($, val) => {
                 $.assign(combinedVal, val);
             },
-            branch: $ => {},
+            branch: _$ => {},
         });
         $(assert.equal(combinedVal, 3n));
     });
@@ -856,7 +856,7 @@ await describe("Function", (test) => {
         const reversed = $.let(reverseList(list), ListType);
         const first = $.let(0n);
         $.match(reversed, {
-            nil: $ => {},
+            nil: _$ => {},
             cons: ($, node) => {
                 $.assign(first, node.head);
             },
@@ -880,5 +880,261 @@ await describe("Function", (test) => {
             return asyncDouble(doubled);
         });
         $(assert.equal(asyncQuadruple(5n), 20n));
+    });
+
+    // =========================================================================
+    // Function Serialization (BEAST2)
+    // =========================================================================
+
+    test("free function serialized to beast2 and deserialized can be called", $ => {
+        const FnType = FunctionType([IntegerType], IntegerType);
+
+        // Create a free function (no captures)
+        const addOne = East.function([IntegerType], IntegerType, ($, x) => {
+            return x.add(1n);
+        });
+
+        // Serialize to BEAST2
+        const blob = $.let(East.Blob.encodeBeast(addOne, 'v2'));
+
+        // Deserialize back to function
+        const decoded = $.let(blob.decodeBeast(FnType, 'v2'));
+
+        // Call the deserialized function
+        $(assert.equal(decoded(41n), 42n));
+        $(assert.equal(decoded(0n), 1n));
+        $(assert.equal(decoded(-1n), 0n));
+    });
+
+    test("free function with multiple params serialized and called", $ => {
+        const FnType = FunctionType([IntegerType, IntegerType], IntegerType);
+
+        const add = East.function([IntegerType, IntegerType], IntegerType, ($, a, b) => {
+            return a.add(b);
+        });
+
+        const blob = $.let(East.Blob.encodeBeast(add, 'v2'));
+        const decoded = $.let(blob.decodeBeast(FnType, 'v2'));
+
+        $(assert.equal(decoded(10n, 20n), 30n));
+        $(assert.equal(decoded(-5n, 5n), 0n));
+    });
+
+    test("free function with control flow serialized and called", $ => {
+        const FnType = FunctionType([IntegerType], IntegerType);
+
+        // Absolute value function
+        const abs = East.function([IntegerType], IntegerType, ($, x) => {
+            $.if(East.less(x, 0n), ($) => {
+                $.return(x.negate());
+            });
+            return x;
+        });
+
+        const blob = $.let(East.Blob.encodeBeast(abs, 'v2'));
+        const decoded = $.let(blob.decodeBeast(FnType, 'v2'));
+
+        $(assert.equal(decoded(5n), 5n));
+        $(assert.equal(decoded(-5n), 5n));
+        $(assert.equal(decoded(0n), 0n));
+    });
+
+    test("free function with loop serialized and called", $ => {
+        const FnType = FunctionType([IntegerType], IntegerType);
+
+        // Sum from 1 to n
+        const sumTo = East.function([IntegerType], IntegerType, ($, n) => {
+            const sum = $.let(0n);
+            const i = $.let(1n);
+            $.while(East.lessEqual(i, n), ($) => {
+                $.assign(sum, sum.add(i));
+                $.assign(i, i.add(1n));
+            });
+            return sum;
+        });
+
+        const blob = $.let(East.Blob.encodeBeast(sumTo, 'v2'));
+        const decoded = $.let(blob.decodeBeast(FnType, 'v2'));
+
+        $(assert.equal(decoded(5n), 15n));  // 1+2+3+4+5
+        $(assert.equal(decoded(10n), 55n)); // 1+2+...+10
+    });
+
+    test("array of functions serialized and called", $ => {
+        const FnType = FunctionType([IntegerType], IntegerType);
+        const ArrayFnType = ArrayType(FnType);
+
+        const funcs = $.const([
+            East.function([IntegerType], IntegerType, ($, x) => x.add(1n)),
+            East.function([IntegerType], IntegerType, ($, x) => x.multiply(2n)),
+            East.function([IntegerType], IntegerType, ($, x) => x.negate()),
+        ], ArrayFnType);
+
+        const blob = $.let(East.Blob.encodeBeast(funcs, 'v2'));
+        const decoded = $.let(blob.decodeBeast(ArrayFnType, 'v2'));
+
+        $(assert.equal(decoded.get(0n)(10n), 11n));  // addOne
+        $(assert.equal(decoded.get(1n)(10n), 20n));  // double
+        $(assert.equal(decoded.get(2n)(10n), -10n)); // negate
+    });
+
+    test("struct containing function serialized and called", $ => {
+        const FnType = FunctionType([IntegerType], IntegerType);
+        const StructWithFn = StructType({
+            name: StringType,
+            transform: FnType
+        });
+
+        const obj = $.const({
+            name: "addOne",
+            transform: East.function([IntegerType], IntegerType, ($, x) => x.add(1n)),
+        }, StructWithFn);
+
+        const blob = $.let(East.Blob.encodeBeast(obj, 'v2'));
+        const decoded = $.let(blob.decodeBeast(StructWithFn, 'v2'));
+
+        $(assert.equal(decoded.name, "addOne"));
+        $(assert.equal(decoded.transform(5n), 6n));
+    });
+
+    test("function in recursive type (linked list) serialized and called", $ => {
+        const ListType = RecursiveType(self => VariantType({
+            nil: NullType,
+            cons: StructType({ head: IntegerType, tail: self })
+        }));
+
+        const FnType = FunctionType([ListType], IntegerType);
+
+        // Function that sums all elements in the list
+        const sumList = East.function([ListType], IntegerType, ($, list) => {
+            const sum = $.let(0n);
+            const current = $.let(list, ListType);
+            $.while(true, ($, label) => {
+                $.match(current, {
+                    nil: ($) => $.break(label),
+                    cons: ($, node) => {
+                        $.assign(sum, sum.add(node.head));
+                        $.assign(current, node.tail);
+                    },
+                });
+            });
+            return sum;
+        });
+
+        // Serialize and deserialize
+        const blob = $.let(East.Blob.encodeBeast(sumList, 'v2'));
+        const decoded = $.let(blob.decodeBeast(FnType, 'v2'));
+
+        // Create list: 1 -> 2 -> 3 -> nil
+        const nil = East.value(variant("nil"), ListType);
+        const list = East.value(variant("cons", {
+            head: 1n,
+            tail: East.value(variant("cons", {
+                head: 2n,
+                tail: East.value(variant("cons", {
+                    head: 3n,
+                    tail: nil
+                }), ListType)
+            }), ListType)
+        }), ListType);
+
+        $(assert.equal(decoded(list), 6n));
+    });
+
+    test("function returning recursive type serialized and called", $ => {
+        const ListType = RecursiveType(self => VariantType({
+            nil: NullType,
+            cons: StructType({ head: IntegerType, tail: self })
+        }));
+
+        const FnType = FunctionType([IntegerType], ListType);
+
+        // Function that creates a list: n -> n-1 -> ... -> 1 -> nil
+        const makeList = East.function([IntegerType], ListType, ($, n) => {
+            const nil = East.value(variant("nil"), ListType);
+            const result = $.let(nil, ListType);
+            const i = $.let(1n);
+            $.while(East.lessEqual(i, n), ($) => {
+                $.assign(result, East.value(variant("cons", {
+                    head: i,
+                    tail: result
+                }), ListType));
+                $.assign(i, i.add(1n));
+            });
+            return result;
+        });
+
+        // Sum helper to verify the list
+        const sumList = East.function([ListType], IntegerType, ($, list) => {
+            const sum = $.let(0n);
+            const current = $.let(list, ListType);
+            $.while(true, ($, label) => {
+                $.match(current, {
+                    nil: ($) => $.break(label),
+                    cons: ($, node) => {
+                        $.assign(sum, sum.add(node.head));
+                        $.assign(current, node.tail);
+                    },
+                });
+            });
+            return sum;
+        });
+
+        // Serialize and deserialize
+        const blob = $.let(East.Blob.encodeBeast(makeList, 'v2'));
+        const decoded = $.let(blob.decodeBeast(FnType, 'v2'));
+
+        // makeList(3) creates 3 -> 2 -> 1 -> nil, sum = 6
+        $(assert.equal(sumList(decoded(3n)), 6n));
+        // makeList(5) creates 5 -> 4 -> 3 -> 2 -> 1 -> nil, sum = 15
+        $(assert.equal(sumList(decoded(5n)), 15n));
+    });
+
+    test("recursive type with function field serialized and called", $ => {
+        // Linked list where each node contains a transform function
+        const FnListType = RecursiveType(self => VariantType({
+            nil: NullType,
+            cons: StructType({
+                fn: FunctionType([IntegerType], IntegerType),
+                next: self
+            })
+        }));
+
+        // Create list: add1 -> double -> square -> nil
+        const nil = East.value(variant("nil"), FnListType);
+        const squareNode = East.value(variant("cons", {
+            fn: East.function([IntegerType], IntegerType, ($, x) => x.multiply(x)),
+            next: nil
+        }), FnListType);
+        const doubleNode = East.value(variant("cons", {
+            fn: East.function([IntegerType], IntegerType, ($, x) => x.multiply(2n)),
+            next: squareNode
+        }), FnListType);
+        const add1Node = East.value(variant("cons", {
+            fn: East.function([IntegerType], IntegerType, ($, x) => x.add(1n)),
+            next: doubleNode
+        }), FnListType);
+
+        // Serialize the entire list with embedded functions
+        const blob = $.let(East.Blob.encodeBeast(add1Node, 'v2'));
+
+        // Deserialize
+        const decoded = $.let(blob.decodeBeast(FnListType, 'v2'));
+
+        // Traverse and apply each function: 3 -> 4 (add1) -> 8 (double) -> 64 (square)
+        const result = $.let(3n);
+        const current = $.let(decoded, FnListType);
+
+        $.while(true, ($, label) => {
+            $.match(current, {
+                nil: ($) => $.break(label),
+                cons: ($, node) => {
+                    $.assign(result, node.fn(result));
+                    $.assign(current, node.next);
+                },
+            });
+        });
+
+        $(assert.equal(result, 64n));
     });
 });

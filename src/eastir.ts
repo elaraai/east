@@ -4,7 +4,7 @@
  */
 import { type ValueTypeOf } from "./types.js";
 import type { AsyncFunctionIR, FunctionIR } from "./ir.js";
-import { compile_internal, ReturnException } from "./compile.js";
+import { compile_internal, ReturnException, EAST_IR_SYMBOL } from "./compile.js";
 import type { PlatformFunction } from "./platform.js";
 import { analyzeIR } from "./analyze.js";
 
@@ -32,13 +32,13 @@ export class EastIR<Inputs extends any[], Output extends any> {
     const platformFns = Object.fromEntries(platform.map(fn => [fn.name, fn.fn]));
     const asyncPlatformFns = new Set<string>();
 
-    const compiled_expr = compile_internal(analyzed_ir, {}, platformFns, asyncPlatformFns);
+    const compiled_expr = compile_internal(analyzed_ir, {}, platformFns, asyncPlatformFns, platform);
 
     // instantiate the function (with no environment)
     const instantiated_function = compiled_expr({});
 
     // Return sync wrapper
-    return (...inputs: any[]) => {
+    const wrapper = (...inputs: any[]) => {
       try {
         return instantiated_function(...inputs)
       } catch (e: unknown) {
@@ -49,6 +49,16 @@ export class EastIR<Inputs extends any[], Output extends any> {
         }
       }
     };
+
+    // Attach IR to wrapper for serialization support
+    Object.defineProperty(wrapper, EAST_IR_SYMBOL, {
+      value: this.ir,
+      writable: false,
+      enumerable: false,
+      configurable: false
+    });
+
+    return wrapper;
   }
 }
 
@@ -79,13 +89,13 @@ export class AsyncEastIR<Inputs extends any[], Output extends any> {
       platform.filter(fn => fn.type === 'async').map(fn => fn.name)
     );
 
-    const compiled_expr = compile_internal(analyzed_ir, {}, platformFns, asyncPlatformFns);
+    const compiled_expr = compile_internal(analyzed_ir, {}, platformFns, asyncPlatformFns, platform);
 
     // instantiate the function (with no environment)
     const instantiated_function = compiled_expr({});
 
     // Return async wrapper
-    return async (...inputs: any[]) => {
+    const wrapper = async (...inputs: any[]) => {
       try {
         return await instantiated_function(...inputs)
       } catch (e: unknown) {
@@ -96,5 +106,15 @@ export class AsyncEastIR<Inputs extends any[], Output extends any> {
         }
       }
     };
+
+    // Attach IR to wrapper for serialization support
+    Object.defineProperty(wrapper, EAST_IR_SYMBOL, {
+      value: this.ir,
+      writable: false,
+      enumerable: false,
+      configurable: false
+    });
+
+    return wrapper;
   }
 }

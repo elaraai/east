@@ -1202,7 +1202,7 @@ await describe("Array", (test) => {
         // .some() callback uses .or() which creates another closure
         // Both closures need to capture 'lower' and 'upper'
         const result = $.let(arr.some(($, v) =>
-            East.less(v, lower).or($ => East.greater(v, upper))
+            East.less(v, lower).or(_$ => East.greater(v, upper))
         ));
         $(assert.equal(result, true)); // 15 > 10
     });
@@ -1213,7 +1213,7 @@ await describe("Array", (test) => {
         const arr = $.const([1n, 3n, 5n, 7n, 9n]);
         // .filter() callback uses .and() which creates another closure
         const result = $.let(arr.filter(($, v) =>
-            East.greater(v, lower).and($ => East.less(v, upper))
+            East.greater(v, lower).and(_$ => East.less(v, upper))
         ));
         $(assert.equal(result, [3n, 5n, 7n])); // 2 < v < 8
     });
@@ -1224,7 +1224,7 @@ await describe("Array", (test) => {
         const found_any = $.let(false);
 
         // Outer loop defines 'bound', inner .some() captures it
-        $.for(bounds, ($, bound, i) => {
+        $.for(bounds, ($, bound, _i) => {
             $.if(values.some(($, v) => East.greater(v, bound)), $ => {
                 $.assign(found_any, true);
             });

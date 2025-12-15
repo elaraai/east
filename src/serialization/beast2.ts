@@ -16,6 +16,10 @@ import {
 } from "./binary-utils.js";
 import { printFor } from "./east.js";
 import { ref } from "../containers/ref.js";
+import { EAST_IR_SYMBOL, compile_internal } from "../compile.js";
+import { IRType, type FunctionIR, type AsyncFunctionIR } from "../ir.js";
+import type { PlatformFunction } from "../platform.js";
+import { analyzeIR } from "../analyze.js";
 
 const printTypeValue = printFor(EastTypeValueType) as (type: EastTypeValue) => string;
 const isTypeValueEqual = equalFor(EastTypeValueType) as (t1: EastTypeValue, t2: EastTypeValue) => boolean;
@@ -46,6 +50,15 @@ export type Beast2DecodeTypeContext = ((buffer: Uint8Array, offset: number, ctx?
  */
 export type Beast2DecodeContext = {
   refs: Map<number, any>;
+};
+
+/**
+ * Options for decoding, allowing function compilation.
+ * When platform is provided, decoded functions will be compiled to callables with IR attached.
+ * When not provided, raw FunctionIR/AsyncFunctionIR is returned.
+ */
+export type Beast2DecodeOptions = {
+  platform?: PlatformFunction[];
 };
 
 // =============================================================================
@@ -192,15 +205,57 @@ export function encodeBeast2ValueToBufferFor(type: EastTypeValue, typeCtx: Beast
     }
     return ret;
   } else if (type.type === "Function") {
-    throw new Error(`Functions cannot be serialized`);
+    return (value: any, writer: BufferWriter, ctx: Beast2EncodeContext = { refs: new Map() }) => {
+      // Get IR from function
+      const ir = value[EAST_IR_SYMBOL] as FunctionIR | undefined;
+
+      if (!ir) {
+        throw new Error(
+          `Cannot serialize function: no IR attached. ` +
+          `Functions must be compiled from East IR to be serializable.`
+        );
+      }
+
+      if (ir.value.captures.length > 0) {
+        throw new Error(
+          `Cannot serialize closure with ${ir.value.captures.length} captured variable(s): ` +
+          `${ir.value.captures.map((v: any) => v.value.name).join(", ")}. ` +
+          `Only free functions (no captures) can be serialized.`
+        );
+      }
+
+      // Serialize the IR
+      irEncoder(ir, writer, ctx);
+    };
   } else if (type.type === "AsyncFunction") {
-    throw new Error(`AsyncFunctions cannot be serialized`);
+    return (value: any, writer: BufferWriter, ctx: Beast2EncodeContext = { refs: new Map() }) => {
+      // Get IR from function
+      const ir = value[EAST_IR_SYMBOL] as AsyncFunctionIR | undefined;
+
+      if (!ir) {
+        throw new Error(
+          `Cannot serialize async function: no IR attached. ` +
+          `Functions must be compiled from East IR to be serializable.`
+        );
+      }
+
+      if (ir.value.captures.length > 0) {
+        throw new Error(
+          `Cannot serialize async closure with ${ir.value.captures.length} captured variable(s): ` +
+          `${ir.value.captures.map((v: any) => v.value.name).join(", ")}. ` +
+          `Only free async functions (no captures) can be serialized.`
+        );
+      }
+
+      // Serialize the IR
+      irEncoder(ir, writer, ctx);
+    };
   } else {
     throw new Error(`Unhandled type ${(type satisfies never as EastTypeValue).type}`);
   }
 }
 
-export function decodeBeast2ValueFor(type: EastTypeValue | EastType, typeCtx: Beast2DecodeTypeContext = []): (buffer: Uint8Array, offset: number, ctx?: Beast2DecodeContext) => [any, number] {
+export function decodeBeast2ValueFor(type: EastTypeValue | EastType, typeCtx: Beast2DecodeTypeContext = [], options?: Beast2DecodeOptions): (buffer: Uint8Array, offset: number, ctx?: Beast2DecodeContext) => [any, number] {
   // Convert EastType to EastTypeValue if necessary
   if (!isVariant(type)) {
     type = toEastTypeValue(type);
@@ -261,7 +316,7 @@ export function decodeBeast2ValueFor(type: EastTypeValue | EastType, typeCtx: Be
       return [result, nextOffset];
     };
     typeCtx.push(ret);
-    valueDecoder = decodeBeast2ValueFor(type.value, typeCtx);
+    valueDecoder = decodeBeast2ValueFor(type.value, typeCtx, options);
     typeCtx.pop();
     return ret;
   } else if (type.type === "Array") {
@@ -289,11 +344,11 @@ export function decodeBeast2ValueFor(type: EastTypeValue | EastType, typeCtx: Be
       return [result, currentOffset];
     };
     typeCtx.push(ret);
-    valueDecoder = decodeBeast2ValueFor(type.value, typeCtx);
+    valueDecoder = decodeBeast2ValueFor(type.value, typeCtx, options);
     typeCtx.pop();
     return ret;
   } else if (type.type === "Set") {
-    const keyDecoder = decodeBeast2ValueFor(type.value, typeCtx);
+    const keyDecoder = decodeBeast2ValueFor(type.value, typeCtx, options);
     return (buffer: Uint8Array, offset: number, ctx: Beast2DecodeContext = { refs: new Map() }) => {
       const [refOrLength, newOffset] = readVarint(buffer, offset);
       // Check if this is a backreference
@@ -317,7 +372,7 @@ export function decodeBeast2ValueFor(type: EastTypeValue | EastType, typeCtx: Be
       return [result, currentOffset];
     };
   } else if (type.type === "Dict") {
-    const keyDecoder = decodeBeast2ValueFor(type.value.key, typeCtx);
+    const keyDecoder = decodeBeast2ValueFor(type.value.key, typeCtx, options);
     let valueDecoder: (buffer: Uint8Array, offset: number, ctx?: Beast2DecodeContext) => [any, number];
     const ret = (buffer: Uint8Array, offset: number, ctx: Beast2DecodeContext = { refs: new Map() }): [any, number] => {
       const [refOrLength, newOffset] = readVarint(buffer, offset);
@@ -343,7 +398,7 @@ export function decodeBeast2ValueFor(type: EastTypeValue | EastType, typeCtx: Be
       return [result, currentOffset];
     };
     typeCtx.push(ret);
-    valueDecoder = decodeBeast2ValueFor(type.value.value, typeCtx);
+    valueDecoder = decodeBeast2ValueFor(type.value.value, typeCtx, options);
     typeCtx.pop();
     return ret;
   } else if (type.type === "Struct") {
@@ -361,7 +416,7 @@ export function decodeBeast2ValueFor(type: EastTypeValue | EastType, typeCtx: Be
     };
     typeCtx.push(ret);
     for (const { name, type: fieldType } of type.value) {
-      fieldDecoders.push([name, decodeBeast2ValueFor(fieldType, typeCtx)]);
+      fieldDecoders.push([name, decodeBeast2ValueFor(fieldType, typeCtx, options)]);
     }
     typeCtx.pop();
     return ret;
@@ -381,7 +436,7 @@ export function decodeBeast2ValueFor(type: EastTypeValue | EastType, typeCtx: Be
     };
     typeCtx.push(ret);
     for (const { name, type: caseType } of type.value) {
-      caseDecoders.push([name, decodeBeast2ValueFor(caseType, typeCtx)]);
+      caseDecoders.push([name, decodeBeast2ValueFor(caseType, typeCtx, options)]);
     }
     typeCtx.pop();
     return ret;
@@ -392,9 +447,63 @@ export function decodeBeast2ValueFor(type: EastTypeValue | EastType, typeCtx: Be
     }
     return ret;
   } else if (type.type === "Function") {
-    throw new Error(`Functions cannot be deserialized`);
+    // Convert platform to internal format
+    const platform = options?.platform ?? [];
+    const platformFns = Object.fromEntries(platform.map(fn => [fn.name, fn.fn]));
+    const asyncPlatformFns = new Set(platform.filter(fn => fn.type === 'async').map(fn => fn.name));
+
+    return (buffer: Uint8Array, offset: number, ctx: Beast2DecodeContext = { refs: new Map() }): [any, number] => {
+      // Decode the IR
+      const [ir, newOffset] = irDecoder(buffer, offset, ctx);
+
+      // Validate it's a FunctionIR
+      if (ir.type !== "Function") {
+        throw new Error(
+          `Expected Function IR, got ${ir.type} at offset ${offset}`
+        );
+      }
+
+      // Analyze and compile the function (compile_internal attaches IR automatically)
+      let fn: any;
+      try {
+        const analyzedIR = analyzeIR(ir, platform, {});
+        const compiled = compile_internal(analyzedIR, {}, platformFns, asyncPlatformFns, platform, true, new Set());
+        fn = compiled({});
+      } catch (e: unknown) {
+        throw new Error(`Failed to compile decoded function: ${(e as Error).message}`);
+      }
+
+      return [fn, newOffset];
+    };
   } else if (type.type === "AsyncFunction") {
-    throw new Error(`AsyncFunctions cannot be deserialized`);
+    // Convert platform to internal format
+    const platform = options?.platform ?? [];
+    const platformFns = Object.fromEntries(platform.map(fn => [fn.name, fn.fn]));
+    const asyncPlatformFns = new Set(platform.filter(fn => fn.type === 'async').map(fn => fn.name));
+
+    return (buffer: Uint8Array, offset: number, ctx: Beast2DecodeContext = { refs: new Map() }): [any, number] => {
+      // Decode the IR
+      const [ir, newOffset] = irDecoder(buffer, offset, ctx);
+
+      // Validate it's an AsyncFunctionIR
+      if (ir.type !== "AsyncFunction") {
+        throw new Error(
+          `Expected AsyncFunction IR, got ${ir.type} at offset ${offset}`
+        );
+      }
+
+      // Analyze and compile the function (compile_internal attaches IR automatically)
+      let fn: any;
+      try {
+        const analyzedIR = analyzeIR(ir, platform, {});
+        const compiled = compile_internal(analyzedIR, {}, platformFns, asyncPlatformFns, platform, true, new Set());
+        fn = compiled({});
+      } catch (e: unknown) {
+        throw new Error(`Failed to compile decoded async function: ${(e as Error).message}`);
+      }
+
+      return [fn, newOffset];
+    };
   } else {
     throw new Error(`Unhandled type ${(type satisfies never as EastTypeValue).type}`);
   }
@@ -433,6 +542,11 @@ export function encodeBeast2ValueFor(type: EastTypeValue | EastType): (value: an
 export const MAGIC_BYTES = new Uint8Array([0x89, 0x45, 0x61, 0x73, 0x74, 0x0D, 0x0A, 0x01]);
 const typeEncoder = encodeBeast2ValueToBufferFor(EastTypeValueType);
 const typeDecoder = decodeBeast2ValueFor(EastTypeValueType);
+
+// IR encoder/decoder for function serialization
+const IRTypeValue = toEastTypeValue(IRType);
+const irEncoder = encodeBeast2ValueToBufferFor(IRTypeValue);
+const irDecoder = decodeBeast2ValueFor(IRTypeValue);
 
 export function encodeBeast2For(type: EastTypeValue): (value: any) => Uint8Array
 export function encodeBeast2For<T extends EastType>(type: T): (value: ValueTypeOf<T>) => Uint8Array
@@ -491,15 +605,15 @@ export function decodeBeast2(data: Uint8Array): { type: EastTypeValue; value: an
   return { type, value };
 }
 
-export function decodeBeast2For(type: EastTypeValue): (data: Uint8Array) => any
-export function decodeBeast2For<T extends EastType>(type: T): (data: Uint8Array) => ValueTypeOf<T>
-export function decodeBeast2For(type: EastTypeValue | EastType): (data: Uint8Array) => any {
+export function decodeBeast2For(type: EastTypeValue, options?: Beast2DecodeOptions): (data: Uint8Array) => any
+export function decodeBeast2For<T extends EastType>(type: T, options?: Beast2DecodeOptions): (data: Uint8Array) => ValueTypeOf<T>
+export function decodeBeast2For(type: EastTypeValue | EastType, options?: Beast2DecodeOptions): (data: Uint8Array) => any {
   // Convert EastType to EastTypeValue if necessary
   if (!isVariant(type)) {
       type = toEastTypeValue(type);
   }
 
-  const valueDecoder = decodeBeast2ValueFor(type as EastTypeValue);
+  const valueDecoder = decodeBeast2ValueFor(type as EastTypeValue, [], options);
 
   return (data: Uint8Array) => {
     // Verify magic bytes
@@ -533,4 +647,50 @@ export function decodeBeast2For(type: EastTypeValue | EastType): (data: Uint8Arr
 
     return value;
   };
+}
+
+// =============================================================================
+// Function serialization helpers
+// =============================================================================
+
+// Re-export for convenience
+export { EAST_IR_SYMBOL } from "../compile.js";
+
+import { EastIR, AsyncEastIR } from "../eastir.js";
+
+/**
+ * Compile a deserialized FunctionIR to an executable function.
+ *
+ * @param ir - The FunctionIR returned from BEAST2 deserialization
+ * @param platform - Platform functions required for execution
+ * @returns Compiled JavaScript function
+ *
+ * @example
+ * ```ts
+ * const funcType = FunctionType([IntegerType], IntegerType);
+ * const data = encodeBeast2For(funcType)(myCompiledFunc);
+ * const ir = decodeBeast2For(funcType)(data);
+ * const recompiled = compileFunctionIR(ir, []);
+ * const result = recompiled(42n);
+ * ```
+ */
+export function compileFunctionIR<I extends any[], O>(
+  ir: FunctionIR,
+  platform: PlatformFunction[]
+): (...args: I) => O {
+  return new EastIR(ir).compile(platform) as (...args: I) => O;
+}
+
+/**
+ * Compile a deserialized AsyncFunctionIR to an executable async function.
+ *
+ * @param ir - The AsyncFunctionIR returned from BEAST2 deserialization
+ * @param platform - Platform functions required for execution
+ * @returns Compiled JavaScript async function
+ */
+export function compileAsyncFunctionIR<I extends any[], O>(
+  ir: AsyncFunctionIR,
+  platform: PlatformFunction[]
+): (...args: I) => Promise<O> {
+  return new AsyncEastIR(ir).compile(platform) as (...args: I) => Promise<O>;
 }
