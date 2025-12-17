@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Elara AI Pty Ltd
  * Dual-licensed under AGPL-3.0 and commercial license. See LICENSE for details.
  */
-import { East, Expr, ArrayType, IntegerType, FloatType, StringType, BooleanType, BlobType, some, none, SetType, DictType, StructType, VariantType, NullType, variant } from "../src/index.js";
+import { East, Expr, ArrayType, IntegerType, FloatType, StringType, BooleanType, BlobType, some, none, SetType, DictType, StructType, VariantType, NullType, variant, RecursiveType } from "../src/index.js";
 import type { option } from "../src/index.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
 
@@ -1287,5 +1287,59 @@ await describe("Array", (test) => {
 
         const result = $.let(transform_fn(arr));
         $(assert.equal(result, [15n, 25n, 35n])); // 1*10+5, 2*10+5, 3*10+5
+    });
+
+    // =========================================================================
+    // TypeOf RecursiveType preservation tests
+    // This tests the fix for: when map() callback returns Expr<RecursiveType<...>>,
+    // TypeOf should preserve the RecursiveType wrapper, not unwrap to VariantType
+    //
+    // Real-world use case:
+    //   Stack.HStack(strings.map(($, s) => Badge.Root(s)), { gap: "1" })
+    // Where Badge.Root returns Expr<UIComponentType> and UIComponentType is a RecursiveType
+    // =========================================================================
+
+    test("map() with function returning Expr<RecursiveType> preserves type", $ => {
+        // Simplified UIComponentType - a recursive type wrapping a variant
+        const ComponentType = RecursiveType(self => VariantType({
+            Text: StructType({ content: StringType }),
+            Badge: StructType({ label: StringType }),
+            Stack: StructType({ children: ArrayType(self) }),
+        }));
+
+        // Simulates Badge.Root(label) - returns Expr<ComponentType>
+        // This is a callable function expression that returns the RecursiveType
+        const BadgeRoot = East.function([StringType], ComponentType, ($, label) => {
+            return $.return(East.value(variant("Badge", { label }), ComponentType));
+        });
+
+        // Simulates Stack.HStack(children) - accepts Array<ComponentType>
+        const StackHStack = East.function([ArrayType(ComponentType)], ComponentType, ($, children) => {
+            return $.return(East.value(variant("Stack", { children }), ComponentType));
+        });
+
+        // The actual use case: map strings to badges, then wrap in a stack
+        const labels = $.let(["tag1", "tag2", "tag3"]);
+
+        // This is the key test: BadgeRoot returns Expr<ComponentType> (a RecursiveType)
+        // TypeOf should preserve RecursiveType, so badges should be ArrayExpr<ComponentType>
+        const badges = labels.map(($, label) => BadgeRoot(label));
+
+        // This should type-check: StackHStack expects ArrayType(ComponentType)
+        // If TypeOf incorrectly unwrapped RecursiveType to VariantType, this would fail
+        const stack = StackHStack(badges);
+
+        // The fact that the above line compiles is the test!
+        // StackHStack expects ArrayType(ComponentType) and badges is ArrayExpr<ComponentType>
+        // Verify runtime behavior matches expected value
+        const expected = East.value(variant("Stack", {
+            children: [
+                variant("Badge", { label: "tag1" }),
+                variant("Badge", { label: "tag2" }),
+                variant("Badge", { label: "tag3" }),
+            ]
+        }), ComponentType);
+
+        $(assert.equal(stack, expected));
     });
 });

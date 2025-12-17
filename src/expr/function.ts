@@ -10,7 +10,14 @@ import { get_location } from "../location.js";
 import { FunctionType, type EastType } from "../types.js";
 import { valueOrExprToAstTyped } from "./ast.js";
 import { AstSymbol, Expr, FactorySymbol, type ToExpr } from "./expr.js";
+import type { RecursiveType } from "../types.js";
 import type { ExprType, SubtypeExprOrValue } from "./types.js";
+
+/**
+ * Return type for function calls - preserves RecursiveType wrapper to maintain type identity,
+ * but expands other types to their ergonomic ExprType (e.g., IntegerExpr with .add() methods)
+ */
+type FunctionReturnType<O> = O extends RecursiveType<any> ? Expr<O> : ExprType<O>;
 
 /**
 * Expression representing the Function type.
@@ -22,9 +29,9 @@ export class FunctionExpr<I extends any[], O extends any> extends Expr<FunctionT
   }
   
   /** Note that {@link CallableFunctionExpr} provides a more ergonomic way to call functions.
-   * 
+   *
    * @internal */
-  call(...args: { [K in keyof I]: SubtypeExprOrValue<I[K]> }): ExprType<O> {
+  call(...args: { [K in keyof I]: SubtypeExprOrValue<I[K]> }): FunctionReturnType<O> {
     if (args.length !== this.input_types.length) {
       throw new Error(`Expected ${this.input_types.length} arguments, got ${args.length}`);
     }
@@ -37,7 +44,7 @@ export class FunctionExpr<I extends any[], O extends any> extends Expr<FunctionT
       location: get_location(2),
       function: this[AstSymbol],
       arguments: inputs,
-    }) as ExprType<O>;
+    }) as FunctionReturnType<O>;
   }
   
   /** Convert the function to East's "intermediate representation" (IR). This can then be serialized or compiled.
@@ -56,7 +63,7 @@ export class FunctionExpr<I extends any[], O extends any> extends Expr<FunctionT
  * 
  * Supports direct calling of functions using `f(x, y)` syntax instead using a method, like `f.call(x, y)`.
  */
-export type CallableFunctionExpr<I extends any[], O> = FunctionExpr<I, O> & ((...args: { [K in keyof I]: SubtypeExprOrValue<I[K]> }) => ExprType<O>);
+export type CallableFunctionExpr<I extends any[], O> = FunctionExpr<I, O> & ((...args: { [K in keyof I]: SubtypeExprOrValue<I[K]> }) => FunctionReturnType<O>);
 
 /**
  * Factory producing a callable FunctionExpr so users can invoke it directly.
@@ -71,7 +78,7 @@ export function createFunctionExpr<I extends any[], O extends any>(
   createExpr: ToExpr
 ): CallableFunctionExpr<I, O> {
   const inst = new FunctionExpr<I, O>(input_types, output_type, ast, createExpr);
-  const callable = function (...args: { [K in keyof I]: SubtypeExprOrValue<I[K]> }): ExprType<O> {
+  const callable = function (...args: { [K in keyof I]: SubtypeExprOrValue<I[K]> }): FunctionReturnType<O> {
     return inst.call(...(args as any));
   } as unknown as CallableFunctionExpr<I, O>;
   Object.setPrototypeOf(callable, inst);

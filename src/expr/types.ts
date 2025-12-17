@@ -44,8 +44,9 @@ export type SubtypeExprOrValue<T> =
   T extends SetType<infer K> ? Expr<NeverType> | Expr<SetType<K>> | Set<SubtypeExprOrValue<K>> :
   T extends DictType<infer K, infer V> ? Expr<NeverType> | Expr<DictType<K, V>> | Map<SubtypeExprOrValue<K>, SubtypeExprOrValue<V>> :
   T extends StructType<infer Fields> ? Expr<NeverType> | Expr<StructType<{ [K in keyof Fields]: SubType<Fields[K]> }>> | { [K in keyof Fields]: SubtypeExprOrValue<Fields[K]> } :
-  T extends VariantType<infer Cases> ? Expr<NeverType> | Expr<VariantType<{ [K in keyof Cases]?: SubType<Cases[K]> }>> | { [K in keyof Cases]: variant<K, SubtypeExprOrValue<Cases[K]>> }[keyof Cases] :
+  // RecursiveType must be checked BEFORE VariantType to preserve the wrapper
   T extends RecursiveType<infer U> ? Expr<T> | SubtypeExprOrValue<U> : // an Expr with the RecursiveType, or an Expr or value unwrapped from it
+  T extends VariantType<infer Cases> ? Expr<NeverType> | Expr<VariantType<{ [K in keyof Cases]?: SubType<Cases[K]> }>> | { [K in keyof Cases]: variant<K, SubtypeExprOrValue<Cases[K]>> }[keyof Cases] :
   T extends RecursiveTypeMarker ? any : // make TypeScript faster - don't expand further
   T extends FunctionType<infer I, undefined> ? Expr<FunctionType<I, any>> | (($: BlockBuilder<NeverType>, ...input: { [K in keyof I]: ExprType<I[K]> }) => any) :
   T extends FunctionType<infer I, infer O> ? Expr<FunctionType<I, SubType<O>>> | (($: BlockBuilder<O>, ...input: { [K in keyof I]: ExprType<I[K]> }) => void | SubtypeExprOrValue<O>) :
@@ -60,8 +61,9 @@ export type ExpandOnce<T, NodeType> =
   T extends SetType<infer U> ? SetType<ExpandOnce<U, NodeType>> :
   T extends DictType<infer K, infer V> ? DictType<ExpandOnce<K, NodeType>, ExpandOnce<V, NodeType>> :
   T extends StructType<infer Fields> ? StructType<{ [K in keyof Fields]: ExpandOnce<Fields[K], NodeType> }> :
-  T extends VariantType<infer Cases> ? VariantType<{ [K in keyof Cases]: ExpandOnce<Cases[K], NodeType> }> :
+  // RecursiveType must be checked BEFORE VariantType to preserve the wrapper
   T extends RecursiveType<infer U> ? RecursiveType<U> :
+  T extends VariantType<infer Cases> ? VariantType<{ [K in keyof Cases]: ExpandOnce<Cases[K], NodeType> }> :
   T extends RecursiveTypeMarker ? NodeType : // other recursive types get left as-is
   T;
 
@@ -84,8 +86,9 @@ export type ExprType<T> =
   T extends NeverType | SetType<infer K> ? SetExpr<K> :
   T extends NeverType | DictType<infer K, infer V> ? DictExpr<K, V> :
   T extends NeverType | StructType<infer Fields> ? StructExpr<Fields> :
-  T extends NeverType | VariantType<infer Cases> ? VariantExpr<Cases> :
+  // RecursiveType must be checked BEFORE VariantType to preserve the wrapper
   T extends NeverType | RecursiveType<infer U> ? ExprType<ExpandOnce<U, T>> :
+  T extends NeverType | VariantType<infer Cases> ? VariantExpr<Cases> :
   T extends NeverType | RecursiveTypeMarker ? NeverExpr : // this shouldn't happen
   T extends NeverType | FunctionType<infer I, infer O> ? CallableFunctionExpr<I, O> :
   T extends NeverType | AsyncFunctionType<infer I, infer O> ? CallableAsyncFunctionExpr<I, O> :
@@ -115,6 +118,9 @@ export type TypeOf<T> =
   T extends Expr<DictType<infer K, infer V>> ? DictType<K, V> :
   T extends Map<infer K, infer V> ? DictType<TypeOf<K>, TypeOf<V>> :
   T extends Expr<FunctionType<infer I, infer O>> ? FunctionType<I, O> :
+  // RecursiveType must be checked BEFORE VariantType to preserve the wrapper
+  // Otherwise Expr<RecursiveType<VariantType<...>>> matches Expr<VariantType<...>> and strips the wrapper
+  T extends Expr<RecursiveType<infer _U>> ? (T extends Expr<infer R> ? R : never) :
   T extends Expr<VariantType<infer Cases>> ? VariantType<Cases> :
   T extends variant<infer Case, infer U> ? Case extends string ? VariantType<{ [K in Case]: TypeOf<U> }> : never :
   // note the user might do some "interesting" spreads (replace a field, or add a new field - generally we don't support removing fields via spread)
