@@ -8,6 +8,8 @@ import { FloatType, IntegerType, isTypeEqual } from "../types.js";
 import { AstSymbol, Expr, FactorySymbol, type ToExpr } from "./expr.js";
 import { valueOrExprToAst } from "./ast.js";
 import type { FloatExpr } from "./float.js";
+import type { BooleanExpr } from "./boolean.js";
+import { equal, notEqual, less, lessEqual, greater, greaterEqual } from "./block.js";
 
 /**
  * Expression representing integer values and operations.
@@ -445,5 +447,129 @@ export class IntegerExpr extends Expr<IntegerType> {
       type_parameters: [],
       arguments: [this[AstSymbol]],
     }) as FloatExpr;
+  }
+
+  /**
+   * Checks if this integer equals another value.
+   *
+   * @param other - The value to compare against
+   * @returns A BooleanExpr that is true if the values are equal
+   *
+   * @example
+   * ```ts
+   * const isEqual = East.function([IntegerType, IntegerType], BooleanType, ($, a, b) => {
+   *   $.return(a.equals(b));
+   * });
+   * const compiled = East.compile(isEqual.toIR(), []);
+   * compiled(5n, 5n);   // true
+   * compiled(5n, 3n);   // false
+   * ```
+   */
+  equals(other: IntegerExpr | bigint): BooleanExpr {
+    return equal(this, other);
+  }
+
+  /**
+   * Checks if this integer does not equal another value.
+   *
+   * @param other - The value to compare against
+   * @returns A BooleanExpr that is true if the values are not equal
+   *
+   * @example
+   * ```ts
+   * const isNotEqual = East.function([IntegerType, IntegerType], BooleanType, ($, a, b) => {
+   *   $.return(a.notEquals(b));
+   * });
+   * const compiled = East.compile(isNotEqual.toIR(), []);
+   * compiled(5n, 3n);   // true
+   * compiled(5n, 5n);   // false
+   * ```
+   */
+  notEquals(other: IntegerExpr | bigint): BooleanExpr {
+    return notEqual(this, other);
+  }
+
+  /**
+   * Checks if this integer is greater than another value.
+   *
+   * @param other - The value to compare against
+   * @returns A BooleanExpr that is true if this value is greater
+   *
+   * @example
+   * ```ts
+   * const isGreater = East.function([IntegerType, IntegerType], BooleanType, ($, a, b) => {
+   *   $.return(a.greaterThan(b));
+   * });
+   * const compiled = East.compile(isGreater.toIR(), []);
+   * compiled(5n, 3n);   // true
+   * compiled(3n, 5n);   // false
+   * compiled(5n, 5n);   // false
+   * ```
+   */
+  greaterThan(other: IntegerExpr | bigint): BooleanExpr {
+    return greater(this, other);
+  }
+
+  /**
+   * Checks if this integer is less than another value.
+   *
+   * @param other - The value to compare against
+   * @returns A BooleanExpr that is true if this value is less
+   *
+   * @example
+   * ```ts
+   * const isLess = East.function([IntegerType, IntegerType], BooleanType, ($, a, b) => {
+   *   $.return(a.lessThan(b));
+   * });
+   * const compiled = East.compile(isLess.toIR(), []);
+   * compiled(3n, 5n);   // true
+   * compiled(5n, 3n);   // false
+   * compiled(5n, 5n);   // false
+   * ```
+   */
+  lessThan(other: IntegerExpr | bigint): BooleanExpr {
+    return less(this, other);
+  }
+
+  /**
+   * Checks if this integer is greater than or equal to another value.
+   *
+   * @param other - The value to compare against
+   * @returns A BooleanExpr that is true if this value is greater than or equal
+   *
+   * @example
+   * ```ts
+   * const isGreaterOrEqual = East.function([IntegerType, IntegerType], BooleanType, ($, a, b) => {
+   *   $.return(a.greaterThanOrEqual(b));
+   * });
+   * const compiled = East.compile(isGreaterOrEqual.toIR(), []);
+   * compiled(5n, 3n);   // true
+   * compiled(5n, 5n);   // true
+   * compiled(3n, 5n);   // false
+   * ```
+   */
+  greaterThanOrEqual(other: IntegerExpr | bigint): BooleanExpr {
+    return greaterEqual(this, other);
+  }
+
+  /**
+   * Checks if this integer is less than or equal to another value.
+   *
+   * @param other - The value to compare against
+   * @returns A BooleanExpr that is true if this value is less than or equal
+   *
+   * @example
+   * ```ts
+   * const isLessOrEqual = East.function([IntegerType, IntegerType], BooleanType, ($, a, b) => {
+   *   $.return(a.lessThanOrEqual(b));
+   * });
+   * const compiled = East.compile(isLessOrEqual.toIR(), []);
+   * compiled(3n, 5n);   // true
+   * compiled(5n, 5n);   // true
+   * compiled(5n, 3n);   // false
+   * ```
+   */
+  lessThanOrEqual(other: IntegerExpr | bigint): BooleanExpr {
+    return lessEqual(this, other);
   }
 }

@@ -558,6 +558,20 @@ await describe("DateTime", (test) => {
         $(assert.equal(East.lessEqual(date1, date3), true))
         $(assert.equal(East.greater(date3, date1), true))
         $(assert.equal(East.greaterEqual(date3, date1), true))
+
+        // Instance method tests
+        $(assert.equal(date1.equals(date2), true))
+        $(assert.equal(date1.equals(date3), false))
+        $(assert.equal(date1.notEquals(date3), true))
+        $(assert.equal(date1.notEquals(date2), false))
+        $(assert.equal(date1.lessThan(date3), true))
+        $(assert.equal(date3.lessThan(date1), false))
+        $(assert.equal(date1.lessThanOrEqual(date2), true))
+        $(assert.equal(date1.lessThanOrEqual(date3), true))
+        $(assert.equal(date3.greaterThan(date1), true))
+        $(assert.equal(date1.greaterThan(date3), false))
+        $(assert.equal(date3.greaterThanOrEqual(date1), true))
+        $(assert.equal(date1.greaterThanOrEqual(date2), true))
     });
 
     test("Formatted printing", $ => {

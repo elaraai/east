@@ -113,3 +113,39 @@ jobs:
           name: ${{ steps.version.outputs.new_version }}
           generate_release_notes: true
           prerelease: ${{ steps.npm_tag.outputs.prerelease == 'true' }}
+
+      - name: Wait for npm propagation
+        if: ${{ !inputs.dry_run }}
+        uses: nick-invision/retry@v3
+        with:
+          timeout_minutes: 5
+          max_attempts: 20
+          retry_wait_seconds: 15
+          command: npm view "@elaraai/east@${{ steps.version.outputs.new_version }}" version
+
+      - name: Trigger update-deps in dependent repos
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          # Only trigger direct dependents - they cascade to their dependents
+          # east -> east-node, east-py -> e3 -> east-ui
+          REPOS="elaraai/east-node elaraai/east-py"
+          FAILED=""
+
+          for repo in $REPOS; do
+            echo "Triggering update-deps in $repo..."
+            if gh workflow run update-deps.yml --repo "$repo"; then
+              echo "Successfully triggered $repo"
+            else
+              echo "Failed to trigger $repo"
+              FAILED="$FAILED $repo"
+            fi
+          done
+
+          if [[ -n "$FAILED" ]]; then
+            echo "Failed to trigger update-deps in:$FAILED"
+            exit 1
+          fi
+
+          echo "Successfully triggered update-deps in dependent repos (cascade will continue)"

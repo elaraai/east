@@ -8,6 +8,8 @@ import { FloatType, IntegerType, isTypeEqual, printType } from "../types.js";
 import { AstSymbol, Expr, FactorySymbol, type ToExpr } from "./expr.js";
 import { valueOrExprToAstTyped } from "./ast.js";
 import type { IntegerExpr } from "./integer.js";
+import type { BooleanExpr } from "./boolean.js";
+import { equal, notEqual, less, lessEqual, greater, greaterEqual } from "./block.js";
 
 /**
  * Expression representing floating-point values and operations (IEEE 754 double-precision).
@@ -631,5 +633,133 @@ export class FloatExpr extends Expr<FloatType> {
       type_parameters: [],
       arguments: [this[AstSymbol]],
     }) as IntegerExpr;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Comparison methods
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Checks if this float equals another value.
+   *
+   * @param other - The value to compare against
+   * @returns A BooleanExpr that is true if the values are equal
+   *
+   * @example
+   * ```ts
+   * const checkEqual = East.function([FloatType, FloatType], BooleanType, ($, x, y) => {
+   *   $.return(x.equals(y));
+   * });
+   * const compiled = East.compile(checkEqual.toIR(), []);
+   * compiled(3.14, 3.14);  // true
+   * compiled(3.14, 2.0);   // false
+   * ```
+   */
+  equals(other: FloatExpr | number): BooleanExpr {
+    return equal(this, other);
+  }
+
+  /**
+   * Checks if this float does not equal another value.
+   *
+   * @param other - The value to compare against
+   * @returns A BooleanExpr that is true if the values are not equal
+   *
+   * @example
+   * ```ts
+   * const checkNotEqual = East.function([FloatType, FloatType], BooleanType, ($, x, y) => {
+   *   $.return(x.notEquals(y));
+   * });
+   * const compiled = East.compile(checkNotEqual.toIR(), []);
+   * compiled(3.14, 2.0);   // true
+   * compiled(3.14, 3.14);  // false
+   * ```
+   */
+  notEquals(other: FloatExpr | number): BooleanExpr {
+    return notEqual(this, other);
+  }
+
+  /**
+   * Checks if this float is greater than another value.
+   *
+   * @param other - The value to compare against
+   * @returns A BooleanExpr that is true if this value is greater
+   *
+   * @example
+   * ```ts
+   * const checkGreater = East.function([FloatType, FloatType], BooleanType, ($, x, y) => {
+   *   $.return(x.greaterThan(y));
+   * });
+   * const compiled = East.compile(checkGreater.toIR(), []);
+   * compiled(3.14, 2.0);   // true
+   * compiled(2.0, 3.14);   // false
+   * compiled(3.14, 3.14);  // false
+   * ```
+   */
+  greaterThan(other: FloatExpr | number): BooleanExpr {
+    return greater(this, other);
+  }
+
+  /**
+   * Checks if this float is less than another value.
+   *
+   * @param other - The value to compare against
+   * @returns A BooleanExpr that is true if this value is less
+   *
+   * @example
+   * ```ts
+   * const checkLess = East.function([FloatType, FloatType], BooleanType, ($, x, y) => {
+   *   $.return(x.lessThan(y));
+   * });
+   * const compiled = East.compile(checkLess.toIR(), []);
+   * compiled(2.0, 3.14);   // true
+   * compiled(3.14, 2.0);   // false
+   * compiled(3.14, 3.14);  // false
+   * ```
+   */
+  lessThan(other: FloatExpr | number): BooleanExpr {
+    return less(this, other);
+  }
+
+  /**
+   * Checks if this float is greater than or equal to another value.
+   *
+   * @param other - The value to compare against
+   * @returns A BooleanExpr that is true if this value is greater than or equal
+   *
+   * @example
+   * ```ts
+   * const checkGte = East.function([FloatType, FloatType], BooleanType, ($, x, y) => {
+   *   $.return(x.greaterThanOrEqual(y));
+   * });
+   * const compiled = East.compile(checkGte.toIR(), []);
+   * compiled(3.14, 2.0);   // true
+   * compiled(3.14, 3.14);  // true
+   * compiled(2.0, 3.14);   // false
+   * ```
+   */
+  greaterThanOrEqual(other: FloatExpr | number): BooleanExpr {
+    return greaterEqual(this, other);
+  }
+
+  /**
+   * Checks if this float is less than or equal to another value.
+   *
+   * @param other - The value to compare against
+   * @returns A BooleanExpr that is true if this value is less than or equal
+   *
+   * @example
+   * ```ts
+   * const checkLte = East.function([FloatType, FloatType], BooleanType, ($, x, y) => {
+   *   $.return(x.lessThanOrEqual(y));
+   * });
+   * const compiled = East.compile(checkLte.toIR(), []);
+   * compiled(2.0, 3.14);   // true
+   * compiled(3.14, 3.14);  // true
+   * compiled(3.14, 2.0);   // false
+   * ```
+   */
+  lessThanOrEqual(other: FloatExpr | number): BooleanExpr {
+    return lessEqual(this, other);
   }
 }

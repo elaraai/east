@@ -118,7 +118,7 @@ East supports a rich type system optimized for business logic and data processin
 
 ## Documentation
 
-- **[USAGE.md](USAGE.md)** - Comprehensive developer guide with API reference
+- **[SKILL.md](SKILL.md)** - Comprehensive guide with API and example reference
 - **[LICENSE.md](LICENSE.md)** - Dual licensing information (AGPL-3.0 / Commercial)
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** - How to contribute to East
 - **[CLA.md](CLA.md)** - Contributor License Agreement

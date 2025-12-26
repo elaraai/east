@@ -790,6 +790,20 @@ await describe("String", (test) => {
         $(assert.equal(East.lessEqual(East.value("a"), "b"), true));
         $(assert.equal(East.greater(East.value("b"), "a"), true));
         $(assert.equal(East.greaterEqual(East.value("b"), "a"), true));
+
+        // Instance method tests
+        $(assert.equal(East.value("hello").equals("hello"), true));
+        $(assert.equal(East.value("hello").equals("world"), false));
+        $(assert.equal(East.value("hello").notEquals("world"), true));
+        $(assert.equal(East.value("hello").notEquals("hello"), false));
+        $(assert.equal(East.value("a").lessThan("b"), true));
+        $(assert.equal(East.value("b").lessThan("a"), false));
+        $(assert.equal(East.value("a").lessThanOrEqual("a"), true));
+        $(assert.equal(East.value("a").lessThanOrEqual("b"), true));
+        $(assert.equal(East.value("b").greaterThan("a"), true));
+        $(assert.equal(East.value("a").greaterThan("b"), false));
+        $(assert.equal(East.value("b").greaterThanOrEqual("a"), true));
+        $(assert.equal(East.value("b").greaterThanOrEqual("b"), true));
     });
 
     test("JSON print", $ => {

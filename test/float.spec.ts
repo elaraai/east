@@ -109,6 +109,20 @@ await describe("Float", (test) => {
         $(assert.equal(East.greaterEqual(East.value(10), 5), true));
         $(assert.equal(East.greaterEqual(East.value(5), 10), false));
         $(assert.equal(East.greaterEqual(East.value(10), 10), true));
+
+        // Instance method tests
+        $(assert.equal(East.value(10.0).equals(10.0), true));
+        $(assert.equal(East.value(10.0).equals(5.0), false));
+        $(assert.equal(East.value(10.0).notEquals(5.0), true));
+        $(assert.equal(East.value(10.0).notEquals(10.0), false));
+        $(assert.equal(East.value(5.0).lessThan(10.0), true));
+        $(assert.equal(East.value(10.0).lessThan(5.0), false));
+        $(assert.equal(East.value(5.0).lessThanOrEqual(10.0), true));
+        $(assert.equal(East.value(10.0).lessThanOrEqual(10.0), true));
+        $(assert.equal(East.value(10.0).greaterThan(5.0), true));
+        $(assert.equal(East.value(5.0).greaterThan(10.0), false));
+        $(assert.equal(East.value(10.0).greaterThanOrEqual(5.0), true));
+        $(assert.equal(East.value(10.0).greaterThanOrEqual(10.0), true));
     });
 
     test("Parsing", $ => {

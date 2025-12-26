@@ -6,8 +6,10 @@ import type { AST } from "../ast.js";
 import { get_location } from "../location.js";
 import { BooleanType, NeverType, StringType, TypeUnion, VariantType } from "../types.js";
 import type { BlockBuilder } from "./block.js";
+import { equal, notEqual } from "./block.js";
 import { Expr, type ToExpr } from "./expr.js";
-import type { ExprType, TypeOf } from "./types.js";
+import type { ExprType, TypeOf, SubtypeExprOrValue } from "./types.js";
+import type { BooleanExpr } from "./boolean.js";
 
 /**
  * Expression representing variant (sum type/tagged union) values.
@@ -154,17 +156,17 @@ export class VariantExpr<Cases extends Record<string, any>> extends Expr<Variant
   }
 
   /**
-   * Pattern match on this variant, handling specific cases with a default fallback.
+   * Pattern match on this variant.
    *
-   * This method allows partial matching where you only need to handle the cases you care about,
-   * with a required default handler for any unmatched cases. This is more ergonomic than
-   * exhaustive matching when you only need to handle a subset of cases.
+   * This method supports two modes:
+   * 1. **Exhaustive matching**: Provide handlers for all cases, no default needed
+   * 2. **Partial matching**: Provide handlers for some cases with a default fallback
    *
-   * @typeParam Handlers - Partial record of case handlers
-   * @typeParam Default - Type of the default handler function
-   * @param handlers - Object mapping case names to handler functions (not all cases required)
-   * @param defaultHandler - Required handler for any unmatched cases
-   * @returns Expression of the union type of all handler return types and default return type
+   * @typeParam Handlers - Record of case handlers (all cases required for exhaustive, partial for default mode)
+   * @typeParam Default - Type of the default handler function (only for partial matching)
+   * @param handlers - Object mapping case names to handler functions
+   * @param defaultHandler - Optional handler for unmatched cases (required if not all cases are handled)
+   * @returns Expression of the union type of all handler return types
    *
    * @see {@link Expr.match} for exhaustive pattern matching requiring all cases
    * @see {@link unwrap} for extracting a single case value
@@ -173,7 +175,23 @@ export class VariantExpr<Cases extends Record<string, any>> extends Expr<Variant
    * ```ts
    * const OptionType = VariantType({ some: IntegerType, none: NullType });
    *
-   * // Handle only the 'some' case, use default for 'none'
+   * // Exhaustive matching - all cases handled, no default needed
+   * const getValue = East.function([OptionType], IntegerType, ($, opt) => {
+   *   $.return(opt.match({
+   *     some: ($, val) => val,
+   *     none: ($) => 0n
+   *   }));
+   * });
+   * const compiled = East.compile(getValue.toIR(), []);
+   * compiled(Expr.variant("some", 42n));   // 42n
+   * compiled(Expr.variant("none", null));  // 0n
+   * ```
+   *
+   * @example
+   * ```ts
+   * const OptionType = VariantType({ some: IntegerType, none: NullType });
+   *
+   * // Partial matching - only handle some cases, use default for rest
    * const getOrZero = East.function([OptionType], IntegerType, ($, opt) => {
    *   $.return(opt.match({
    *     some: ($, val) => val
@@ -201,6 +219,13 @@ export class VariantExpr<Cases extends Record<string, any>> extends Expr<Variant
    * compiled(Expr.variant("pending", null));  // 0n
    * ```
    */
+  // Overload 1: Exhaustive matching - all cases required, no default needed
+  match<
+    Handlers extends { [K in keyof Cases]: ($: BlockBuilder<NeverType>, data: ExprType<Cases[K]>) => any }
+  >(
+    handlers: Handlers
+  ): ExprType<TypeOf<{ [K in keyof Handlers]: ReturnType<Handlers[K]> }[keyof Handlers]>>
+  // Overload 2: Partial matching - optional cases with required default
   match<
     Handlers extends { [K in keyof Cases]?: ($: BlockBuilder<NeverType>, data: ExprType<Cases[K]>) => any },
     Default extends ($: BlockBuilder<NeverType>) => any
@@ -210,15 +235,65 @@ export class VariantExpr<Cases extends Record<string, any>> extends Expr<Variant
   ): ExprType<TypeUnion<
     TypeOf<{ [K in keyof Handlers]: ReturnType<NonNullable<Handlers[K]>> }[keyof Handlers]>,
     TypeOf<ReturnType<Default>>
-  >> {
-    // Build complete handler set by filling unhandled cases with default
+  >>
+  // Implementation
+  match(
+    handlers: Record<string, ($: BlockBuilder<NeverType>, data: any) => any>,
+    defaultHandler?: ($: BlockBuilder<NeverType>) => any
+  ): Expr {
+    // Build complete handler set by filling unhandled cases with default (if provided)
     const completeHandlers = Object.fromEntries(
       Object.keys(this.cases).map(caseName => [
         caseName,
-        (handlers as Record<string, any>)[caseName] ?? (($: BlockBuilder<NeverType>, _data: any) => defaultHandler($))
+        handlers[caseName] ?? (defaultHandler ? (($: BlockBuilder<NeverType>, _data: any) => defaultHandler($)) : undefined)
       ])
     ) as Record<keyof Cases, ($: BlockBuilder<NeverType>, data: any) => any>;
 
     return Expr.match(this, completeHandlers) as any;
+  }
+
+  /**
+   * Checks if this variant equals another variant (same tag and value).
+   *
+   * @param other - The variant to compare against
+   * @returns A BooleanExpr that is true if the variants are equal
+   *
+   * @example
+   * ```ts
+   * const OptionType = VariantType({ some: IntegerType, none: NullType });
+   *
+   * const isEqual = East.function([OptionType, OptionType], BooleanType, ($, a, b) => {
+   *   $.return(a.equals(b));
+   * });
+   * const compiled = East.compile(isEqual.toIR(), []);
+   * compiled(variant("some", 42n), variant("some", 42n));  // true
+   * compiled(variant("some", 42n), variant("some", 0n));   // false
+   * compiled(variant("some", 42n), variant("none", null)); // false
+   * ```
+   */
+  equals(other: SubtypeExprOrValue<VariantType<Cases>>): BooleanExpr {
+    return equal(this, other) as BooleanExpr;
+  }
+
+  /**
+   * Checks if this variant does not equal another variant.
+   *
+   * @param other - The variant to compare against
+   * @returns A BooleanExpr that is true if the variants are not equal
+   *
+   * @example
+   * ```ts
+   * const OptionType = VariantType({ some: IntegerType, none: NullType });
+   *
+   * const isNotEqual = East.function([OptionType, OptionType], BooleanType, ($, a, b) => {
+   *   $.return(a.notEquals(b));
+   * });
+   * const compiled = East.compile(isNotEqual.toIR(), []);
+   * compiled(variant("some", 42n), variant("some", 0n));   // true
+   * compiled(variant("some", 42n), variant("some", 42n));  // false
+   * ```
+   */
+  notEquals(other: SubtypeExprOrValue<VariantType<Cases>>): BooleanExpr {
+    return notEqual(this, other) as BooleanExpr;
   }
 }

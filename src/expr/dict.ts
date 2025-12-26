@@ -7,6 +7,7 @@ import { get_location } from "../location.js";
 import { DictType, BooleanType, FunctionType, IntegerType, type EastType, NullType, OptionType, SetType, NeverType, VariantType, printType, FloatType, isTypeEqual, ArrayType } from "../types.js";
 import { valueOrExprToAst, valueOrExprToAstTyped } from "./ast.js";
 import type { BooleanExpr } from "./boolean.js";
+import { equal, notEqual } from "./block.js";
 import type { IntegerExpr } from "./integer.js";
 import { AstSymbol, Expr, FactorySymbol, TypeSymbol, type ToExpr } from "./expr.js";
 import type { SubtypeExprOrValue, ExprType, TypeOf } from "./types.js";
@@ -2122,5 +2123,45 @@ export class DictExpr<K extends any, T extends any> extends Expr<DictType<K, T>>
         throw new Error(`Can only perform mean on dict of numbers (Integer or Float), got ${printType(returnType)}`);
       }
     }
+  }
+
+  /**
+   * Checks if this dictionary equals another dictionary (same key-value pairs).
+   *
+   * @param other - The dictionary to compare against
+   * @returns A BooleanExpr that is true if the dictionaries are equal
+   *
+   * @example
+   * ```ts
+   * const isEqual = East.function([DictType(StringType, IntegerType), DictType(StringType, IntegerType)], BooleanType, ($, a, b) => {
+   *   $.return(a.equals(b));
+   * });
+   * const compiled = East.compile(isEqual.toIR(), []);
+   * compiled(new Map([["a", 1n], ["b", 2n]]), new Map([["a", 1n], ["b", 2n]]));  // true
+   * compiled(new Map([["a", 1n]]), new Map([["a", 1n], ["b", 2n]]));            // false
+   * ```
+   */
+  equals(other: DictExpr<K, T> | Map<SubtypeExprOrValue<K>, SubtypeExprOrValue<T>>): BooleanExpr {
+    return equal(this, other);
+  }
+
+  /**
+   * Checks if this dictionary does not equal another dictionary.
+   *
+   * @param other - The dictionary to compare against
+   * @returns A BooleanExpr that is true if the dictionaries are not equal
+   *
+   * @example
+   * ```ts
+   * const isNotEqual = East.function([DictType(StringType, IntegerType), DictType(StringType, IntegerType)], BooleanType, ($, a, b) => {
+   *   $.return(a.notEquals(b));
+   * });
+   * const compiled = East.compile(isNotEqual.toIR(), []);
+   * compiled(new Map([["a", 1n]]), new Map([["a", 1n], ["b", 2n]]));            // true
+   * compiled(new Map([["a", 1n], ["b", 2n]]), new Map([["a", 1n], ["b", 2n]]));  // false
+   * ```
+   */
+  notEquals(other: DictExpr<K, T> | Map<SubtypeExprOrValue<K>, SubtypeExprOrValue<T>>): BooleanExpr {
+    return notEqual(this, other);
   }
 }

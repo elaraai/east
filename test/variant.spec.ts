@@ -56,23 +56,26 @@ await describe("Variant", (test) => {
 
         $(assert.throws(v3.unwrap()));
 
-        // match with partial handlers and default
-        $(assert.equal(v1.match({ some: (_$, val) => val }, _$ => 0n), 42n));
-        $(assert.equal(v2.match({ some: (_$, val) => val }, _$ => 0n), 0n));
-
-        // match with multiple handlers and default for remaining cases
         const ResultType = VariantType({ ok: IntegerType, error: IntegerType, pending: NullType });
         const r1 = $.let(variant("ok", 100n), ResultType);
         const r2 = $.let(variant("error", -1n), ResultType);
         const r3 = $.let(variant("pending", null), ResultType);
 
+        // partial match: only some cases + default (2nd arg)
+        $(assert.equal(v1.match({ some: (_$, val) => val }, _$ => 0n), 42n));
+        $(assert.equal(v2.match({ some: (_$, val) => val }, _$ => 0n), 0n));
+        $(assert.equal(v1.match({ none: _$ => -1n }, _$ => -1n), -1n));
+        $(assert.equal(v2.match({ none: _$ => -1n }, _$ => -1n), -1n));
         $(assert.equal(r1.match({ ok: (_$, val) => val, error: (_$, val) => val }, _$ => 0n), 100n));
         $(assert.equal(r2.match({ ok: (_$, val) => val, error: (_$, val) => val }, _$ => 0n), -1n));
         $(assert.equal(r3.match({ ok: (_$, val) => val, error: (_$, val) => val }, _$ => 0n), 0n));
 
-        // match handling single case with default for all others
-        $(assert.equal(v1.match({ none: _$ => -1n }, _$ => -1n), -1n));
-        $(assert.equal(v2.match({ none: _$ => -1n }, _$ => -1n), -1n));
+        // exhaustive match: all cases handled, no default (no 2nd arg)
+        $(assert.equal(v1.match({ some: (_$, val) => val, none: _$ => 0n }), 42n));
+        $(assert.equal(v2.match({ some: (_$, val) => val, none: _$ => 0n }), 0n));
+        $(assert.equal(r1.match({ ok: (_$, val) => val, error: (_$, val) => val, pending: _$ => 0n }), 100n));
+        $(assert.equal(r2.match({ ok: (_$, val) => val, error: (_$, val) => val, pending: _$ => 0n }), -1n));
+        $(assert.equal(r3.match({ ok: (_$, val) => val, error: (_$, val) => val, pending: _$ => 0n }), 0n));
     });
 
     test("Comparisons", $ => {
@@ -101,6 +104,12 @@ await describe("Variant", (test) => {
         $(assert.equal(East.greater(East.value(variant("some", 20n)), variant("some", 10n)), true));
         $(assert.equal(East.lessEqual(East.value(variant("some", 10n)), variant("some", 20n)), true));
         $(assert.equal(East.greaterEqual(East.value(variant("some", 20n)), variant("some", 10n)), true));
+
+        // Instance method tests
+        $(assert.equal(East.value(variant("some", 42n)).equals(variant("some", 42n)), true));
+        $(assert.equal(East.value(variant("some", 42n)).equals(variant("some", 43n)), false));
+        $(assert.equal(East.value(variant("some", 42n)).notEquals(variant("some", 43n)), true));
+        $(assert.equal(East.value(variant("some", 42n)).notEquals(variant("some", 42n)), false));
 
         // TODO: Add cross-type variant comparison tests once universal comparison functions are available
     });

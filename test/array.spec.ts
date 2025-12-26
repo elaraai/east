@@ -3,7 +3,7 @@
  * Dual-licensed under AGPL-3.0 and commercial license. See LICENSE for details.
  */
 import { East, Expr, ArrayType, IntegerType, FloatType, StringType, BooleanType, BlobType, some, none, SetType, DictType, StructType, VariantType, NullType, variant, RecursiveType } from "../src/index.js";
-import type { option } from "../src/index.js";
+import type { ExprType, option, SubtypeExprOrValue } from "../src/index.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
 
 await describe("Array", (test) => {
@@ -384,6 +384,12 @@ await describe("Array", (test) => {
         $(assert.greaterEqual(East.value([1n, 2n]), [1n, 2n]))
         $(assert.greaterEqual(East.value([1n, 2n, 3n]), [1n, 2n]))
         $(assert.greaterEqual(East.value([1n, 3n]), [1n, 2n]))
+
+        // Instance method tests
+        $(assert.equal(East.value([1n, 2n, 3n]).equals([1n, 2n, 3n]), true))
+        $(assert.equal(East.value([1n, 2n, 3n]).equals([1n, 2n]), false))
+        $(assert.equal(East.value([1n, 2n, 3n]).notEquals([1n, 2n]), true))
+        $(assert.equal(East.value([1n, 2n, 3n]).notEquals([1n, 2n, 3n]), false))
     });
 
     test("toSet", $ => {
@@ -1255,7 +1261,7 @@ await describe("Array", (test) => {
         const arr = $.const([1n, 2n, 3n]);
 
         // Inner function that uses .map() capturing 'multiplier' from outer scope
-        const inner_fn = East.function(
+        const inner_fn = $.let(East.function(
             [ArrayType(IntegerType)],
             ArrayType(IntegerType),
             ($, input) => {
@@ -1263,7 +1269,7 @@ await describe("Array", (test) => {
                 const result = $.let(input.map(($, v) => v.multiply(multiplier)));
                 return $.return(result);
             }
-        );
+        ));
 
         const result = $.let(inner_fn(arr));
         $(assert.equal(result, [2n, 4n, 6n]));
@@ -1275,7 +1281,7 @@ await describe("Array", (test) => {
         const offset = $.const(5n);
         const arr = $.const([1n, 2n, 3n]);
 
-        const transform_fn = East.function(
+        const transform_fn = $.let(East.function(
             [ArrayType(IntegerType)],
             ArrayType(IntegerType),
             ($, input) => {
@@ -1283,7 +1289,7 @@ await describe("Array", (test) => {
                 const result = $.let(input.map(($, v) => v.multiply(scale).add(offset)));
                 return $.return(result);
             }
-        );
+        ));
 
         const result = $.let(transform_fn(arr));
         $(assert.equal(result, [15n, 25n, 35n])); // 1*10+5, 2*10+5, 3*10+5
@@ -1309,37 +1315,48 @@ await describe("Array", (test) => {
 
         // Simulates Badge.Root(label) - returns Expr<ComponentType>
         // This is a callable function expression that returns the RecursiveType
-        const BadgeRoot = East.function([StringType], ComponentType, ($, label) => {
+        const BadgeRoot = $.let(East.function([StringType], ComponentType, ($, label) => {
             return $.return(East.value(variant("Badge", { label }), ComponentType));
-        });
+        }));
 
         // Simulates Stack.HStack(children) - accepts Array<ComponentType>
-        const StackHStack = East.function([ArrayType(ComponentType)], ComponentType, ($, children) => {
+        const StackHStack = $.let(East.function([ArrayType(ComponentType)], ComponentType, ($, children) => {
             return $.return(East.value(variant("Stack", { children }), ComponentType));
-        });
+        }));
+
+        const createStack = (
+            children: SubtypeExprOrValue<ArrayType<typeof ComponentType>>,
+        ): ExprType<typeof ComponentType> => {
+            return $.let(StackHStack(children));
+        }
 
         // The actual use case: map strings to badges, then wrap in a stack
         const labels = $.let(["tag1", "tag2", "tag3"]);
 
         // This is the key test: BadgeRoot returns Expr<ComponentType> (a RecursiveType)
         // TypeOf should preserve RecursiveType, so badges should be ArrayExpr<ComponentType>
-        const badges = labels.map(($, label) => BadgeRoot(label));
+        const badges = $.let(labels.map(($, label) => BadgeRoot(label)));
 
         // This should type-check: StackHStack expects ArrayType(ComponentType)
         // If TypeOf incorrectly unwrapped RecursiveType to VariantType, this would fail
-        const stack = StackHStack(badges);
+        const stack = $.let(StackHStack(badges));
+
+        // Also test passing badges via a helper function
+        const other_stack = $.let(createStack(badges));
 
         // The fact that the above line compiles is the test!
         // StackHStack expects ArrayType(ComponentType) and badges is ArrayExpr<ComponentType>
         // Verify runtime behavior matches expected value
-        const expected = East.value(variant("Stack", {
+        const expected = $.let(East.value(variant("Stack", {
             children: [
                 variant("Badge", { label: "tag1" }),
                 variant("Badge", { label: "tag2" }),
                 variant("Badge", { label: "tag3" }),
             ]
-        }), ComponentType);
+        }), ComponentType));
 
         $(assert.equal(stack, expected));
+        $(assert.equal(other_stack, expected));
+        $(assert.equal(other_stack, stack));
     });
 });

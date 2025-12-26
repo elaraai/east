@@ -225,6 +225,12 @@ await describe("Set", (test) => {
         $(assert.greaterEqual(East.value(new Set([1n, 2n])), new Set([1n, 2n])))
         $(assert.greaterEqual(East.value(new Set([1n, 2n, 3n])), new Set([1n, 2n])))
         $(assert.greaterEqual(East.value(new Set([1n, 3n])), new Set([1n, 2n])))
+
+        // Instance method tests
+        $(assert.equal(East.value(new Set([1n, 2n, 3n])).equals(new Set([1n, 2n, 3n])), true))
+        $(assert.equal(East.value(new Set([1n, 2n, 3n])).equals(new Set([1n, 2n])), false))
+        $(assert.equal(East.value(new Set([1n, 2n, 3n])).notEquals(new Set([1n, 2n])), true))
+        $(assert.equal(East.value(new Set([1n, 2n, 3n])).notEquals(new Set([1n, 2n, 3n])), false))
     });
 
     test("Set map/filter/reduce/etc", $ => {

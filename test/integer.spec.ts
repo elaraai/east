@@ -212,6 +212,20 @@ await describe("Integer", (test) => {
         $(assert.equal(East.greaterEqual(East.value(10n), 5n), true));
         $(assert.equal(East.greaterEqual(East.value(5n), 10n), false));
         $(assert.equal(East.greaterEqual(East.value(10n), 10n), true));
+
+        // Instance method tests
+        $(assert.equal(East.value(10n).equals(10n), true));
+        $(assert.equal(East.value(10n).equals(5n), false));
+        $(assert.equal(East.value(10n).notEquals(5n), true));
+        $(assert.equal(East.value(10n).notEquals(10n), false));
+        $(assert.equal(East.value(5n).lessThan(10n), true));
+        $(assert.equal(East.value(10n).lessThan(5n), false));
+        $(assert.equal(East.value(5n).lessThanOrEqual(10n), true));
+        $(assert.equal(East.value(10n).lessThanOrEqual(10n), true));
+        $(assert.equal(East.value(10n).greaterThan(5n), true));
+        $(assert.equal(East.value(5n).greaterThan(10n), false));
+        $(assert.equal(East.value(10n).greaterThanOrEqual(5n), true));
+        $(assert.equal(East.value(10n).greaterThanOrEqual(10n), true));
     });
 
     test("Parsing", $ => {

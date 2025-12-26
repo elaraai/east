@@ -7,6 +7,7 @@ import { get_location } from "../location.js";
 import { SetType, BooleanType, FunctionType, IntegerType, type EastType, NullType, NeverType, DictType, printType, FloatType, isTypeEqual, ArrayType, VariantType, StringType } from "../types.js";
 import { valueOrExprToAst, valueOrExprToAstTyped } from "./ast.js";
 import type { BooleanExpr } from "./boolean.js";
+import { equal, notEqual } from "./block.js";
 import type { IntegerExpr } from "./integer.js";
 import { AstSymbol, Expr, TypeSymbol, type ToExpr } from "./expr.js";
 import type { ExprType, SubtypeExprOrValue, TypeOf } from "./types.js";
@@ -1833,5 +1834,45 @@ export class SetExpr<K extends any> extends Expr<SetType<K>> {
         throw new Error(`Can only perform mean on set of numbers (Integer or Float), got ${printType(returnType)}`);
       }
     }
+  }
+
+  /**
+   * Checks if this set equals another set (same elements).
+   *
+   * @param other - The set to compare against
+   * @returns A BooleanExpr that is true if the sets are equal
+   *
+   * @example
+   * ```ts
+   * const isEqual = East.function([SetType(IntegerType), SetType(IntegerType)], BooleanType, ($, a, b) => {
+   *   $.return(a.equals(b));
+   * });
+   * const compiled = East.compile(isEqual.toIR(), []);
+   * compiled(new Set([1n, 2n, 3n]), new Set([1n, 2n, 3n]));  // true
+   * compiled(new Set([1n, 2n]), new Set([1n, 2n, 3n]));      // false
+   * ```
+   */
+  equals(other: SetExpr<K> | Set<SubtypeExprOrValue<K>>): BooleanExpr {
+    return equal(this, other);
+  }
+
+  /**
+   * Checks if this set does not equal another set.
+   *
+   * @param other - The set to compare against
+   * @returns A BooleanExpr that is true if the sets are not equal
+   *
+   * @example
+   * ```ts
+   * const isNotEqual = East.function([SetType(IntegerType), SetType(IntegerType)], BooleanType, ($, a, b) => {
+   *   $.return(a.notEquals(b));
+   * });
+   * const compiled = East.compile(isNotEqual.toIR(), []);
+   * compiled(new Set([1n, 2n]), new Set([1n, 2n, 3n]));      // true
+   * compiled(new Set([1n, 2n, 3n]), new Set([1n, 2n, 3n]));  // false
+   * ```
+   */
+  notEquals(other: SetExpr<K> | Set<SubtypeExprOrValue<K>>): BooleanExpr {
+    return notEqual(this, other);
   }
 }

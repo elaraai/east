@@ -9,6 +9,7 @@ import { AstSymbol, Expr, FactorySymbol, type ToExpr } from "./expr.js";
 import type { ExprType, TypeOf } from "./types.js";
 import { valueOrExprToAstTyped } from "./ast.js";
 import type { BlockBuilder } from "./block.js";
+import { equal, notEqual } from "./block.js";
 
 /**
  * Expression representing boolean values and logical operations.
@@ -272,5 +273,47 @@ export class BooleanExpr extends Expr<BooleanType> {
       }],
       else_body: false_expr[AstSymbol],
     }) as ExprType<TypeUnion<TypeOf<ReturnType<F1>>, TypeOf<ReturnType<F2>>>>;
+  }
+
+  /**
+   * Checks if this boolean equals another value.
+   *
+   * @param other - The value to compare against
+   * @returns A BooleanExpr that is true if the values are equal
+   *
+   * @example
+   * ```ts
+   * const isEqual = East.function([BooleanType, BooleanType], BooleanType, ($, a, b) => {
+   *   $.return(a.equals(b));
+   * });
+   * const compiled = East.compile(isEqual.toIR(), []);
+   * compiled(true, true);     // true
+   * compiled(false, false);   // true
+   * compiled(true, false);    // false
+   * ```
+   */
+  equals(other: BooleanExpr | boolean): BooleanExpr {
+    return equal(this, other);
+  }
+
+  /**
+   * Checks if this boolean does not equal another value.
+   *
+   * @param other - The value to compare against
+   * @returns A BooleanExpr that is true if the values are not equal
+   *
+   * @example
+   * ```ts
+   * const isNotEqual = East.function([BooleanType, BooleanType], BooleanType, ($, a, b) => {
+   *   $.return(a.notEquals(b));
+   * });
+   * const compiled = East.compile(isNotEqual.toIR(), []);
+   * compiled(true, false);    // true
+   * compiled(false, true);    // true
+   * compiled(true, true);     // false
+   * ```
+   */
+  notEquals(other: BooleanExpr | boolean): BooleanExpr {
+    return notEqual(this, other);
   }
 }

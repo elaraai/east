@@ -61,6 +61,12 @@ await describe("Boolean", (test) => {
         $(assert.equal(East.lessEqual(East.value(true), true), true));
         $(assert.equal(East.greater(East.value(true), false), true));
         $(assert.equal(East.greaterEqual(East.value(true), false), true));
+
+        // Instance method tests
+        $(assert.equal(East.value(true).equals(true), true));
+        $(assert.equal(East.value(true).equals(false), false));
+        $(assert.equal(East.value(true).notEquals(false), true));
+        $(assert.equal(East.value(true).notEquals(true), false));
     });
 
     test("Parsing", $ => {

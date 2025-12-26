@@ -12,6 +12,7 @@ import { AstSymbol, Expr, FactorySymbol, TypeSymbol, type ToExpr } from "./expr.
 import type { StringExpr } from "./string.js";
 import type { SubtypeExprOrValue, ExprType, TypeOf } from "./types.js";
 import type { BlockBuilder } from "./block.js";
+import { equal, notEqual } from "./block.js";
 import type { BooleanExpr } from "./boolean.js";
 import type { SetExpr } from "./set.js";
 import type { FloatExpr } from "./float.js";
@@ -3080,6 +3081,46 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
       type_parameters: [this.value_type as EastType, CsvSerializeConfigType],
       arguments: [this[AstSymbol], configAst],
     }) as BlobExpr;
+  }
+
+  /**
+   * Checks if this array equals another array (deep comparison).
+   *
+   * @param other - The array to compare against
+   * @returns A BooleanExpr that is true if the arrays are deeply equal
+   *
+   * @example
+   * ```ts
+   * const isEqual = East.function([ArrayType(IntegerType), ArrayType(IntegerType)], BooleanType, ($, a, b) => {
+   *   $.return(a.equals(b));
+   * });
+   * const compiled = East.compile(isEqual.toIR(), []);
+   * compiled([1n, 2n, 3n], [1n, 2n, 3n]);  // true
+   * compiled([1n, 2n], [1n, 2n, 3n]);      // false
+   * ```
+   */
+  equals(other: ArrayExpr<T> | SubtypeExprOrValue<T>[]): BooleanExpr {
+    return equal(this, other);
+  }
+
+  /**
+   * Checks if this array does not equal another array.
+   *
+   * @param other - The array to compare against
+   * @returns A BooleanExpr that is true if the arrays are not equal
+   *
+   * @example
+   * ```ts
+   * const isNotEqual = East.function([ArrayType(IntegerType), ArrayType(IntegerType)], BooleanType, ($, a, b) => {
+   *   $.return(a.notEquals(b));
+   * });
+   * const compiled = East.compile(isNotEqual.toIR(), []);
+   * compiled([1n, 2n], [1n, 2n, 3n]);      // true
+   * compiled([1n, 2n, 3n], [1n, 2n, 3n]);  // false
+   * ```
+   */
+  notEquals(other: ArrayExpr<T> | SubtypeExprOrValue<T>[]): BooleanExpr {
+    return notEqual(this, other);
   }
 
 }

@@ -10,6 +10,8 @@ import { AstSymbol, Expr, FactorySymbol, type ToExpr } from "./expr.js";
 import type { IntegerExpr } from "./integer.js";
 import type { StringExpr } from "./string.js";
 import type { ExprType } from "./types.js";
+import type { BooleanExpr } from "./boolean.js";
+import { equal, notEqual } from "./block.js";
 import { CsvParseConfigType, csvParseOptionsToValue, type CsvParseOptions } from "../serialization/csv.js";
 import type { ArrayExpr } from "./array.js";
 
@@ -244,5 +246,50 @@ export class BlobExpr extends Expr<BlobType> {
       type_parameters: [structType, CsvParseConfigType],
       arguments: [this[AstSymbol], configAst],
     }) as ArrayExpr<T>;
+  }
+
+  /**
+   * Checks if this blob equals another blob (byte-by-byte comparison).
+   *
+   * @param other - The blob to compare against
+   * @returns A BooleanExpr that is true if the blobs are identical
+   *
+   * @example
+   * ```ts
+   * const isEqual = East.function([BlobType, BlobType], BooleanType, ($, a, b) => {
+   *   $.return(a.equals(b));
+   * });
+   * const compiled = East.compile(isEqual.toIR(), []);
+   * const blob1 = new Uint8Array([1, 2, 3]);
+   * const blob2 = new Uint8Array([1, 2, 3]);
+   * const blob3 = new Uint8Array([1, 2, 4]);
+   * compiled(blob1, blob2);  // true
+   * compiled(blob1, blob3);  // false
+   * ```
+   */
+  equals(other: BlobExpr | Uint8Array): BooleanExpr {
+    return equal(this, other);
+  }
+
+  /**
+   * Checks if this blob does not equal another blob.
+   *
+   * @param other - The blob to compare against
+   * @returns A BooleanExpr that is true if the blobs are different
+   *
+   * @example
+   * ```ts
+   * const isNotEqual = East.function([BlobType, BlobType], BooleanType, ($, a, b) => {
+   *   $.return(a.notEquals(b));
+   * });
+   * const compiled = East.compile(isNotEqual.toIR(), []);
+   * const blob1 = new Uint8Array([1, 2, 3]);
+   * const blob2 = new Uint8Array([1, 2, 4]);
+   * compiled(blob1, blob2);  // true
+   * compiled(blob1, blob1);  // false
+   * ```
+   */
+  notEquals(other: BlobExpr | Uint8Array): BooleanExpr {
+    return notEqual(this, other);
   }
 }

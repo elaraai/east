@@ -14,6 +14,8 @@ import { tokenizeDateTimeFormat } from "../datetime_format/tokenize.js";
 import { DateTimeFormatTokenType } from "../datetime_format/types.js";
 import { validateDateTimeFormatTokens } from "../datetime_format/validate.js";
 import type { SubtypeExprOrValue } from "./types.js";
+import type { BooleanExpr } from "./boolean.js";
+import { equal, notEqual, less, lessEqual, greater, greaterEqual } from "./block.js";
 
 /**
  * Expression representing date and time values and operations.
@@ -918,6 +920,130 @@ export class DateTimeExpr extends Expr<DateTimeType> {
       type_parameters: [],
       arguments: [this[AstSymbol], tokensArray[AstSymbol]],
     }) as StringExpr;
+  }
+
+  /**
+   * Checks if this DateTime equals another value.
+   *
+   * @param other - The value to compare against
+   * @returns A BooleanExpr that is true if the values are equal
+   *
+   * @example
+   * ```ts
+   * const isEqual = East.function([DateTimeType, DateTimeType], BooleanType, ($, a, b) => {
+   *   $.return(a.equals(b));
+   * });
+   * const compiled = East.compile(isEqual.toIR(), []);
+   * compiled(new Date("2025-01-15T00:00:00.000Z"), new Date("2025-01-15T00:00:00.000Z"));  // true
+   * compiled(new Date("2025-01-15T00:00:00.000Z"), new Date("2025-01-16T00:00:00.000Z"));  // false
+   * ```
+   */
+  equals(other: DateTimeExpr | Date): BooleanExpr {
+    return equal(this, other);
+  }
+
+  /**
+   * Checks if this DateTime does not equal another value.
+   *
+   * @param other - The value to compare against
+   * @returns A BooleanExpr that is true if the values are not equal
+   *
+   * @example
+   * ```ts
+   * const isNotEqual = East.function([DateTimeType, DateTimeType], BooleanType, ($, a, b) => {
+   *   $.return(a.notEquals(b));
+   * });
+   * const compiled = East.compile(isNotEqual.toIR(), []);
+   * compiled(new Date("2025-01-15T00:00:00.000Z"), new Date("2025-01-16T00:00:00.000Z"));  // true
+   * compiled(new Date("2025-01-15T00:00:00.000Z"), new Date("2025-01-15T00:00:00.000Z"));  // false
+   * ```
+   */
+  notEquals(other: DateTimeExpr | Date): BooleanExpr {
+    return notEqual(this, other);
+  }
+
+  /**
+   * Checks if this DateTime is after another value.
+   *
+   * @param other - The value to compare against
+   * @returns A BooleanExpr that is true if this DateTime is after the other
+   *
+   * @example
+   * ```ts
+   * const isAfter = East.function([DateTimeType, DateTimeType], BooleanType, ($, a, b) => {
+   *   $.return(a.greaterThan(b));
+   * });
+   * const compiled = East.compile(isAfter.toIR(), []);
+   * compiled(new Date("2025-01-16T00:00:00.000Z"), new Date("2025-01-15T00:00:00.000Z"));  // true
+   * compiled(new Date("2025-01-15T00:00:00.000Z"), new Date("2025-01-16T00:00:00.000Z"));  // false
+   * compiled(new Date("2025-01-15T00:00:00.000Z"), new Date("2025-01-15T00:00:00.000Z"));  // false
+   * ```
+   */
+  greaterThan(other: DateTimeExpr | Date): BooleanExpr {
+    return greater(this, other);
+  }
+
+  /**
+   * Checks if this DateTime is before another value.
+   *
+   * @param other - The value to compare against
+   * @returns A BooleanExpr that is true if this DateTime is before the other
+   *
+   * @example
+   * ```ts
+   * const isBefore = East.function([DateTimeType, DateTimeType], BooleanType, ($, a, b) => {
+   *   $.return(a.lessThan(b));
+   * });
+   * const compiled = East.compile(isBefore.toIR(), []);
+   * compiled(new Date("2025-01-15T00:00:00.000Z"), new Date("2025-01-16T00:00:00.000Z"));  // true
+   * compiled(new Date("2025-01-16T00:00:00.000Z"), new Date("2025-01-15T00:00:00.000Z"));  // false
+   * compiled(new Date("2025-01-15T00:00:00.000Z"), new Date("2025-01-15T00:00:00.000Z"));  // false
+   * ```
+   */
+  lessThan(other: DateTimeExpr | Date): BooleanExpr {
+    return less(this, other);
+  }
+
+  /**
+   * Checks if this DateTime is after or equal to another value.
+   *
+   * @param other - The value to compare against
+   * @returns A BooleanExpr that is true if this DateTime is after or equal to the other
+   *
+   * @example
+   * ```ts
+   * const isAfterOrEqual = East.function([DateTimeType, DateTimeType], BooleanType, ($, a, b) => {
+   *   $.return(a.greaterThanOrEqual(b));
+   * });
+   * const compiled = East.compile(isAfterOrEqual.toIR(), []);
+   * compiled(new Date("2025-01-16T00:00:00.000Z"), new Date("2025-01-15T00:00:00.000Z"));  // true
+   * compiled(new Date("2025-01-15T00:00:00.000Z"), new Date("2025-01-15T00:00:00.000Z"));  // true
+   * compiled(new Date("2025-01-15T00:00:00.000Z"), new Date("2025-01-16T00:00:00.000Z"));  // false
+   * ```
+   */
+  greaterThanOrEqual(other: DateTimeExpr | Date): BooleanExpr {
+    return greaterEqual(this, other);
+  }
+
+  /**
+   * Checks if this DateTime is before or equal to another value.
+   *
+   * @param other - The value to compare against
+   * @returns A BooleanExpr that is true if this DateTime is before or equal to the other
+   *
+   * @example
+   * ```ts
+   * const isBeforeOrEqual = East.function([DateTimeType, DateTimeType], BooleanType, ($, a, b) => {
+   *   $.return(a.lessThanOrEqual(b));
+   * });
+   * const compiled = East.compile(isBeforeOrEqual.toIR(), []);
+   * compiled(new Date("2025-01-15T00:00:00.000Z"), new Date("2025-01-16T00:00:00.000Z"));  // true
+   * compiled(new Date("2025-01-15T00:00:00.000Z"), new Date("2025-01-15T00:00:00.000Z"));  // true
+   * compiled(new Date("2025-01-16T00:00:00.000Z"), new Date("2025-01-15T00:00:00.000Z"));  // false
+   * ```
+   */
+  lessThanOrEqual(other: DateTimeExpr | Date): BooleanExpr {
+    return lessEqual(this, other);
   }
 }
 

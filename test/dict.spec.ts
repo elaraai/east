@@ -170,6 +170,12 @@ await describe("Dict", (test) => {
         $(assert.greaterEqual(East.value(new Map([[1n, "a"], [2n, "b"]])), new Map([[1n, "a"], [2n, "b"]])))
         $(assert.greaterEqual(East.value(new Map([[1n, "a"], [2n, "b"], [3n, "c"]])), new Map([[1n, "a"], [2n, "b"]])))
         $(assert.greaterEqual(East.value(new Map([[1n, "a"], [3n, "c"]])), new Map([[1n, "a"], [2n, "b"]])))
+
+        // Instance method tests
+        $(assert.equal(East.value(new Map([[1n, "a"], [2n, "b"]])).equals(new Map([[1n, "a"], [2n, "b"]])), true))
+        $(assert.equal(East.value(new Map([[1n, "a"], [2n, "b"]])).equals(new Map([[1n, "a"]])), false))
+        $(assert.equal(East.value(new Map([[1n, "a"], [2n, "b"]])).notEquals(new Map([[1n, "a"]])), true))
+        $(assert.equal(East.value(new Map([[1n, "a"], [2n, "b"]])).notEquals(new Map([[1n, "a"], [2n, "b"]])), false))
     });
 
     test("Dict keys/copy/filter/map/reduce/etc", $ => {

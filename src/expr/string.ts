@@ -8,6 +8,7 @@ import { ArrayType, BlobType, BooleanType, IntegerType, isDataType, StringType, 
 import { valueOrExprToAstTyped } from "./ast.js";
 import type { BooleanExpr } from "./boolean.js";
 import type { IntegerExpr } from "./integer.js";
+import { equal, notEqual, less, lessEqual, greater, greaterEqual } from "./block.js";
 import type { ArrayExpr } from "./array.js";
 import { AstSymbol, Expr, FactorySymbol, type ToExpr } from "./expr.js";
 import type { ExprType } from "./types.js";
@@ -714,5 +715,129 @@ export class StringExpr extends Expr<StringType> {
       type_parameters: [],
       arguments: [this[AstSymbol]],
     }) as ExprType<BlobType>;
+  }
+
+  /**
+   * Checks if this string equals another value.
+   *
+   * @param other - The value to compare against
+   * @returns A BooleanExpr that is true if the values are equal
+   *
+   * @example
+   * ```ts
+   * const isEqual = East.function([StringType, StringType], BooleanType, ($, a, b) => {
+   *   $.return(a.equals(b));
+   * });
+   * const compiled = East.compile(isEqual.toIR(), []);
+   * compiled("hello", "hello");   // true
+   * compiled("hello", "world");   // false
+   * ```
+   */
+  equals(other: StringExpr | string): BooleanExpr {
+    return equal(this, other);
+  }
+
+  /**
+   * Checks if this string does not equal another value.
+   *
+   * @param other - The value to compare against
+   * @returns A BooleanExpr that is true if the values are not equal
+   *
+   * @example
+   * ```ts
+   * const isNotEqual = East.function([StringType, StringType], BooleanType, ($, a, b) => {
+   *   $.return(a.notEquals(b));
+   * });
+   * const compiled = East.compile(isNotEqual.toIR(), []);
+   * compiled("hello", "world");   // true
+   * compiled("hello", "hello");   // false
+   * ```
+   */
+  notEquals(other: StringExpr | string): BooleanExpr {
+    return notEqual(this, other);
+  }
+
+  /**
+   * Checks if this string is greater than another value (lexicographically).
+   *
+   * @param other - The value to compare against
+   * @returns A BooleanExpr that is true if this string is greater
+   *
+   * @example
+   * ```ts
+   * const isGreater = East.function([StringType, StringType], BooleanType, ($, a, b) => {
+   *   $.return(a.greaterThan(b));
+   * });
+   * const compiled = East.compile(isGreater.toIR(), []);
+   * compiled("b", "a");     // true
+   * compiled("a", "b");     // false
+   * compiled("a", "a");     // false
+   * ```
+   */
+  greaterThan(other: StringExpr | string): BooleanExpr {
+    return greater(this, other);
+  }
+
+  /**
+   * Checks if this string is less than another value (lexicographically).
+   *
+   * @param other - The value to compare against
+   * @returns A BooleanExpr that is true if this string is less
+   *
+   * @example
+   * ```ts
+   * const isLess = East.function([StringType, StringType], BooleanType, ($, a, b) => {
+   *   $.return(a.lessThan(b));
+   * });
+   * const compiled = East.compile(isLess.toIR(), []);
+   * compiled("a", "b");     // true
+   * compiled("b", "a");     // false
+   * compiled("a", "a");     // false
+   * ```
+   */
+  lessThan(other: StringExpr | string): BooleanExpr {
+    return less(this, other);
+  }
+
+  /**
+   * Checks if this string is greater than or equal to another value (lexicographically).
+   *
+   * @param other - The value to compare against
+   * @returns A BooleanExpr that is true if this string is greater than or equal
+   *
+   * @example
+   * ```ts
+   * const isGreaterOrEqual = East.function([StringType, StringType], BooleanType, ($, a, b) => {
+   *   $.return(a.greaterThanOrEqual(b));
+   * });
+   * const compiled = East.compile(isGreaterOrEqual.toIR(), []);
+   * compiled("b", "a");     // true
+   * compiled("a", "a");     // true
+   * compiled("a", "b");     // false
+   * ```
+   */
+  greaterThanOrEqual(other: StringExpr | string): BooleanExpr {
+    return greaterEqual(this, other);
+  }
+
+  /**
+   * Checks if this string is less than or equal to another value (lexicographically).
+   *
+   * @param other - The value to compare against
+   * @returns A BooleanExpr that is true if this string is less than or equal
+   *
+   * @example
+   * ```ts
+   * const isLessOrEqual = East.function([StringType, StringType], BooleanType, ($, a, b) => {
+   *   $.return(a.lessThanOrEqual(b));
+   * });
+   * const compiled = East.compile(isLessOrEqual.toIR(), []);
+   * compiled("a", "b");     // true
+   * compiled("a", "a");     // true
+   * compiled("b", "a");     // false
+   * ```
+   */
+  lessThanOrEqual(other: StringExpr | string): BooleanExpr {
+    return lessEqual(this, other);
   }
 }
