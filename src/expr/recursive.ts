@@ -94,7 +94,8 @@ export class RecursiveExpr<T> extends Expr<RecursiveType<T>> {
    */
   static wrap<T>(
     value: SubtypeExprOrValue<T>,
-    type: RecursiveType<T>
+    type: RecursiveType<T>,
+    factory: ToExpr
   ): RecursiveExpr<T> {
     const valueAst = valueOrExprToAstTyped(value, type.node as AST["type"]);
     const wrapAst: AST = {
@@ -103,8 +104,6 @@ export class RecursiveExpr<T> extends Expr<RecursiveType<T>> {
       location: get_location(2),
       value: valueAst,
     };
-    // Import fromAst dynamically to avoid circular dependency
-    const { fromAst } = require("./block.js");
-    return fromAst(wrapAst) as RecursiveExpr<T>;
+    return factory(wrapAst) as RecursiveExpr<T>;
   }
 }
