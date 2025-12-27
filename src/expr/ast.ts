@@ -272,14 +272,6 @@ export function valueOrExprToAstTyped<T extends EastType>(value: any, type: T, v
       visited = new Set();
     }
 
-    // // Create WrapRecursive node with placeholder
-    // const wrapNode: AST = {
-    //   ast_type: "WrapRecursive",
-    //   type: type,
-    //   location,
-    //   value: undefined as any
-    // };
-
     // Register before recursing (enables cycle detection)
     visited.add(value);
 
@@ -288,16 +280,8 @@ export function valueOrExprToAstTyped<T extends EastType>(value: any, type: T, v
 
     visited.delete(value);
 
-    return node;
-
-    // if (node.ast_type === "UnwrapRecursive" && node.type === type.node) {
-    //   // Optimize away redundant unwrap/wrap
-    //   return node.value as any;
-    // }
-
-    // (wrapNode as any).value = node;
-
-    // return wrapNode as any;
+    // Wrap in WrapRecursive so fromAst returns a RecursiveExpr
+    return { ast_type: "WrapRecursive", type, value: node, location };
   } else if (type.type === "Function") {
     if (typeof value !== "function") {
       throw new Error(`Expected function but got ${value === null ? "null" : typeof value}`);

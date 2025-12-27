@@ -24,6 +24,7 @@ export { SetExpr } from './set.js';
 export { DictExpr } from './dict.js';
 export { StructExpr } from './struct.js';
 export { VariantExpr } from './variant.js';
+export { RecursiveExpr } from './recursive.js';
 export { type CallableFunctionExpr, FunctionExpr } from './function.js';
 export { type CallableAsyncFunctionExpr, AsyncFunctionExpr } from './asyncfunction.js';
 

@@ -8,7 +8,7 @@ import { get_location, printLocation, type Location } from "../location.js";
 import { type EastType, FunctionType, isSubtype, NullType, printType, isTypeEqual, StringType, NeverType, VariantType, BooleanType, TypeUnion, IntegerType, StructType, ArrayType, type ValueTypeOf, AsyncFunctionType } from "../types.js";
 
 import type { ExprType, SubtypeExprOrValue, TypeOf } from "./types.js";
-import { AstSymbol, Expr } from "./expr.js";
+import { AstSymbol, Expr, TypeSymbol } from "./expr.js";
 import { NeverExpr } from "./never.js";
 import { NullExpr } from "./null.js";
 import { BooleanExpr } from "./boolean.js";
@@ -22,6 +22,7 @@ import { SetExpr } from "./set.js";
 import { DictExpr } from "./dict.js";
 import { StructExpr } from "./struct.js";
 import { VariantExpr } from "./variant.js";
+import { RecursiveExpr } from "./recursive.js";
 import { type CallableFunctionExpr, createFunctionExpr, FunctionExpr } from "./function.js";
 import { valueOrExprToAst, valueOrExprToAstTyped } from "./ast.js";
 import type { PlatformFunction } from "../platform.js";
@@ -63,14 +64,8 @@ export function fromAst<T extends AST>(ast: T): Expr<T["type"]> {
   } else if (type === "Variant") {
     return new VariantExpr(ast.type.cases, ast, fromAst);
   } else if (type === "Recursive") {
-    // Automatically unwrap a recursive type to give access to the node data
-    const as_ast = {
-      ast_type: "UnwrapRecursive" as const,
-      type: ast.type.node,
-      location: ast.location,
-      value: ast,
-    }
-    return fromAst(as_ast);
+    // Return RecursiveExpr to preserve the RecursiveType wrapper for TypeOf
+    return new RecursiveExpr(ast.type.node, ast, fromAst);
   } else if (type === "Function") {
     return createFunctionExpr(ast.type.inputs, ast.type.output, ast, fromAst);
   } else if (type === "AsyncFunction") {
@@ -1154,7 +1149,7 @@ export type BlockBuilder<Ret> = ((expr: Expr) => void) & {
    */
   let: (<T>(expr: SubtypeExprOrValue<NoInfer<T>>, type: T) => ExprType<T>) & (<V>(expr: V) => ExprType<TypeOf<V>>),
   /** Reassign a variable defined with `let` to a new value. */
-  assign: (<T>(variable: ExprType<T>, value: SubtypeExprOrValue<NoInfer<T>>) => ExprType<NullType>),
+  assign: (<E extends Expr<any>>(variable: E, value: SubtypeExprOrValue<E[TypeSymbol]>) => ExprType<NullType>),
   /** Return a value immediately from the current function */
   return: (value: SubtypeExprOrValue<Ret>) => void,
   /** Break immediately from the indicated loop */

@@ -10,14 +10,12 @@ import { get_location } from "../location.js";
 import { FunctionType, type EastType } from "../types.js";
 import { valueOrExprToAstTyped } from "./ast.js";
 import { AstSymbol, Expr, FactorySymbol, type ToExpr } from "./expr.js";
-import type { RecursiveType } from "../types.js";
 import type { ExprType, SubtypeExprOrValue } from "./types.js";
 
 /**
- * Return type for function calls - preserves RecursiveType wrapper to maintain type identity,
- * but expands other types to their ergonomic ExprType (e.g., IntegerExpr with .add() methods)
+ * Return type for function calls - uses ExprType for all types including RecursiveType
  */
-type FunctionReturnType<O> = O extends RecursiveType<any> ? Expr<O> : ExprType<O>;
+type FunctionReturnType<O> = ExprType<O>;
 
 /**
 * Expression representing the Function type.

@@ -56,7 +56,7 @@ await describe("Recursive", (test) => {
 
     test("Unwrapping", $ => {
         // Unwrap list2
-        const unwrapped2 = list2.unwrap("cons").tail;
+        const unwrapped2 = list2.unwrap().unwrap("cons").tail;
         $(assert.equal(unwrapped2, list1));
 
         const t1 = Expr.type(list1);

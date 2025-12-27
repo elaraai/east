@@ -19,6 +19,7 @@ import type { SetExpr } from "./set.js";
 import type { DictExpr } from "./dict.js";
 import type { StructExpr } from "./struct.js";
 import type { VariantExpr } from "./variant.js";
+import type { RecursiveExpr } from "./recursive.js";
 import type { CallableFunctionExpr } from "./function.js";
 import type { BlockBuilder } from "./block.js";
 import type { ref } from "../containers/ref.js";
@@ -45,9 +46,10 @@ export type SubtypeExprOrValue<T> =
   T extends DictType<infer K, infer V> ? Expr<NeverType> | Expr<DictType<K, V>> | Map<SubtypeExprOrValue<K>, SubtypeExprOrValue<V>> :
   T extends StructType<infer Fields> ? Expr<NeverType> | Expr<StructType<{ [K in keyof Fields]: SubType<Fields[K]> }>> | { [K in keyof Fields]: SubtypeExprOrValue<Fields[K]> } :
   // RecursiveType must be checked BEFORE VariantType to preserve the wrapper
-  T extends RecursiveType<infer U> ? Expr<T> | SubtypeExprOrValue<U> : // an Expr with the RecursiveType, or an Expr or value unwrapped from it
+  // Accept RecursiveExpr OR raw variant values (but NOT VariantExpr to avoid type confusion)
+  T extends RecursiveType<infer U> ? RecursiveExpr<ExpandOnce<U, T>> | (U extends VariantType<infer Cases> ? { [K in keyof Cases]: variant<K, SubtypeExprOrValue<Cases[K]>> }[keyof Cases] : never) :
   T extends VariantType<infer Cases> ? Expr<NeverType> | Expr<VariantType<{ [K in keyof Cases]?: SubType<Cases[K]> }>> | { [K in keyof Cases]: variant<K, SubtypeExprOrValue<Cases[K]>> }[keyof Cases] :
-  T extends RecursiveTypeMarker ? any : // make TypeScript faster - don't expand further
+  T extends RecursiveTypeMarker ? any : // recursive self-reference accepts anything
   T extends FunctionType<infer I, undefined> ? Expr<FunctionType<I, any>> | (($: BlockBuilder<NeverType>, ...input: { [K in keyof I]: ExprType<I[K]> }) => any) :
   T extends FunctionType<infer I, infer O> ? Expr<FunctionType<I, SubType<O>>> | (($: BlockBuilder<O>, ...input: { [K in keyof I]: ExprType<I[K]> }) => void | SubtypeExprOrValue<O>) :
   T extends AsyncFunctionType<infer I, undefined> ? Expr<AsyncFunctionType<I, any>> | (($: BlockBuilder<NeverType>, ...input: { [K in keyof I]: ExprType<I[K]> }) => any) :
@@ -87,9 +89,10 @@ export type ExprType<T> =
   T extends NeverType | DictType<infer K, infer V> ? DictExpr<K, V> :
   T extends NeverType | StructType<infer Fields> ? StructExpr<Fields> :
   // RecursiveType must be checked BEFORE VariantType to preserve the wrapper
-  T extends NeverType | RecursiveType<infer U> ? ExprType<ExpandOnce<U, T>> :
+  // ExpandOnce replaces RecursiveTypeMarker with the full RecursiveType for proper nested access
+  T extends NeverType | RecursiveType<infer U> ? RecursiveExpr<ExpandOnce<U, T>> :
   T extends NeverType | VariantType<infer Cases> ? VariantExpr<Cases> :
-  T extends NeverType | RecursiveTypeMarker ? NeverExpr : // this shouldn't happen
+  T extends NeverType | RecursiveTypeMarker ? RecursiveExpr<any> : // shouldn't normally happen
   T extends NeverType | FunctionType<infer I, infer O> ? CallableFunctionExpr<I, O> :
   T extends NeverType | AsyncFunctionType<infer I, infer O> ? CallableAsyncFunctionExpr<I, O> :
   Expr<T>;

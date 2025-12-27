@@ -319,26 +319,26 @@ await describe("Function", (test) => {
         }));
 
         // Create a linked list: add1 -> double -> square -> nil
-        const nil = East.value(variant("nil"), FnListType);
-        const squareNode = East.value(variant("cons", {
+        const nil = $.let(East.value(variant("nil"), FnListType));
+        const squareNode = $.let(East.value(variant("cons", {
             fn: East.function([IntegerType], IntegerType, ($, x) => x.multiply(x)),
             next: nil
-        }), FnListType);
-        const doubleNode = East.value(variant("cons", {
+        }), FnListType));
+        const doubleNode = $.let(East.value(variant("cons", {
             fn: East.function([IntegerType], IntegerType, ($, x) => x.multiply(2n)),
             next: squareNode
-        }), FnListType);
-        const add1Node = East.value(variant("cons", {
+        }), FnListType));
+        const add1Node = $.let(East.value(variant("cons", {
             fn: East.function([IntegerType], IntegerType, ($, x) => x.add(1n)),
             next: doubleNode
-        }), FnListType);
+        }), FnListType));
 
         // Traverse the list and apply each function in sequence
         const result = $.let(3n);
         const current = $.let(add1Node, FnListType);
 
         $.while(true, ($, label) => {
-            $.match(current, {
+            $.match(current.unwrap(), {
                 nil: $ => {
                     $.break(label);
                 },
@@ -370,7 +370,7 @@ await describe("Function", (test) => {
             const current = $.let(list, ListType);
 
             $.while(true, ($, label) => {
-                $.match(current, {
+                $.match(current.unwrap(), {
                     nil: $ => {
                         $.break(label);
                     },
@@ -384,8 +384,8 @@ await describe("Function", (test) => {
         });
 
         // Create list: 1 -> 2 -> 3 -> nil
-        const nil = East.value(variant("nil"), ListType);
-        const list = East.value(variant("cons", {
+        const nil = $.let(East.value(variant("nil"), ListType));
+        const list = $.let(East.value(variant("cons", {
             head: 1n,
             tail: East.value(variant("cons", {
                 head: 2n,
@@ -394,7 +394,7 @@ await describe("Function", (test) => {
                     tail: nil
                 }), ListType)
             }), ListType)
-        }), ListType);
+        }), ListType));
 
         $(assert.equal(sumList(list), 6n));
     });
@@ -407,8 +407,8 @@ await describe("Function", (test) => {
         }));
 
         // Function that creates a list with n elements: n -> n-1 -> ... -> 1 -> nil
-        const makeList = East.function([IntegerType], ListType, ($, n) => {
-            const nil = East.value(variant("nil"), ListType);
+        const makeList = $.let(East.function([IntegerType], ListType, ($, n) => {
+            const nil = $.let(East.value(variant("nil"), ListType));
             const result = $.let(nil, ListType);
             const i = $.let(1n);
 
@@ -421,14 +421,14 @@ await describe("Function", (test) => {
             });
 
             return result;
-        });
+        }));
 
         // Sum function to verify the list
-        const sumList = East.function([ListType], IntegerType, ($, list) => {
+        const sumList = $.let(East.function([ListType], IntegerType, ($, list) => {
             const sum = $.let(0n);
             const current = $.let(list, ListType);
             $.while(true, ($, label) => {
-                $.match(current, {
+                $.match(current.unwrap(), {
                     nil: $ => $.break(label),
                     cons: ($, node) => {
                         $.assign(sum, sum.add(node.head));
@@ -437,7 +437,7 @@ await describe("Function", (test) => {
                 });
             });
             return sum;
-        });
+        }));
 
         // makeList(3) creates 3 -> 2 -> 1 -> nil, sum = 6
         $(assert.equal(sumList(makeList(3n)), 6n));
@@ -458,7 +458,7 @@ await describe("Function", (test) => {
             const values = $.let([] as bigint[], ArrayType(IntegerType));
             const current = $.let(list, ListType);
             $.while(true, ($, label) => {
-                $.match(current, {
+                $.match(current.unwrap(), {
                     nil: $ => $.break(label),
                     cons: ($, node) => {
                         $(values.pushLast(node.head.multiply(2n)));
@@ -485,7 +485,7 @@ await describe("Function", (test) => {
             const sum = $.let(0n);
             const current = $.let(list, ListType);
             $.while(true, ($, label) => {
-                $.match(current, {
+                $.match(current.unwrap(), {
                     nil: $ => $.break(label),
                     cons: ($, node) => {
                         $.assign(sum, sum.add(node.head));
@@ -497,8 +497,8 @@ await describe("Function", (test) => {
         });
 
         // Create list: 1 -> 2 -> 3 -> nil
-        const nil = East.value(variant("nil"), ListType);
-        const list = East.value(variant("cons", {
+        const nil = $.let(East.value(variant("nil"), ListType));
+        const list = $.let(East.value(variant("cons", {
             head: 1n,
             tail: East.value(variant("cons", {
                 head: 2n,
@@ -507,7 +507,7 @@ await describe("Function", (test) => {
                     tail: nil
                 }), ListType)
             }), ListType)
-        }), ListType);
+        }), ListType));
 
         // Sum of original: 1 + 2 + 3 = 6
         $(assert.equal(sumList(list), 6n));
@@ -535,7 +535,7 @@ await describe("Function", (test) => {
                 const sum = $.let(0n);
                 const current = $.let(list, ListType);
                 $.while(true, ($, label) => {
-                    $.match(current, {
+                    $.match(current.unwrap(), {
                         nil: $ => $.break(label),
                         cons: ($, node) => {
                             $.assign(sum, sum.add(node.head));
@@ -547,7 +547,7 @@ await describe("Function", (test) => {
             }),
         }, ListOpsType);
 
-        const nil = East.value(variant("nil"), ListType);
+        const nil = $.let(East.value(variant("nil"), ListType));
         const list1 = $.let(listOps.prepend(nil, 1n), ListType);
         const list2 = $.let(listOps.prepend(list1, 2n), ListType);
         const list3 = $.let(listOps.prepend(list2, 3n), ListType);
@@ -570,7 +570,7 @@ await describe("Function", (test) => {
                 const sum = $.let(0n);
                 const current = $.let(list, ListType);
                 $.while(true, ($, label) => {
-                    $.match(current, {
+                    $.match(current.unwrap(), {
                         nil: $ => $.break(label),
                         cons: ($, node) => {
                             $.assign(sum, sum.add(node.head));
@@ -583,11 +583,11 @@ await describe("Function", (test) => {
             MaybeTransformType
         );
 
-        const nil = East.value(variant("nil"), ListType);
-        const list = East.value(variant("cons", {
+        const nil = $.let(East.value(variant("nil"), ListType));
+        const list = $.let(East.value(variant("cons", {
             head: 5n,
             tail: East.value(variant("cons", { head: 3n, tail: nil }), ListType)
-        }), ListType);
+        }), ListType));
 
         const result = $.let(-1n);
         $.match(someSum, {
@@ -613,22 +613,22 @@ await describe("Function", (test) => {
         }));
 
         // Create chain: link(1, -> link(2, -> end(3)))
-        const endNode = East.value(variant("end", 3n), ChainType);
-        const link2 = East.value(variant("link", {
+        const endNode = $.let(East.value(variant("end", 3n), ChainType));
+        const link2 = $.let(East.value(variant("link", {
             value: 2n,
             next: East.function([], ChainType, _$ => endNode)
-        }), ChainType);
-        const link1 = East.value(variant("link", {
+        }), ChainType));
+        const link1 = $.let(East.value(variant("link", {
             value: 1n,
             next: East.function([], ChainType, _$ => link2)
-        }), ChainType);
+        }), ChainType));
 
         // Traverse the chain and sum values
         const sum = $.let(0n);
         const current = $.let(link1, ChainType);
 
         $.while(true, ($, label) => {
-            $.match(current, {
+            $.match(current.unwrap(), {
                 end: ($, val) => {
                     $.assign(sum, sum.add(val));
                     $.break(label);
@@ -655,13 +655,13 @@ await describe("Function", (test) => {
         }));
 
         // Create a simple tree
-        const leaf1 = East.value(variant("leaf", 1n), TreeType);
-        const leaf2 = East.value(variant("leaf", 2n), TreeType);
-        const leaf3 = East.value(variant("leaf", 3n), TreeType);
-        const leaf4 = East.value(variant("leaf", 4n), TreeType);
+        const leaf1 = $.let(East.value(variant("leaf", 1n), TreeType));
+        const leaf2 = $.let(East.value(variant("leaf", 2n), TreeType));
+        const leaf3 = $.let(East.value(variant("leaf", 3n), TreeType));
+        const leaf4 = $.let(East.value(variant("leaf", 4n), TreeType));
 
         // Placeholder combiner for struct
-        const placeholderCombiner = East.function([TreeType, TreeType], TreeType, ($, a, _b) => a);
+        const placeholderCombiner = $.let(East.function([TreeType, TreeType], TreeType, ($, a, _b) => a));
 
         // Combine function that creates a new branch
         const combiner = East.function([TreeType, TreeType], TreeType, ($, a, b) => {
@@ -678,7 +678,7 @@ await describe("Function", (test) => {
 
         // Verify leaf values can be extracted
         const leafVal = $.let(0n);
-        $.match(leaf1, {
+        $.match(leaf1.unwrap(), {
             leaf: ($, val) => {
                 $.assign(leafVal, val);
             },
@@ -688,10 +688,10 @@ await describe("Function", (test) => {
 
         // Verify branch structure - extract left leaf value
         const branchLeftVal = $.let(0n);
-        $.match(branch1, {
+        $.match(branch1.unwrap(), {
             leaf: _$ => {},
             branch: ($, b) => {
-                $.match(b.left, {
+                $.match(b.left.unwrap(), {
                     leaf: ($, val) => {
                         $.assign(branchLeftVal, val);
                     },
@@ -704,7 +704,7 @@ await describe("Function", (test) => {
         // Test the combine function stored in branch
         // placeholderCombiner returns the first argument, so combine(leaf3, leaf4) returns leaf3
         const combinedTree = $.let(East.value(variant("leaf", 0n), TreeType), TreeType);
-        $.match(branch1, {
+        $.match(branch1.unwrap(), {
             leaf: _$ => {},
             branch: ($, b) => {
                 // Call the stored combine function
@@ -713,7 +713,7 @@ await describe("Function", (test) => {
         });
         // combinedTree should be leaf3 (since placeholderCombiner returns first arg)
         const combinedVal = $.let(0n);
-        $.match(combinedTree, {
+        $.match(combinedTree.unwrap(), {
             leaf: ($, val) => {
                 $.assign(combinedVal, val);
             },
@@ -737,7 +737,7 @@ await describe("Function", (test) => {
                 const current = $.let(list, ListType);
 
                 $.while(true, ($, label) => {
-                    $.match(current, {
+                    $.match(current.unwrap(), {
                         nil: $ => $.break(label),
                         cons: ($, node) => {
                             $.assign(acc, fn(acc, node.head));
@@ -749,8 +749,8 @@ await describe("Function", (test) => {
             }
         );
 
-        const nil = East.value(variant("nil"), ListType);
-        const list = East.value(variant("cons", {
+        const nil = $.let(East.value(variant("nil"), ListType));
+        const list = $.let(East.value(variant("cons", {
             head: 1n,
             tail: East.value(variant("cons", {
                 head: 2n,
@@ -759,14 +759,14 @@ await describe("Function", (test) => {
                     tail: nil
                 }), ListType)
             }), ListType)
-        }), ListType);
+        }), ListType));
 
         // Sum using fold
-        const add = East.function([IntegerType, IntegerType], IntegerType, ($, a, b) => a.add(b));
+        const add = $.let(East.function([IntegerType, IntegerType], IntegerType, ($, a, b) => a.add(b)));
         $(assert.equal(fold(list, 0n, add), 6n));
 
         // Product using fold
-        const mul = East.function([IntegerType, IntegerType], IntegerType, ($, a, b) => a.multiply(b));
+        const mul = $.let(East.function([IntegerType, IntegerType], IntegerType, ($, a, b) => a.multiply(b)));
         $(assert.equal(fold(list, 1n, mul), 6n)); // 1 * 2 * 3 = 6
     });
 
@@ -777,7 +777,7 @@ await describe("Function", (test) => {
         }));
 
         // Captured list
-        const nil = East.value(variant("nil"), ListType);
+        const nil = $.let(East.value(variant("nil"), ListType));
         const capturedList = $.const(East.value(variant("cons", {
             head: 10n,
             tail: East.value(variant("cons", {
@@ -796,7 +796,7 @@ await describe("Function", (test) => {
             const sum = $.let(0n);
             const current = $.let(list, ListType);
             $.while(true, ($, label) => {
-                $.match(current, {
+                $.match(current.unwrap(), {
                     nil: $ => $.break(label),
                     cons: ($, node) => {
                         $.assign(sum, sum.add(node.head));
@@ -820,12 +820,12 @@ await describe("Function", (test) => {
 
         // Async function that reverses a list
         const reverseList = East.asyncFunction([ListType], ListType, ($, list) => {
-            const nil = East.value(variant("nil"), ListType);
+            const nil = $.let(East.value(variant("nil"), ListType));
             const result = $.let(nil, ListType);
             const current = $.let(list, ListType);
 
             $.while(true, ($, label) => {
-                $.match(current, {
+                $.match(current.unwrap(), {
                     nil: $ => $.break(label),
                     cons: ($, node) => {
                         $.assign(result, East.value(variant("cons", {
@@ -840,8 +840,8 @@ await describe("Function", (test) => {
         });
 
         // Create list 1 -> 2 -> 3 -> nil
-        const nil = East.value(variant("nil"), ListType);
-        const list = East.value(variant("cons", {
+        const nil = $.let(East.value(variant("nil"), ListType));
+        const list = $.let(East.value(variant("cons", {
             head: 1n,
             tail: East.value(variant("cons", {
                 head: 2n,
@@ -850,12 +850,12 @@ await describe("Function", (test) => {
                     tail: nil
                 }), ListType)
             }), ListType)
-        }), ListType);
+        }), ListType));
 
         // Reverse and check first element (should be 3)
         const reversed = $.let(reverseList(list), ListType);
         const first = $.let(0n);
-        $.match(reversed, {
+        $.match(reversed.unwrap(), {
             nil: _$ => {},
             cons: ($, node) => {
                 $.assign(first, node.head);
@@ -1010,7 +1010,7 @@ await describe("Function", (test) => {
             const sum = $.let(0n);
             const current = $.let(list, ListType);
             $.while(true, ($, label) => {
-                $.match(current, {
+                $.match(current.unwrap(), {
                     nil: ($) => $.break(label),
                     cons: ($, node) => {
                         $.assign(sum, sum.add(node.head));
@@ -1026,8 +1026,8 @@ await describe("Function", (test) => {
         const decoded = $.let(blob.decodeBeast(FnType, 'v2'));
 
         // Create list: 1 -> 2 -> 3 -> nil
-        const nil = East.value(variant("nil"), ListType);
-        const list = East.value(variant("cons", {
+        const nil = $.let(East.value(variant("nil"), ListType));
+        const list = $.let(East.value(variant("cons", {
             head: 1n,
             tail: East.value(variant("cons", {
                 head: 2n,
@@ -1036,7 +1036,7 @@ await describe("Function", (test) => {
                     tail: nil
                 }), ListType)
             }), ListType)
-        }), ListType);
+        }), ListType));
 
         $(assert.equal(decoded(list), 6n));
     });
@@ -1051,7 +1051,7 @@ await describe("Function", (test) => {
 
         // Function that creates a list: n -> n-1 -> ... -> 1 -> nil
         const makeList = East.function([IntegerType], ListType, ($, n) => {
-            const nil = East.value(variant("nil"), ListType);
+            const nil = $.let(East.value(variant("nil"), ListType));
             const result = $.let(nil, ListType);
             const i = $.let(1n);
             $.while(East.lessEqual(i, n), ($) => {
@@ -1069,7 +1069,7 @@ await describe("Function", (test) => {
             const sum = $.let(0n);
             const current = $.let(list, ListType);
             $.while(true, ($, label) => {
-                $.match(current, {
+                $.match(current.unwrap(), {
                     nil: ($) => $.break(label),
                     cons: ($, node) => {
                         $.assign(sum, sum.add(node.head));
@@ -1101,19 +1101,19 @@ await describe("Function", (test) => {
         }));
 
         // Create list: add1 -> double -> square -> nil
-        const nil = East.value(variant("nil"), FnListType);
-        const squareNode = East.value(variant("cons", {
+        const nil = $.let(East.value(variant("nil"), FnListType));
+        const squareNode = $.let(East.value(variant("cons", {
             fn: East.function([IntegerType], IntegerType, ($, x) => x.multiply(x)),
             next: nil
-        }), FnListType);
-        const doubleNode = East.value(variant("cons", {
+        }), FnListType));
+        const doubleNode = $.let(East.value(variant("cons", {
             fn: East.function([IntegerType], IntegerType, ($, x) => x.multiply(2n)),
             next: squareNode
-        }), FnListType);
-        const add1Node = East.value(variant("cons", {
+        }), FnListType));
+        const add1Node = $.let(East.value(variant("cons", {
             fn: East.function([IntegerType], IntegerType, ($, x) => x.add(1n)),
             next: doubleNode
-        }), FnListType);
+        }), FnListType));
 
         // Serialize the entire list with embedded functions
         const blob = $.let(East.Blob.encodeBeast(add1Node, 'v2'));
@@ -1126,7 +1126,7 @@ await describe("Function", (test) => {
         const current = $.let(decoded, FnListType);
 
         $.while(true, ($, label) => {
-            $.match(current, {
+            $.match(current.unwrap(), {
                 nil: ($) => $.break(label),
                 cons: ($, node) => {
                     $.assign(result, node.fn(result));
