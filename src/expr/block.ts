@@ -78,23 +78,23 @@ export function fromAst<T extends AST>(ast: T): Expr<T["type"]> {
 
 /**
  * Compile a function expression into a JavaScript function.
- * 
+ *
  * @param f the function expression to compile
  * @param platform the platform functions available during compilation
  * @returns the compiled function
  */
-export function compile<I extends EastType[], O extends EastType, F extends FunctionExpr<I, O>>(f: F, platform: PlatformFunction[]): (...inputs: { [K in keyof I]: ValueTypeOf<I[K]> }) => ValueTypeOf<O>  {
+export function compile<I extends any[], O>(f: FunctionExpr<I, O>, platform: PlatformFunction[]): (...inputs: { [K in keyof I]: ValueTypeOf<I[K]> }) => ValueTypeOf<O>  {
   return f.toIR().compile(platform);
 }
 
 /**
  * Compile an async function expression into a JavaScript function.
- * 
+ *
  * @param f the async function expression to compile
  * @param platform the platform functions available during compilation
  * @returns the compiled async function
  */
-export function compileAsync<I extends EastType[], O extends EastType, F extends AsyncFunctionExpr<I, O>>(f: F, platform: PlatformFunction[]): (...inputs: { [K in keyof I]: ValueTypeOf<I[K]> }) => Promise<ValueTypeOf<O>>  {
+export function compileAsync<I extends any[], O>(f: AsyncFunctionExpr<I, O>, platform: PlatformFunction[]): (...inputs: { [K in keyof I]: ValueTypeOf<I[K]> }) => Promise<ValueTypeOf<O>>  {
   return f.toIR().compile(platform);
 }
 
