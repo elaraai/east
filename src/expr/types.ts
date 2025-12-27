@@ -46,8 +46,9 @@ export type SubtypeExprOrValue<T> =
   T extends DictType<infer K, infer V> ? Expr<NeverType> | Expr<DictType<K, V>> | Map<SubtypeExprOrValue<K>, SubtypeExprOrValue<V>> :
   T extends StructType<infer Fields> ? Expr<NeverType> | Expr<StructType<{ [K in keyof Fields]: SubType<Fields[K]> }>> | { [K in keyof Fields]: SubtypeExprOrValue<Fields[K]> } :
   // RecursiveType must be checked BEFORE VariantType to preserve the wrapper
-  // Accept RecursiveExpr OR raw variant values (but NOT VariantExpr to avoid type confusion)
-  T extends RecursiveType<infer U> ? RecursiveExpr<ExpandOnce<U, T>> | (U extends VariantType<infer Cases> ? { [K in keyof Cases]: variant<K, SubtypeExprOrValue<Cases[K]>> }[keyof Cases] : never) :
+  // Accept RecursiveExpr OR raw values matching the inner type (struct literals, variant values, etc.)
+  // Note: SubtypeExprOrValue<U> (not ExpandOnce) - recursion breaks at RecursiveTypeMarker -> any
+  T extends RecursiveType<infer U> ? RecursiveExpr<ExpandOnce<U, T>> | SubtypeExprOrValue<U> :
   T extends VariantType<infer Cases> ? Expr<NeverType> | Expr<VariantType<{ [K in keyof Cases]?: SubType<Cases[K]> }>> | { [K in keyof Cases]: variant<K, SubtypeExprOrValue<Cases[K]>> }[keyof Cases] :
   T extends RecursiveTypeMarker ? any : // recursive self-reference accepts anything
   T extends FunctionType<infer I, undefined> ? Expr<FunctionType<I, any>> | (($: BlockBuilder<NeverType>, ...input: { [K in keyof I]: ExprType<I[K]> }) => any) :

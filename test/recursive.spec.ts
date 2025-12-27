@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Elara AI Pty Ltd
  * Dual-licensed under AGPL-3.0 and commercial license. See LICENSE for details.
  */
-import { East, BooleanType, VariantType, NullType, RecursiveType, variant, StructType, Expr, isTypeEqual } from "../src/index.js";
+import { East, BooleanType, VariantType, NullType, RecursiveType, variant, StructType, Expr, isTypeEqual, StringType, ArrayType, DictType } from "../src/index.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
 
 await describe("Recursive", (test) => {
@@ -76,5 +76,56 @@ await describe("Recursive", (test) => {
         $(assert.equal(East.value(".cons (head=false, tail=.cons (head=true, tail=.nil))").parse(LinkedListType), list2));
 
         $(assert.throws(East.value(".cons (head=false, tail=.cons (head=true, tail=true))").parse(LinkedListType)));
+    });
+
+    // Test recursive type wrapping a struct (not a variant)
+    // This is common for tree-like structures like XML nodes
+    const XmlNodeType = RecursiveType(self => StructType({
+        tag: StringType,
+        attributes: DictType(StringType, StringType),
+        children: ArrayType(VariantType({
+            TEXT: StringType,
+            ELEMENT: self
+        }))
+    }));
+
+    test("Struct-based recursive type", $ => {
+        // Create an XML node with struct literal syntax
+        const textNode = $.let(East.value({
+            tag: "p",
+            attributes: new Map(),
+            children: [variant("TEXT", "Hello world")],
+        }, XmlNodeType));
+
+        $(assert.equal(textNode.unwrap().tag, "p"));
+
+        // Create nested nodes
+        const nestedNode = $.let(East.value({
+            tag: "div",
+            attributes: new Map([["class", "container"]]),
+            children: [
+                variant("ELEMENT", {
+                    tag: "span",
+                    attributes: new Map(),
+                    children: [variant("TEXT", "nested")]
+                })
+            ],
+        }, XmlNodeType));
+
+        $(assert.equal(nestedNode.unwrap().tag, "div"));
+        $(assert.equal(nestedNode.unwrap().attributes.get("class"), "container"));
+    });
+
+    test("Struct-based recursive type with $.let", $ => {
+        // Ensure $.let works with struct-based recursive types
+        const node = $.let(East.value({
+            tag: "book",
+            attributes: new Map(),
+            children: [variant("TEXT", "East Guide")],
+        }, XmlNodeType));
+
+        // Access fields through unwrap
+        $(assert.equal(node.unwrap().tag, "book"));
+        $(assert.equal(node.unwrap().children.length(), 1n));
     });
 });
