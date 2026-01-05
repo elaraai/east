@@ -29,7 +29,6 @@
     "test": "npm run build && node --enable-source-maps --test 'dist/test/**/*.spec.js' 'dist/src/**/*.spec.js'",
     "test:coverage": "npm run build && node --enable-source-maps --test --experimental-test-coverage 'dist/test/**/*.spec.js' 'dist/src/**/*.spec.js'",
     "test:export": "npm run build && EXPORT_TEST_IR=/tmp/east-test-ir node --enable-source-maps --test 'dist/test/**/*.spec.js'",
-    "extract-examples": "tsx scripts/extract-typedoc-examples.ts",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "version:patch": "npm version patch -m 'chore: bump version to %s'",
