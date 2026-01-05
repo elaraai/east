@@ -121,4 +121,16 @@ await describe("Boolean", (test) => {
         );
         $(assert.equal(result, true)); // 7 > 5 && 7 < 10
     });
+
+    test("Equality method aliases", $ => {
+        // Test short aliases (eq, ne)
+        $(assert.equal(East.value(true).eq(true), true));
+        $(assert.equal(East.value(true).eq(false), false));
+        $(assert.equal(East.value(true).ne(false), true));
+        $(assert.equal(East.value(false).ne(false), false));
+
+        // Test medium aliases (equal, notEqual)
+        $(assert.equal(East.value(true).equal(true), true));
+        $(assert.equal(East.value(true).notEqual(false), true));
+    });
 });

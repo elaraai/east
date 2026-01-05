@@ -1703,4 +1703,29 @@ await describe("String", (test) => {
             /Error occurred because expected integer, got 't' at \.result\.ok \(line 1, col 15\) while parsing value of type .*/
         ));
     });
+
+    test("Comparison method aliases", $ => {
+        // Test short aliases (eq, ne, gt, lt, gte, lte, ge, le)
+        $(assert.equal(East.value("hello").eq("hello"), true));
+        $(assert.equal(East.value("hello").eq("world"), false));
+        $(assert.equal(East.value("hello").ne("world"), true));
+        $(assert.equal(East.value("hello").ne("hello"), false));
+        $(assert.equal(East.value("world").gt("hello"), true));
+        $(assert.equal(East.value("hello").gt("world"), false));
+        $(assert.equal(East.value("hello").lt("world"), true));
+        $(assert.equal(East.value("world").lt("hello"), false));
+        $(assert.equal(East.value("hello").gte("hello"), true));
+        $(assert.equal(East.value("world").gte("hello"), true));
+        $(assert.equal(East.value("hello").lte("world"), true));
+        $(assert.equal(East.value("world").ge("hello"), true));
+        $(assert.equal(East.value("hello").le("world"), true));
+
+        // Test medium aliases (equal, notEqual, greater, less, greaterEqual, lessEqual)
+        $(assert.equal(East.value("hello").equal("hello"), true));
+        $(assert.equal(East.value("hello").notEqual("world"), true));
+        $(assert.equal(East.value("world").greater("hello"), true));
+        $(assert.equal(East.value("hello").less("world"), true));
+        $(assert.equal(East.value("hello").greaterEqual("hello"), true));
+        $(assert.equal(East.value("hello").lessEqual("world"), true));
+    });
 });

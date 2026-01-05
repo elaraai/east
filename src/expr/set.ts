@@ -1875,4 +1875,18 @@ export class SetExpr<K extends any> extends Expr<SetType<K>> {
   notEquals(other: SetExpr<K> | Set<SubtypeExprOrValue<K>>): BooleanExpr {
     return notEqual(this, other);
   }
+
+  // ============================================================================
+  // Aliases for comparison operations
+  // ============================================================================
+
+  /** Alias for {@link equals} */
+  eq = this.equals;
+  /** Alias for {@link equals} */
+  equal = this.equals;
+
+  /** Alias for {@link notEquals} */
+  ne = this.notEquals;
+  /** Alias for {@link notEquals} */
+  notEqual = this.notEquals;
 }

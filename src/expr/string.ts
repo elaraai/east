@@ -840,4 +840,42 @@ export class StringExpr extends Expr<StringType> {
   lessThanOrEqual(other: StringExpr | string): BooleanExpr {
     return lessEqual(this, other);
   }
+
+  // ============================================================================
+  // Aliases for comparison operations
+  // ============================================================================
+
+  /** Alias for {@link equals} */
+  eq = this.equals;
+  /** Alias for {@link equals} */
+  equal = this.equals;
+
+  /** Alias for {@link notEquals} */
+  ne = this.notEquals;
+  /** Alias for {@link notEquals} */
+  notEqual = this.notEquals;
+
+  /** Alias for {@link greaterThan} */
+  gt = this.greaterThan;
+  /** Alias for {@link greaterThan} */
+  greater = this.greaterThan;
+
+  /** Alias for {@link lessThan} */
+  lt = this.lessThan;
+  /** Alias for {@link lessThan} */
+  less = this.lessThan;
+
+  /** Alias for {@link greaterThanOrEqual} */
+  gte = this.greaterThanOrEqual;
+  /** Alias for {@link greaterThanOrEqual} */
+  ge = this.greaterThanOrEqual;
+  /** Alias for {@link greaterThanOrEqual} */
+  greaterEqual = this.greaterThanOrEqual;
+
+  /** Alias for {@link lessThanOrEqual} */
+  lte = this.lessThanOrEqual;
+  /** Alias for {@link lessThanOrEqual} */
+  le = this.lessThanOrEqual;
+  /** Alias for {@link lessThanOrEqual} */
+  lessEqual = this.lessThanOrEqual;
 }

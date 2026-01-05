@@ -29,8 +29,8 @@ export { type CallableFunctionExpr, FunctionExpr } from './function.js';
 export { type CallableAsyncFunctionExpr, AsyncFunctionExpr } from './asyncfunction.js';
 
 // Import factory implementation
-import { from, equal, notEqual, less, lessEqual, print, is, greaterEqual, greater, func, str, platform, asyncFunction, asyncPlatform, compile, compileAsync } from './block.js';
-export { BlockBuilder, type AsyncPlatformDefinition, type PlatformDefinition } from './block.js';
+import { from, equal, notEqual, less, lessEqual, print, is, greaterEqual, greater, func, str, platform, asyncFunction, asyncPlatform, compile, compileAsync, equals, eq, notEquals, ne, lessThan, lt, lessThanOrEqual, lte, le, greaterThan, gt, greaterThanOrEqual, gte, ge } from './block.js';
+export { BlockBuilder, type AsyncPlatformDefinition, type PlatformDefinition, equals, eq, notEquals, ne, lessThan, lt, lessThanOrEqual, lte, le, greaterThan, gt, greaterThanOrEqual, gte, ge } from './block.js';
 
 // Import standard libraries
 import IntegerLib from './libs/integer.js';
@@ -389,6 +389,44 @@ export const East = {
    * ```
    */
   greaterEqual,
+
+  // ============================================================================
+  // Comparison function aliases
+  // ============================================================================
+
+  /** Alias for {@link equal} */
+  equals,
+  /** Alias for {@link equal} */
+  eq,
+
+  /** Alias for {@link notEqual} */
+  notEquals,
+  /** Alias for {@link notEqual} */
+  ne,
+
+  /** Alias for {@link less} */
+  lessThan,
+  /** Alias for {@link less} */
+  lt,
+
+  /** Alias for {@link lessEqual} */
+  lessThanOrEqual,
+  /** Alias for {@link lessEqual} */
+  lte,
+  /** Alias for {@link lessEqual} */
+  le,
+
+  /** Alias for {@link greater} */
+  greaterThan,
+  /** Alias for {@link greater} */
+  gt,
+
+  /** Alias for {@link greaterEqual} */
+  greaterThanOrEqual,
+  /** Alias for {@link greaterEqual} */
+  gte,
+  /** Alias for {@link greaterEqual} */
+  ge,
 
   /**
    * Reference equality comparison for mutable types (Array, Set, Dict).

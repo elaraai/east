@@ -316,4 +316,18 @@ export class BooleanExpr extends Expr<BooleanType> {
   notEquals(other: BooleanExpr | boolean): BooleanExpr {
     return notEqual(this, other);
   }
+
+  // ============================================================================
+  // Aliases for comparison operations
+  // ============================================================================
+
+  /** Alias for {@link equals} */
+  eq = this.equals;
+  /** Alias for {@link equals} */
+  equal = this.equals;
+
+  /** Alias for {@link notEquals} */
+  ne = this.notEquals;
+  /** Alias for {@link notEquals} */
+  notEqual = this.notEquals;
 }

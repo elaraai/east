@@ -113,4 +113,16 @@ await describe("Variant", (test) => {
 
         // TODO: Add cross-type variant comparison tests once universal comparison functions are available
     });
+
+    test("Equality method aliases", $ => {
+        // Test short aliases (eq, ne)
+        $(assert.equal(East.value(variant("some", 42n)).eq(variant("some", 42n)), true));
+        $(assert.equal(East.value(variant("some", 42n)).eq(variant("some", 43n)), false));
+        $(assert.equal(East.value(variant("some", 42n)).ne(variant("some", 43n)), true));
+        $(assert.equal(East.value(variant("some", 42n)).ne(variant("some", 42n)), false));
+
+        // Test medium aliases (equal, notEqual)
+        $(assert.equal(East.value(variant("some", 42n)).equal(variant("some", 42n)), true));
+        $(assert.equal(East.value(variant("some", 42n)).notEqual(variant("some", 43n)), true));
+    });
 });

@@ -898,4 +898,33 @@ await describe("DateTime", (test) => {
             /2-digit month/
         ));
     });
+
+    test("Comparison method aliases", $ => {
+        const d1 = East.value(new Date("2024-01-01T00:00:00.000Z"));
+        const d2 = East.value(new Date("2024-06-15T12:30:00.000Z"));
+        const d3 = East.value(new Date("2024-01-01T00:00:00.000Z")); // Same as d1
+
+        // Test short aliases (eq, ne, gt, lt, gte, lte, ge, le)
+        $(assert.equal(d1.eq(new Date("2024-01-01T00:00:00.000Z")), true));
+        $(assert.equal(d1.eq(new Date("2024-06-15T12:30:00.000Z")), false));
+        $(assert.equal(d1.ne(new Date("2024-06-15T12:30:00.000Z")), true));
+        $(assert.equal(d1.ne(new Date("2024-01-01T00:00:00.000Z")), false));
+        $(assert.equal(d2.gt(new Date("2024-01-01T00:00:00.000Z")), true));
+        $(assert.equal(d1.gt(new Date("2024-06-15T12:30:00.000Z")), false));
+        $(assert.equal(d1.lt(new Date("2024-06-15T12:30:00.000Z")), true));
+        $(assert.equal(d2.lt(new Date("2024-01-01T00:00:00.000Z")), false));
+        $(assert.equal(d1.gte(new Date("2024-01-01T00:00:00.000Z")), true));
+        $(assert.equal(d2.gte(new Date("2024-01-01T00:00:00.000Z")), true));
+        $(assert.equal(d1.lte(new Date("2024-06-15T12:30:00.000Z")), true));
+        $(assert.equal(d2.ge(new Date("2024-01-01T00:00:00.000Z")), true));
+        $(assert.equal(d1.le(new Date("2024-06-15T12:30:00.000Z")), true));
+
+        // Test medium aliases (equal, notEqual, greater, less, greaterEqual, lessEqual)
+        $(assert.equal(d1.equal(new Date("2024-01-01T00:00:00.000Z")), true));
+        $(assert.equal(d1.notEqual(new Date("2024-06-15T12:30:00.000Z")), true));
+        $(assert.equal(d2.greater(new Date("2024-01-01T00:00:00.000Z")), true));
+        $(assert.equal(d1.less(new Date("2024-06-15T12:30:00.000Z")), true));
+        $(assert.equal(d1.greaterEqual(new Date("2024-01-01T00:00:00.000Z")), true));
+        $(assert.equal(d1.lessEqual(new Date("2024-06-15T12:30:00.000Z")), true));
+    });
 });

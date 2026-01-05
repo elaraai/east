@@ -762,4 +762,69 @@ export class FloatExpr extends Expr<FloatType> {
   lessThanOrEqual(other: FloatExpr | number): BooleanExpr {
     return lessEqual(this, other);
   }
+
+  // ============================================================================
+  // Aliases for comparison operations
+  // ============================================================================
+
+  /** Alias for {@link equals} */
+  eq = this.equals;
+  /** Alias for {@link equals} */
+  equal = this.equals;
+
+  /** Alias for {@link notEquals} */
+  ne = this.notEquals;
+  /** Alias for {@link notEquals} */
+  notEqual = this.notEquals;
+
+  /** Alias for {@link greaterThan} */
+  gt = this.greaterThan;
+  /** Alias for {@link greaterThan} */
+  greater = this.greaterThan;
+
+  /** Alias for {@link lessThan} */
+  lt = this.lessThan;
+  /** Alias for {@link lessThan} */
+  less = this.lessThan;
+
+  /** Alias for {@link greaterThanOrEqual} */
+  gte = this.greaterThanOrEqual;
+  /** Alias for {@link greaterThanOrEqual} */
+  ge = this.greaterThanOrEqual;
+  /** Alias for {@link greaterThanOrEqual} */
+  greaterEqual = this.greaterThanOrEqual;
+
+  /** Alias for {@link lessThanOrEqual} */
+  lte = this.lessThanOrEqual;
+  /** Alias for {@link lessThanOrEqual} */
+  le = this.lessThanOrEqual;
+  /** Alias for {@link lessThanOrEqual} */
+  lessEqual = this.lessThanOrEqual;
+
+  // ============================================================================
+  // Aliases for arithmetic operations
+  // ============================================================================
+
+  /** Alias for {@link add} */
+  plus = this.add;
+
+  /** Alias for {@link subtract} */
+  sub = this.subtract;
+  /** Alias for {@link subtract} */
+  minus = this.subtract;
+
+  /** Alias for {@link multiply} */
+  mul = this.multiply;
+  /** Alias for {@link multiply} */
+  times = this.multiply;
+
+  /** Alias for {@link divide} */
+  div = this.divide;
+
+  /** Alias for {@link remainder} */
+  mod = this.remainder;
+  /** Alias for {@link remainder} */
+  rem = this.remainder;
+  /** Alias for {@link remainder} */
+  modulo = this.remainder;
 }

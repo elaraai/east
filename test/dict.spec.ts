@@ -501,4 +501,16 @@ await describe("Dict", (test) => {
             new Map([["a", "[a]: apple=5, apricot=7, "], ["b", "[b]: banana=3, berry=8, "]])
         ))
     })
+
+    test("Equality method aliases", $ => {
+        // Test short aliases (eq, ne)
+        $(assert.equal(East.value(new Map([[1n, "a"], [2n, "b"]])).eq(new Map([[1n, "a"], [2n, "b"]])), true));
+        $(assert.equal(East.value(new Map([[1n, "a"], [2n, "b"]])).eq(new Map([[1n, "a"]])), false));
+        $(assert.equal(East.value(new Map([[1n, "a"], [2n, "b"]])).ne(new Map([[1n, "a"]])), true));
+        $(assert.equal(East.value(new Map([[1n, "a"], [2n, "b"]])).ne(new Map([[1n, "a"], [2n, "b"]])), false));
+
+        // Test medium aliases (equal, notEqual)
+        $(assert.equal(East.value(new Map([[1n, "a"], [2n, "b"]])).equal(new Map([[1n, "a"], [2n, "b"]])), true));
+        $(assert.equal(East.value(new Map([[1n, "a"], [2n, "b"]])).notEqual(new Map([[1n, "a"]])), true));
+    });
 });

@@ -296,4 +296,18 @@ export class VariantExpr<Cases extends Record<string, any>> extends Expr<Variant
   notEquals(other: SubtypeExprOrValue<VariantType<Cases>>): BooleanExpr {
     return notEqual(this, other) as BooleanExpr;
   }
+
+  // ============================================================================
+  // Aliases for comparison operations
+  // ============================================================================
+
+  /** Alias for {@link equals} */
+  eq = this.equals;
+  /** Alias for {@link equals} */
+  equal = this.equals;
+
+  /** Alias for {@link notEquals} */
+  ne = this.notEquals;
+  /** Alias for {@link notEquals} */
+  notEqual = this.notEquals;
 }

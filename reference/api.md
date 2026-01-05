@@ -51,15 +51,17 @@ Main entry point for building East programs.
 
 ### Comparisons
 
-| Signature | Description |
-|-----------|-------------|
-| `East.equal<T extends EastType>(a: Expr<T>, b: Expr<T> \| ValueTypeOf<T>): BooleanExpr` | Deep equality |
-| `East.notEqual<T extends EastType>(a: Expr<T>, b: Expr<T> \| ValueTypeOf<T>): BooleanExpr` | Deep inequality |
-| `East.less<T extends EastType>(a: Expr<T>, b: Expr<T> \| ValueTypeOf<T>): BooleanExpr` | Less than (total ordering) |
-| `East.lessEqual<T extends EastType>(a: Expr<T>, b: Expr<T> \| ValueTypeOf<T>): BooleanExpr` | Less than or equal |
-| `East.greater<T extends EastType>(a: Expr<T>, b: Expr<T> \| ValueTypeOf<T>): BooleanExpr` | Greater than |
-| `East.greaterEqual<T extends EastType>(a: Expr<T>, b: Expr<T> \| ValueTypeOf<T>): BooleanExpr` | Greater than or equal |
-| `East.is<T extends DataType>(a: Expr<T>, b: Expr<T> \| ValueTypeOf<T>): BooleanExpr` | Reference equality (mutable types) |
+All comparison functions have multiple aliases for convenience:
+
+| Signature | Aliases | Description |
+|-----------|---------|-------------|
+| `East.equal<T extends EastType>(a: Expr<T>, b: Expr<T> \| ValueTypeOf<T>): BooleanExpr` | `equals`, `eq` | Deep equality |
+| `East.notEqual<T extends EastType>(a: Expr<T>, b: Expr<T> \| ValueTypeOf<T>): BooleanExpr` | `notEquals`, `ne` | Deep inequality |
+| `East.less<T extends EastType>(a: Expr<T>, b: Expr<T> \| ValueTypeOf<T>): BooleanExpr` | `lessThan`, `lt` | Less than (total ordering) |
+| `East.lessEqual<T extends EastType>(a: Expr<T>, b: Expr<T> \| ValueTypeOf<T>): BooleanExpr` | `lessThanOrEqual`, `lte`, `le` | Less than or equal |
+| `East.greater<T extends EastType>(a: Expr<T>, b: Expr<T> \| ValueTypeOf<T>): BooleanExpr` | `greaterThan`, `gt` | Greater than |
+| `East.greaterEqual<T extends EastType>(a: Expr<T>, b: Expr<T> \| ValueTypeOf<T>): BooleanExpr` | `greaterThanOrEqual`, `gte`, `ge` | Greater than or equal |
+| `East.is<T extends DataType>(a: Expr<T>, b: Expr<T> \| ValueTypeOf<T>): BooleanExpr` | | Reference equality (mutable types) |
 
 ### Utilities
 
@@ -182,63 +184,63 @@ AsyncFunctionType([StringType], BlobType)              // async (string) => blob
 
 ### Comparison Operations
 
-| Signature | Description |
-|-----------|-------------|
-| `x.equals(other: BooleanExpr \| boolean): BooleanExpr` | Check equality |
-| `x.notEquals(other: BooleanExpr \| boolean): BooleanExpr` | Check inequality |
+| Signature | Aliases | Description |
+|-----------|---------|-------------|
+| `x.equals(other: BooleanExpr \| boolean): BooleanExpr` | `equal`, `eq` | Check equality |
+| `x.notEquals(other: BooleanExpr \| boolean): BooleanExpr` | `notEqual`, `ne` | Check inequality |
 
 ---
 
 ## Integer Expressions
 
-| Signature | Description |
-|-----------|-------------|
-| `x.negate(): IntegerExpr` | Unary negation |
-| `x.add(y: IntegerExpr \| bigint): IntegerExpr` | Addition |
-| `x.subtract(y: IntegerExpr \| bigint): IntegerExpr` | Subtraction |
-| `x.multiply(y: IntegerExpr \| bigint): IntegerExpr` | Multiplication |
-| `x.divide(y: IntegerExpr \| bigint): IntegerExpr` | Integer division (floored), `0 / 0 = 0` |
-| `x.remainder(y: IntegerExpr \| bigint): IntegerExpr` | Remainder (floored modulo) |
-| `x.pow(y: IntegerExpr \| bigint): IntegerExpr` | Exponentiation |
-| `x.abs(): IntegerExpr` | Absolute value |
-| `x.sign(): IntegerExpr` | Sign (-1, 0, or 1) |
-| `x.log(base: IntegerExpr \| bigint): IntegerExpr` | Logarithm (floored, custom base) |
-| `x.toFloat(): FloatExpr` | Convert to float (may be approximate) |
-| `x.equals(other: IntegerExpr \| bigint): BooleanExpr` | Check equality |
-| `x.notEquals(other: IntegerExpr \| bigint): BooleanExpr` | Check inequality |
-| `x.greaterThan(other: IntegerExpr \| bigint): BooleanExpr` | Greater than |
-| `x.lessThan(other: IntegerExpr \| bigint): BooleanExpr` | Less than |
-| `x.greaterThanOrEqual(other: IntegerExpr \| bigint): BooleanExpr` | Greater than or equal |
-| `x.lessThanOrEqual(other: IntegerExpr \| bigint): BooleanExpr` | Less than or equal |
+| Signature | Aliases | Description |
+|-----------|---------|-------------|
+| `x.negate(): IntegerExpr` | | Unary negation |
+| `x.add(y: IntegerExpr \| bigint): IntegerExpr` | `plus` | Addition |
+| `x.subtract(y: IntegerExpr \| bigint): IntegerExpr` | `sub`, `minus` | Subtraction |
+| `x.multiply(y: IntegerExpr \| bigint): IntegerExpr` | `mul`, `times` | Multiplication |
+| `x.divide(y: IntegerExpr \| bigint): IntegerExpr` | `div` | Integer division (floored), `0 / 0 = 0` |
+| `x.remainder(y: IntegerExpr \| bigint): IntegerExpr` | `mod`, `rem`, `modulo` | Remainder (floored modulo) |
+| `x.pow(y: IntegerExpr \| bigint): IntegerExpr` | | Exponentiation |
+| `x.abs(): IntegerExpr` | | Absolute value |
+| `x.sign(): IntegerExpr` | | Sign (-1, 0, or 1) |
+| `x.log(base: IntegerExpr \| bigint): IntegerExpr` | | Logarithm (floored, custom base) |
+| `x.toFloat(): FloatExpr` | | Convert to float (may be approximate) |
+| `x.equals(other: IntegerExpr \| bigint): BooleanExpr` | `equal`, `eq` | Check equality |
+| `x.notEquals(other: IntegerExpr \| bigint): BooleanExpr` | `notEqual`, `ne` | Check inequality |
+| `x.greaterThan(other: IntegerExpr \| bigint): BooleanExpr` | `greater`, `gt` | Greater than |
+| `x.lessThan(other: IntegerExpr \| bigint): BooleanExpr` | `less`, `lt` | Less than |
+| `x.greaterThanOrEqual(other: IntegerExpr \| bigint): BooleanExpr` | `greaterEqual`, `gte`, `ge` | Greater than or equal |
+| `x.lessThanOrEqual(other: IntegerExpr \| bigint): BooleanExpr` | `lessEqual`, `lte`, `le` | Less than or equal |
 
 ---
 
 ## Float Expressions
 
-| Signature | Description |
-|-----------|-------------|
-| `x.negate(): FloatExpr` | Unary negation |
-| `x.add(y: FloatExpr \| number): FloatExpr` | Addition |
-| `x.subtract(y: FloatExpr \| number): FloatExpr` | Subtraction |
-| `x.multiply(y: FloatExpr \| number): FloatExpr` | Multiplication |
-| `x.divide(y: FloatExpr \| number): FloatExpr` | Division, `0.0 / 0.0 = NaN` |
-| `x.remainder(y: FloatExpr \| number): FloatExpr` | Remainder (floored modulo) |
-| `x.pow(y: FloatExpr \| number): FloatExpr` | Exponentiation |
-| `x.abs(): FloatExpr` | Absolute value |
-| `x.sign(): FloatExpr` | Sign (-1, 0, or 1) |
-| `x.sqrt(): FloatExpr` | Square root |
-| `x.exp(): FloatExpr` | Exponential (e^x) |
-| `x.log(): FloatExpr` | Natural logarithm |
-| `x.sin(): FloatExpr` | Sine |
-| `x.cos(): FloatExpr` | Cosine |
-| `x.tan(): FloatExpr` | Tangent |
-| `x.toInteger(): IntegerExpr` | Convert to integer (throws if not exact) |
-| `x.equals(other: FloatExpr \| number): BooleanExpr` | Check equality |
-| `x.notEquals(other: FloatExpr \| number): BooleanExpr` | Check inequality |
-| `x.greaterThan(other: FloatExpr \| number): BooleanExpr` | Greater than |
-| `x.lessThan(other: FloatExpr \| number): BooleanExpr` | Less than |
-| `x.greaterThanOrEqual(other: FloatExpr \| number): BooleanExpr` | Greater than or equal |
-| `x.lessThanOrEqual(other: FloatExpr \| number): BooleanExpr` | Less than or equal |
+| Signature | Aliases | Description |
+|-----------|---------|-------------|
+| `x.negate(): FloatExpr` | | Unary negation |
+| `x.add(y: FloatExpr \| number): FloatExpr` | `plus` | Addition |
+| `x.subtract(y: FloatExpr \| number): FloatExpr` | `sub`, `minus` | Subtraction |
+| `x.multiply(y: FloatExpr \| number): FloatExpr` | `mul`, `times` | Multiplication |
+| `x.divide(y: FloatExpr \| number): FloatExpr` | `div` | Division, `0.0 / 0.0 = NaN` |
+| `x.remainder(y: FloatExpr \| number): FloatExpr` | `mod`, `rem`, `modulo` | Remainder (floored modulo) |
+| `x.pow(y: FloatExpr \| number): FloatExpr` | | Exponentiation |
+| `x.abs(): FloatExpr` | | Absolute value |
+| `x.sign(): FloatExpr` | | Sign (-1, 0, or 1) |
+| `x.sqrt(): FloatExpr` | | Square root |
+| `x.exp(): FloatExpr` | | Exponential (e^x) |
+| `x.log(): FloatExpr` | | Natural logarithm |
+| `x.sin(): FloatExpr` | | Sine |
+| `x.cos(): FloatExpr` | | Cosine |
+| `x.tan(): FloatExpr` | | Tangent |
+| `x.toInteger(): IntegerExpr` | | Convert to integer (throws if not exact) |
+| `x.equals(other: FloatExpr \| number): BooleanExpr` | `equal`, `eq` | Check equality |
+| `x.notEquals(other: FloatExpr \| number): BooleanExpr` | `notEqual`, `ne` | Check inequality |
+| `x.greaterThan(other: FloatExpr \| number): BooleanExpr` | `greater`, `gt` | Greater than |
+| `x.lessThan(other: FloatExpr \| number): BooleanExpr` | `less`, `lt` | Less than |
+| `x.greaterThanOrEqual(other: FloatExpr \| number): BooleanExpr` | `greaterEqual`, `gte`, `ge` | Greater than or equal |
+| `x.lessThanOrEqual(other: FloatExpr \| number): FloatExpr` | `lessEqual`, `lte`, `le` | Less than or equal |
 
 ---
 
@@ -287,14 +289,14 @@ AsyncFunctionType([StringType], BlobType)              // async (string) => blob
 
 ### Comparison Operations
 
-| Signature | Description |
-|-----------|-------------|
-| `str.equals(other: StringExpr \| string): BooleanExpr` | Check equality |
-| `str.notEquals(other: StringExpr \| string): BooleanExpr` | Check inequality |
-| `str.greaterThan(other: StringExpr \| string): BooleanExpr` | Greater than (lexicographic) |
-| `str.lessThan(other: StringExpr \| string): BooleanExpr` | Less than (lexicographic) |
-| `str.greaterThanOrEqual(other: StringExpr \| string): BooleanExpr` | Greater than or equal |
-| `str.lessThanOrEqual(other: StringExpr \| string): BooleanExpr` | Less than or equal |
+| Signature | Aliases | Description |
+|-----------|---------|-------------|
+| `str.equals(other: StringExpr \| string): BooleanExpr` | `equal`, `eq` | Check equality |
+| `str.notEquals(other: StringExpr \| string): BooleanExpr` | `notEqual`, `ne` | Check inequality |
+| `str.greaterThan(other: StringExpr \| string): BooleanExpr` | `greater`, `gt` | Greater than (lexicographic) |
+| `str.lessThan(other: StringExpr \| string): BooleanExpr` | `less`, `lt` | Less than (lexicographic) |
+| `str.greaterThanOrEqual(other: StringExpr \| string): BooleanExpr` | `greaterEqual`, `gte`, `ge` | Greater than or equal |
+| `str.lessThanOrEqual(other: StringExpr \| string): BooleanExpr` | `lessEqual`, `lte`, `le` | Less than or equal |
 
 ---
 
@@ -350,29 +352,29 @@ AsyncFunctionType([StringType], BlobType)              // async (string) => blob
 
 ### Comparison Operations
 
-| Signature | Description |
-|-----------|-------------|
-| `date.equals(other: DateTimeExpr \| Date): BooleanExpr` | Check equality |
-| `date.notEquals(other: DateTimeExpr \| Date): BooleanExpr` | Check inequality |
-| `date.greaterThan(other: DateTimeExpr \| Date): BooleanExpr` | Greater than (later) |
-| `date.lessThan(other: DateTimeExpr \| Date): BooleanExpr` | Less than (earlier) |
-| `date.greaterThanOrEqual(other: DateTimeExpr \| Date): BooleanExpr` | Greater than or equal |
-| `date.lessThanOrEqual(other: DateTimeExpr \| Date): BooleanExpr` | Less than or equal |
+| Signature | Aliases | Description |
+|-----------|---------|-------------|
+| `date.equals(other: DateTimeExpr \| Date): BooleanExpr` | `equal`, `eq` | Check equality |
+| `date.notEquals(other: DateTimeExpr \| Date): BooleanExpr` | `notEqual`, `ne` | Check inequality |
+| `date.greaterThan(other: DateTimeExpr \| Date): BooleanExpr` | `greater`, `gt` | Greater than (later) |
+| `date.lessThan(other: DateTimeExpr \| Date): BooleanExpr` | `less`, `lt` | Less than (earlier) |
+| `date.greaterThanOrEqual(other: DateTimeExpr \| Date): BooleanExpr` | `greaterEqual`, `gte`, `ge` | Greater than or equal |
+| `date.lessThanOrEqual(other: DateTimeExpr \| Date): BooleanExpr` | `lessEqual`, `lte`, `le` | Less than or equal |
 
 ---
 
 ## Blob Expressions
 
-| Signature | Description |
-|-----------|-------------|
-| `blob.size(): IntegerExpr` | Size in bytes |
-| `blob.getUint8(offset: IntegerExpr \| bigint): IntegerExpr` | Get byte at offset (0-255, throws if OOB) |
-| `blob.decodeUtf8(): StringExpr` | Decode as UTF-8 (throws on invalid) |
-| `blob.decodeUtf16(): StringExpr` | Decode as UTF-16 (throws on invalid) |
-| `blob.decodeBeast<T extends EastType>(type: T, version: 'v1' \| 'v2' = 'v1'): ExprType<T>` | Decode BEAST format |
-| `blob.decodeCsv<T extends StructType>(structType: T, options?: CsvParseOptions): ArrayExpr<T>` | Parse CSV to array of structs |
-| `blob.equals(other: BlobExpr \| Uint8Array): BooleanExpr` | Check equality |
-| `blob.notEquals(other: BlobExpr \| Uint8Array): BooleanExpr` | Check inequality |
+| Signature | Aliases | Description |
+|-----------|---------|-------------|
+| `blob.size(): IntegerExpr` | | Size in bytes |
+| `blob.getUint8(offset: IntegerExpr \| bigint): IntegerExpr` | | Get byte at offset (0-255, throws if OOB) |
+| `blob.decodeUtf8(): StringExpr` | | Decode as UTF-8 (throws on invalid) |
+| `blob.decodeUtf16(): StringExpr` | | Decode as UTF-16 (throws on invalid) |
+| `blob.decodeBeast<T extends EastType>(type: T, version: 'v1' \| 'v2' = 'v1'): ExprType<T>` | | Decode BEAST format |
+| `blob.decodeCsv<T extends StructType>(structType: T, options?: CsvParseOptions): ArrayExpr<T>` | | Parse CSV to array of structs |
+| `blob.equals(other: BlobExpr \| Uint8Array): BooleanExpr` | `equal`, `eq` | Check equality |
+| `blob.notEquals(other: BlobExpr \| Uint8Array): BooleanExpr` | `notEqual`, `ne` | Check inequality |
 
 ---
 
@@ -478,10 +480,10 @@ For `ArrayExpr<T>` where `T` is the element type:
 
 ### Comparison Operations
 
-| Signature | Description |
-|-----------|-------------|
-| `array.equals(other: ArrayExpr<T> \| ValueTypeOf<T>[]): BooleanExpr` | Check deep equality |
-| `array.notEquals(other: ArrayExpr<T> \| ValueTypeOf<T>[]): BooleanExpr` | Check deep inequality |
+| Signature | Aliases | Description |
+|-----------|---------|-------------|
+| `array.equals(other: ArrayExpr<T> \| ValueTypeOf<T>[]): BooleanExpr` | `equal`, `eq` | Check deep equality |
+| `array.notEquals(other: ArrayExpr<T> \| ValueTypeOf<T>[]): BooleanExpr` | `notEqual`, `ne` | Check deep inequality |
 
 ---
 
@@ -564,10 +566,10 @@ For `SetExpr<K>` where `K` is the key/element type:
 
 ### Comparison Operations
 
-| Signature | Description |
-|-----------|-------------|
-| `set.equals(other: SetExpr<K> \| Set<ValueTypeOf<K>>): BooleanExpr` | Check deep equality |
-| `set.notEquals(other: SetExpr<K> \| Set<ValueTypeOf<K>>): BooleanExpr` | Check deep inequality |
+| Signature | Aliases | Description |
+|-----------|---------|-------------|
+| `set.equals(other: SetExpr<K> \| Set<ValueTypeOf<K>>): BooleanExpr` | `equal`, `eq` | Check deep equality |
+| `set.notEquals(other: SetExpr<K> \| Set<ValueTypeOf<K>>): BooleanExpr` | `notEqual`, `ne` | Check deep inequality |
 
 ---
 
@@ -648,10 +650,10 @@ For `DictExpr<K, V>` where `K` is the key type and `V` is the value type:
 
 ### Comparison Operations
 
-| Signature | Description |
-|-----------|-------------|
-| `dict.equals(other: DictExpr<K, V> \| Map<ValueTypeOf<K>, ValueTypeOf<V>>): BooleanExpr` | Check deep equality |
-| `dict.notEquals(other: DictExpr<K, V> \| Map<ValueTypeOf<K>, ValueTypeOf<V>>): BooleanExpr` | Check deep inequality |
+| Signature | Aliases | Description |
+|-----------|---------|-------------|
+| `dict.equals(other: DictExpr<K, V> \| Map<ValueTypeOf<K>, ValueTypeOf<V>>): BooleanExpr` | `equal`, `eq` | Check deep equality |
+| `dict.notEquals(other: DictExpr<K, V> \| Map<ValueTypeOf<K>, ValueTypeOf<V>>): BooleanExpr` | `notEqual`, `ne` | Check deep inequality |
 
 ---
 
@@ -673,16 +675,16 @@ person.age   // IntegerExpr
 
 For `VariantExpr<Cases>` where `Cases` is a record of `{ tag: ValueType, ... }`:
 
-| Signature | Description |
-|-----------|-------------|
-| `variant.match<R>(handlers: { [Tag in keyof Cases]: ($: BlockBuilder, data: ExprType<Cases[Tag]>) => ExprType<R> }): ExprType<R>` | Full match |
-| `variant.match<R>(handlers: { [Tag in keyof Cases]?: ($: BlockBuilder, data: ExprType<Cases[Tag]>) => ExprType<R> }, defaultFn: ($: BlockBuilder) => ExprType<R>): ExprType<R>` | Partial match with default |
-| `variant.unwrap<Tag extends keyof Cases>(tag?: Tag): ExprType<Cases[Tag]>` | Extract value (throws if wrong tag) |
-| `variant.unwrap<Tag extends keyof Cases>(tag: Tag, defaultFn: ($: BlockBuilder) => ExprType<Cases[Tag]>): ExprType<Cases[Tag]>` | Extract or compute default |
-| `variant.getTag(): StringExpr` | Get tag as string |
-| `variant.hasTag<Tag extends keyof Cases>(tag: Tag): BooleanExpr` | Check if has tag |
-| `variant.equals(other: VariantExpr<Cases> \| ValueTypeOf<Cases>): BooleanExpr` | Check equality |
-| `variant.notEquals(other: VariantExpr<Cases> \| ValueTypeOf<Cases>): BooleanExpr` | Check inequality |
+| Signature | Aliases | Description |
+|-----------|---------|-------------|
+| `variant.match<R>(handlers: { [Tag in keyof Cases]: ($: BlockBuilder, data: ExprType<Cases[Tag]>) => ExprType<R> }): ExprType<R>` | | Full match |
+| `variant.match<R>(handlers: { [Tag in keyof Cases]?: ($: BlockBuilder, data: ExprType<Cases[Tag]>) => ExprType<R> }, defaultFn: ($: BlockBuilder) => ExprType<R>): ExprType<R>` | | Partial match with default |
+| `variant.unwrap<Tag extends keyof Cases>(tag?: Tag): ExprType<Cases[Tag]>` | | Extract value (throws if wrong tag) |
+| `variant.unwrap<Tag extends keyof Cases>(tag: Tag, defaultFn: ($: BlockBuilder) => ExprType<Cases[Tag]>): ExprType<Cases[Tag]>` | | Extract or compute default |
+| `variant.getTag(): StringExpr` | | Get tag as string |
+| `variant.hasTag<Tag extends keyof Cases>(tag: Tag): BooleanExpr` | | Check if has tag |
+| `variant.equals(other: VariantExpr<Cases> \| ValueTypeOf<Cases>): BooleanExpr` | `equal`, `eq` | Check equality |
+| `variant.notEquals(other: VariantExpr<Cases> \| ValueTypeOf<Cases>): BooleanExpr` | `notEqual`, `ne` | Check inequality |
 
 ---
 

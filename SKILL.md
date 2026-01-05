@@ -10,20 +10,23 @@ A statically typed, expression-based programming language embedded in TypeScript
 ## Quick Start
 
 ```typescript
-import { East, IntegerType, ArrayType, NullType } from "@elaraai/east";
+// Types and helpers are direct imports (NOT East.IntegerType)
+import { East, IntegerType, StringType, ArrayType, NullType } from "@elaraai/east";
 
-// 1. Define platform functions
+// 1. Define platform functions (East.platform)
 const log = East.platform("log", [StringType], NullType);
 const platform = [log.implement(console.log)];
 
-// 2. Define East function
+// 2. Define East function (East.function)
 const sumArray = East.function([ArrayType(IntegerType)], IntegerType, ($, arr) => {
-    $.return(arr.sum());
+    const total = $.let(arr.sum());
+    $(log(East.str`Sum: ${total}`));
+    $.return(total);
 });
 
-// 3. Compile and execute
+// 3. Compile and execute (East.compile)
 const compiled = East.compile(sumArray, platform);
-compiled([1n, 2n, 3n]);  // 6n
+compiled([1n, 2n, 3n]);  // logs "Sum: 6", returns 6n
 ```
 
 ## Decision Tree: What Do You Need?
@@ -31,17 +34,43 @@ compiled([1n, 2n, 3n]);  // 6n
 ```
 Task → What do you need?
     │
-    ├─ Define a Type
+    ├─ Create East Expressions (East.*)
+    │   ├─ From TypeScript value → East.value(tsValue) or East.value(tsValue, Type)
+    │   ├─ String interpolation → East.str`Hello ${name}!`
+    │   └─ Inside function body → $.let(value), $.const(value)
+    │
+    ├─ Define a Type (import from package, NOT East.*)
     │   ├─ Primitive → IntegerType, FloatType, StringType, BooleanType, DateTimeType, BlobType, NullType
     │   ├─ Collection → ArrayType(T), SetType(K), DictType(K, V), RefType(T)
     │   ├─ Compound → StructType({...}), VariantType({...}), RecursiveType(...)
     │   └─ Function → FunctionType<I, O>, AsyncFunctionType<I, O>
     │
-    ├─ Write a Function
+    ├─ Create TypeScript Values for East Types
+    │   ├─ Null → null
+    │   ├─ Boolean → true, false
+    │   ├─ Integer → 42n (bigint literal)
+    │   ├─ Float → 3.14 (number literal)
+    │   ├─ String → "hello"
+    │   ├─ DateTime → new Date("2025-01-01T00:00:00Z")
+    │   ├─ Blob → new Uint8Array([...])
+    │   ├─ Array → [1n, 2n, 3n]
+    │   ├─ Set → new Set([1n, 2n, 3n])
+    │   ├─ Dict → new Map([["a", 1n], ["b", 2n]])
+    │   ├─ Struct → { field1: value1, field2: value2 }
+    │   ├─ Variant (import from package)
+    │   │   ├─ Option type → some(value), none  ← preferred for Option/Maybe
+    │   │   └─ Other variants → variant("caseName", value)
+    │   └─ Reference (import from package) → ref(value)
+    │
+    ├─ Write a Function (East.*)
     │   ├─ Synchronous → East.function([inputs], output, ($, ...args) => { ... })
     │   └─ Asynchronous → East.asyncFunction([inputs], output, ($, ...args) => { ... })
     │
-    ├─ Use Platform Effects
+    ├─ Compile and Execute (East.*)
+    │   ├─ Sync function → East.compile(fn, platform)
+    │   └─ Async function → East.compileAsync(fn, platform)
+    │
+    ├─ Use Platform Effects (East.*)
     │   ├─ Sync effect → East.platform("name", [inputs], output).implement(fn)
     │   └─ Async effect → East.asyncPlatform("name", [inputs], output).implement(fn)
     │
@@ -55,33 +84,33 @@ Task → What do you need?
     │   ├─ Boolean
     │   │   ├─ Logic → .and($=>), .or($=>), .not(), .ifElse($=>,$=>)
     │   │   ├─ Bitwise → .bitAnd(), .bitOr(), .bitXor()
-    │   │   └─ Compare → .equals(), .notEquals()
+    │   │   └─ Compare → .equals()/.equal()/.eq(), .notEquals()/.notEqual()/.ne()
     │   ├─ Integer
-    │   │   ├─ Math → .add(), .subtract(), .multiply(), .divide(), .remainder(), .pow(), .abs(), .sign(), .negate(), .log()
+    │   │   ├─ Math → .add()/.plus(), .subtract()/.sub()/.minus(), .multiply()/.mul()/.times(), .divide()/.div(), .remainder()/.mod()/.rem()/.modulo(), .pow(), .abs(), .sign(), .negate(), .log()
     │   │   ├─ Convert → .toFloat()
-    │   │   └─ Compare → .equals(), .notEquals(), .lessThan(), .greaterThan(), .lessThanOrEqual(), .greaterThanOrEqual()
+    │   │   └─ Compare → .equals()/.equal()/.eq(), .notEquals()/.notEqual()/.ne(), .lessThan()/.less()/.lt(), .greaterThan()/.greater()/.gt(), .lessThanOrEqual()/.lessEqual()/.lte()/.le(), .greaterThanOrEqual()/.greaterEqual()/.gte()/.ge()
     │   ├─ Float
-    │   │   ├─ Math → .add(), .subtract(), .multiply(), .divide(), .remainder(), .pow(), .abs(), .sign(), .negate()
+    │   │   ├─ Math → .add()/.plus(), .subtract()/.sub()/.minus(), .multiply()/.mul()/.times(), .divide()/.div(), .remainder()/.mod()/.rem()/.modulo(), .pow(), .abs(), .sign(), .negate()
     │   │   ├─ Advanced → .sqrt(), .exp(), .log(), .sin(), .cos(), .tan()
     │   │   ├─ Convert → .toInteger()
-    │   │   └─ Compare → .equals(), .notEquals(), .lessThan(), .greaterThan(), .lessThanOrEqual(), .greaterThanOrEqual()
+    │   │   └─ Compare → .equals()/.equal()/.eq(), .notEquals()/.notEqual()/.ne(), .lessThan()/.less()/.lt(), .greaterThan()/.greater()/.gt(), .lessThanOrEqual()/.lessEqual()/.lte()/.le(), .greaterThanOrEqual()/.greaterEqual()/.gte()/.ge()
     │   ├─ String
     │   │   ├─ Transform → .concat(), .repeat(), .substring(), .upperCase(), .lowerCase(), .trim(), .trimStart(), .trimEnd()
     │   │   ├─ Replace → .replace(), .replaceAll(), .split()
     │   │   ├─ Query → .length(), .startsWith(), .endsWith(), .contains(), .indexOf(), .charAt()
     │   │   ├─ Parse → .parse(), .parseJson()
     │   │   ├─ Encode → .encodeUtf8(), .encodeUtf16()
-    │   │   └─ Compare → .equals(), .notEquals(), .lessThan(), .greaterThan()
+    │   │   └─ Compare → .equals()/.equal()/.eq(), .notEquals()/.notEqual()/.ne(), .lessThan()/.less()/.lt(), .greaterThan()/.greater()/.gt(), .lessThanOrEqual()/.lessEqual()/.lte()/.le(), .greaterThanOrEqual()/.greaterEqual()/.gte()/.ge()
     │   ├─ DateTime
     │   │   ├─ Components → .getYear(), .getMonth(), .getDayOfMonth(), .getDayOfWeek(), .getHour(), .getMinute(), .getSecond(), .getMillisecond()
     │   │   ├─ Arithmetic → .addDays(), .subtractDays(), .addHours(), .subtractHours(), .addMinutes(), .addSeconds(), .addMilliseconds(), .addWeeks()
     │   │   ├─ Duration → .durationDays(), .durationHours(), .durationMinutes(), .durationSeconds(), .durationMilliseconds(), .durationWeeks()
     │   │   ├─ Convert → .toEpochMilliseconds(), .printFormatted()
-    │   │   └─ Compare → .equals(), .notEquals(), .lessThan(), .greaterThan()
+    │   │   └─ Compare → .equals()/.equal()/.eq(), .notEquals()/.notEqual()/.ne(), .lessThan()/.less()/.lt(), .greaterThan()/.greater()/.gt(), .lessThanOrEqual()/.lessEqual()/.lte()/.le(), .greaterThanOrEqual()/.greaterEqual()/.gte()/.ge()
     │   ├─ Blob
     │   │   ├─ Read → .size(), .getUint8()
     │   │   ├─ Decode → .decodeUtf8(), .decodeUtf16(), .decodeBeast(), .decodeCsv()
-    │   │   └─ Compare → .equals(), .notEquals()
+    │   │   └─ Compare → .equals()/.equal()/.eq(), .notEquals()/.notEqual()/.ne()
     │   ├─ Array
     │   │   ├─ Read → .size(), .length(), .has(), .get(), .at(), .tryGet(), .getKeys()
     │   │   ├─ Mutate → .update(), .pushLast(), .popLast(), .pushFirst(), .popFirst(), .append(), .prepend(), .clear(), .sortInPlace(), .reverseInPlace()
@@ -90,7 +119,7 @@ Task → What do you need?
     │   │   ├─ Reduce → .reduce(), .every(), .some(), .sum(), .mean(), .maximum(), .minimum(), .findMaximum(), .findMinimum()
     │   │   ├─ Convert → .stringJoin(), .toSet(), .toDict(), .flattenToSet(), .flattenToDict(), .encodeCsv()
     │   │   ├─ Group → .groupReduce(), .groupSize(), .groupSum(), .groupMean(), .groupMinimum(), .groupMaximum(), .groupToArrays(), .groupToSets(), .groupToDicts(), .groupEvery(), .groupSome()
-    │   │   └─ Compare → .equals(), .notEquals()
+    │   │   └─ Compare → .equals()/.equal()/.eq(), .notEquals()/.notEqual()/.ne()
     │   ├─ Set
     │   │   ├─ Read → .size(), .has()
     │   │   ├─ Mutate → .insert(), .tryInsert(), .delete(), .tryDelete(), .clear(), .unionInPlace()
@@ -99,7 +128,7 @@ Task → What do you need?
     │   │   ├─ Reduce → .reduce(), .every(), .some(), .sum(), .mean()
     │   │   ├─ Convert → .toArray(), .toSet(), .toDict(), .flattenToArray(), .flattenToSet(), .flattenToDict()
     │   │   ├─ Group → .groupReduce(), .groupSize(), .groupSum(), .groupMean(), .groupToArrays(), .groupToSets(), .groupToDicts(), .groupEvery(), .groupSome()
-    │   │   └─ Compare → .equals(), .notEquals()
+    │   │   └─ Compare → .equals()/.equal()/.eq(), .notEquals()/.notEqual()/.ne()
     │   ├─ Dict
     │   │   ├─ Read → .size(), .has(), .get(), .tryGet(), .keys(), .getKeys()
     │   │   ├─ Mutate → .insert(), .insertOrUpdate(), .update(), .merge(), .getOrInsert(), .delete(), .tryDelete(), .pop(), .swap(), .clear(), .unionInPlace()
@@ -107,9 +136,9 @@ Task → What do you need?
     │   │   ├─ Reduce → .reduce(), .every(), .some(), .sum(), .mean()
     │   │   ├─ Convert → .toArray(), .toSet(), .toDict(), .flattenToArray(), .flattenToSet(), .flattenToDict()
     │   │   ├─ Group → .groupReduce(), .groupSize(), .groupSum(), .groupMean(), .groupToArrays(), .groupToSets(), .groupToDicts(), .groupEvery(), .groupSome()
-    │   │   └─ Compare → .equals(), .notEquals()
+    │   │   └─ Compare → .equals()/.equal()/.eq(), .notEquals()/.notEqual()/.ne()
     │   ├─ Struct → .fieldName (direct property access)
-    │   ├─ Variant → .match(), .unwrap(), .hasTag(), .getTag(), .equals(), .notEquals()
+    │   ├─ Variant → .match(), .unwrap(), .hasTag(), .getTag(), .equals()/.equal()/.eq(), .notEquals()/.notEqual()/.ne()
     │   └─ Ref → .get(), .update(), .merge()
     │
     ├─ Standard Library (East.*)
@@ -123,7 +152,14 @@ Task → What do you need?
     │   └─ String → East.String.printJson(), East.String.printError()
     │
     ├─ Comparisons (East.*)
-    │   └─ East.equal(), .notEqual(), .less(), .greater(), .min(), .max(), .clamp()
+    │   ├─ Equality → East.equal()/.equals()/.eq(), East.notEqual()/.notEquals()/.ne()
+    │   ├─ Ordering → East.less()/.lessThan()/.lt(), East.greater()/.greaterThan()/.gt()
+    │   ├─ Bounds → East.lessEqual()/.lte()/.le(), East.greaterEqual()/.gte()/.ge()
+    │   ├─ Identity → East.is() (reference equality for mutable types)
+    │   └─ Utilities → East.min(), East.max(), East.clamp()
+    │
+    ├─ Conversion (East.*)
+    │   └─ To string → East.print(expr)
     │
     └─ Serialization
         ├─ IR → fn.toIR(), ir.toJSON(), EastIR.fromJSON(data).compile(platform)
@@ -156,22 +192,75 @@ Task → What do you need?
 
 ## Key Patterns
 
-### Creating Values
-```typescript
-// Use variant() for sum types
-import { variant } from "@elaraai/east";
-const some = variant("some", 42n);
-const none = variant("none", null);
+### TypeScript Values vs East Expressions
 
-// Use ref() for mutable references
-import { ref } from "@elaraai/east";
+TypeScript values and East expressions are different. East methods only work on East expressions.
+
+```typescript
+// WRONG - Cannot call East methods on TypeScript values
+const THRESHOLD = 100n;  // This is a TypeScript bigint
+East.function([IntegerType], BooleanType, ($, x) => {
+    $.return(x.greaterThan(THRESHOLD));  // ERROR: THRESHOLD has no .greaterThan()
+});
+
+// CORRECT - Wrap TypeScript values with East.value()
+const THRESHOLD = 100n;
+East.function([IntegerType], BooleanType, ($, x) => {
+    $.return(x.greaterThan(East.value(THRESHOLD)));  // OK
+});
+
+// ALSO CORRECT - Use $.const() inside the function
+East.function([IntegerType], BooleanType, ($, x) => {
+    const threshold = $.const(THRESHOLD);  // Creates East expression
+    $.return(x.greaterThan(threshold));    // OK
+});
+```
+
+**Rule**: Function parameters are already East expressions. External TypeScript values must be wrapped with `East.value()` or bound with `$.const()`.
+
+### Creating Variant Values
+```typescript
+import { variant, some, none, ref } from "@elaraai/east";
+
+// Option types - use some() and none helpers (preferred)
+const hasValue = some(42n);      // { type: "some", value: 42n }
+const noValue = none;            // { type: "none", value: null }
+
+// AVOID: variant("some", ...) and variant("none", ...) for Option types
+// const hasValue = variant("some", 42n);  // works but use some() instead
+// const noValue = variant("none", null);  // works but use none instead
+
+// Other variant types - use variant()
+const success = variant("ok", "done");
+const failure = variant("error", "failed");
+
+// Mutable references - use ref()
 const counter = ref(0n);
 ```
 
 ### String Interpolation
 ```typescript
-// Use East.str`` for string templates
-$(log(East.str`Value: ${x}, Total: ${arr.sum()}`));
+// East.str`` creates a StringExpr from a template
+// Only East expressions can be interpolated, NOT plain TypeScript values
+
+const MY_CONSTANT = 100n;  // TypeScript value
+
+East.function([IntegerType], StringType, ($, x) => {
+    // CORRECT - x is already an East expression (function parameter)
+    const msg1 = $.let(East.str`Value: ${x}`);
+
+    // CORRECT - wrap TypeScript constant with East.value()
+    const msg2 = $.let(East.str`Threshold: ${East.value(MY_CONSTANT)}`);
+
+    // CORRECT - use $.const() to create East expression first
+    const threshold = $.const(MY_CONSTANT);
+    const msg3 = $.let(East.str`Threshold: ${threshold}`);
+
+    // WRONG - cannot interpolate plain TypeScript values
+    // const msg4 = $.let(East.str`Threshold: ${MY_CONSTANT}`);  // ERROR
+
+    $.return(msg1);
+});
 ```
 
 ### Error Handling
@@ -183,4 +272,39 @@ $.try($ => {
 }).finally($ => {
     // cleanup
 });
+```
+
+### Platform Function Implementations
+```typescript
+// Platform implementations are raw TypeScript functions that receive East values
+// (bigint for Integer, number for Float, string for String, etc.)
+
+// Sync platform - regular TypeScript function
+const log = East.platform("log", [StringType], NullType);
+const timeNs = East.platform("time_ns", [], IntegerType);
+
+// Async platform - async TypeScript function
+const fetchStatus = East.asyncPlatform("fetch_status", [StringType], StringType);
+
+// Implementations receive/return TypeScript values matching East types
+const platform = [
+    log.implement(console.log),                          // (msg: string) => void
+    timeNs.implement(() => process.hrtime.bigint()),     // () => bigint
+    fetchStatus.implement(async (url: string) => {       // async function OK
+        const response = await fetch(url);
+        return `${response.status}`;
+    }),
+];
+
+// In East code: NO await needed - async is handled automatically
+const myFn = East.asyncFunction([StringType], NullType, ($, url) => {
+    const t1 = $.let(timeNs());
+    const status = $.let(fetchStatus(url));  // no await, just call it
+    const t2 = $.let(timeNs());
+    $(log(East.str`Fetched in ${t2.subtract(t1)} ns, status: ${status}`));
+});
+
+// Compile async functions with East.compileAsync
+const compiled = East.compileAsync(myFn, platform);
+await compiled("https://example.com");  // await at the outer TypeScript level
 ```

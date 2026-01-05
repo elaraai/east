@@ -292,4 +292,18 @@ export class BlobExpr extends Expr<BlobType> {
   notEquals(other: BlobExpr | Uint8Array): BooleanExpr {
     return notEqual(this, other);
   }
+
+  // ============================================================================
+  // Aliases for comparison operations
+  // ============================================================================
+
+  /** Alias for {@link equals} */
+  eq = this.equals;
+  /** Alias for {@link equals} */
+  equal = this.equals;
+
+  /** Alias for {@link notEquals} */
+  ne = this.notEquals;
+  /** Alias for {@link notEquals} */
+  notEqual = this.notEquals;
 }

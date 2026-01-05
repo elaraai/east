@@ -378,6 +378,43 @@ await describe("Float", (test) => {
         $(assert.throws(East.Float.roundToDecimals(-Infinity, 2n)));
     });
 
+    test("Comparison method aliases", $ => {
+        // Test short aliases (eq, ne, gt, lt, gte, lte, ge, le)
+        $(assert.equal(East.value(10.0).eq(10.0), true));
+        $(assert.equal(East.value(10.0).eq(5.0), false));
+        $(assert.equal(East.value(10.0).ne(5.0), true));
+        $(assert.equal(East.value(10.0).ne(10.0), false));
+        $(assert.equal(East.value(10.0).gt(5.0), true));
+        $(assert.equal(East.value(5.0).gt(10.0), false));
+        $(assert.equal(East.value(5.0).lt(10.0), true));
+        $(assert.equal(East.value(10.0).lt(5.0), false));
+        $(assert.equal(East.value(10.0).gte(10.0), true));
+        $(assert.equal(East.value(10.0).gte(5.0), true));
+        $(assert.equal(East.value(5.0).lte(10.0), true));
+        $(assert.equal(East.value(10.0).ge(5.0), true));
+        $(assert.equal(East.value(5.0).le(10.0), true));
+
+        // Test medium aliases (equal, notEqual, greater, less, greaterEqual, lessEqual)
+        $(assert.equal(East.value(10.0).equal(10.0), true));
+        $(assert.equal(East.value(10.0).notEqual(5.0), true));
+        $(assert.equal(East.value(10.0).greater(5.0), true));
+        $(assert.equal(East.value(5.0).less(10.0), true));
+        $(assert.equal(East.value(10.0).greaterEqual(10.0), true));
+        $(assert.equal(East.value(5.0).lessEqual(10.0), true));
+    });
+
+    test("Arithmetic method aliases", $ => {
+        $(assert.equal(East.value(10.0).plus(5.0), 15.0));
+        $(assert.equal(East.value(10.0).sub(5.0), 5.0));
+        $(assert.equal(East.value(10.0).minus(5.0), 5.0));
+        $(assert.equal(East.value(10.0).mul(5.0), 50.0));
+        $(assert.equal(East.value(10.0).times(5.0), 50.0));
+        $(assert.equal(East.value(10.0).div(5.0), 2.0));
+        $(assert.equal(East.value(10.0).mod(3.0), 1.0));
+        $(assert.equal(East.value(10.0).rem(3.0), 1.0));
+        $(assert.equal(East.value(10.0).modulo(3.0), 1.0));
+    });
+
     test("Edge cases: NaN and Infinity for formatting functions", $ => {
         // printCommaSeperated with NaN/Infinity - should throw or handle gracefully
         $(assert.throws(East.Float.printCommaSeperated(NaN, 2n)));

@@ -588,4 +588,16 @@ await describe("Set", (test) => {
             new Map([[0n, 8.0], [1n, 6.0]])
         ))
     })
+
+    test("Equality method aliases", $ => {
+        // Test short aliases (eq, ne)
+        $(assert.equal(East.value(new Set([1n, 2n, 3n])).eq(new Set([1n, 2n, 3n])), true));
+        $(assert.equal(East.value(new Set([1n, 2n, 3n])).eq(new Set([1n, 2n])), false));
+        $(assert.equal(East.value(new Set([1n, 2n, 3n])).ne(new Set([1n, 2n])), true));
+        $(assert.equal(East.value(new Set([1n, 2n, 3n])).ne(new Set([1n, 2n, 3n])), false));
+
+        // Test medium aliases (equal, notEqual)
+        $(assert.equal(East.value(new Set([1n, 2n, 3n])).equal(new Set([1n, 2n, 3n])), true));
+        $(assert.equal(East.value(new Set([1n, 2n, 3n])).notEqual(new Set([1n, 2n])), true));
+    });
 });

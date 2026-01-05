@@ -375,6 +375,65 @@ await describe("Integer", (test) => {
         $(assert.equal(East.clamp(val3, val2, val1), 7n)); // 12 clamped between 3 and 7
     });
 
+    test("Comparison method aliases", $ => {
+        // Test short aliases (eq, ne, gt, lt, gte, lte, ge, le)
+        $(assert.equal(East.value(10n).eq(10n), true));
+        $(assert.equal(East.value(10n).eq(5n), false));
+        $(assert.equal(East.value(10n).ne(5n), true));
+        $(assert.equal(East.value(10n).ne(10n), false));
+        $(assert.equal(East.value(10n).gt(5n), true));
+        $(assert.equal(East.value(5n).gt(10n), false));
+        $(assert.equal(East.value(5n).lt(10n), true));
+        $(assert.equal(East.value(10n).lt(5n), false));
+        $(assert.equal(East.value(10n).gte(10n), true));
+        $(assert.equal(East.value(10n).gte(5n), true));
+        $(assert.equal(East.value(5n).gte(10n), false));
+        $(assert.equal(East.value(10n).lte(10n), true));
+        $(assert.equal(East.value(5n).lte(10n), true));
+        $(assert.equal(East.value(10n).lte(5n), false));
+        $(assert.equal(East.value(10n).ge(5n), true));
+        $(assert.equal(East.value(5n).le(10n), true));
+
+        // Test medium aliases (equal, notEqual, greater, less, greaterEqual, lessEqual)
+        $(assert.equal(East.value(10n).equal(10n), true));
+        $(assert.equal(East.value(10n).notEqual(5n), true));
+        $(assert.equal(East.value(10n).greater(5n), true));
+        $(assert.equal(East.value(5n).less(10n), true));
+        $(assert.equal(East.value(10n).greaterEqual(10n), true));
+        $(assert.equal(East.value(5n).lessEqual(10n), true));
+    });
+
+    test("Arithmetic method aliases", $ => {
+        // Test aliases for arithmetic operations
+        $(assert.equal(East.value(10n).plus(5n), 15n));
+        $(assert.equal(East.value(10n).sub(5n), 5n));
+        $(assert.equal(East.value(10n).minus(5n), 5n));
+        $(assert.equal(East.value(10n).mul(5n), 50n));
+        $(assert.equal(East.value(10n).times(5n), 50n));
+        $(assert.equal(East.value(10n).div(5n), 2n));
+        $(assert.equal(East.value(10n).mod(3n), 1n));
+        $(assert.equal(East.value(10n).rem(3n), 1n));
+        $(assert.equal(East.value(10n).modulo(3n), 1n));
+    });
+
+    test("Standalone function aliases", $ => {
+        // Test aliases for standalone comparison functions
+        $(assert.equal(East.equals(East.value(10n), 10n), true));
+        $(assert.equal(East.eq(East.value(10n), 10n), true));
+        $(assert.equal(East.notEquals(East.value(10n), 5n), true));
+        $(assert.equal(East.ne(East.value(10n), 5n), true));
+        $(assert.equal(East.lessThan(East.value(5n), 10n), true));
+        $(assert.equal(East.lt(East.value(5n), 10n), true));
+        $(assert.equal(East.greaterThan(East.value(10n), 5n), true));
+        $(assert.equal(East.gt(East.value(10n), 5n), true));
+        $(assert.equal(East.lessThanOrEqual(East.value(10n), 10n), true));
+        $(assert.equal(East.lte(East.value(10n), 10n), true));
+        $(assert.equal(East.le(East.value(10n), 10n), true));
+        $(assert.equal(East.greaterThanOrEqual(East.value(10n), 10n), true));
+        $(assert.equal(East.gte(East.value(10n), 10n), true));
+        $(assert.equal(East.ge(East.value(10n), 10n), true));
+    });
+
     test("Integer to Float conversion", $ => {
         // Basic conversions
         $(assert.equal(East.value(0n).toFloat(), 0.0));

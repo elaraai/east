@@ -886,6 +886,44 @@ export function greaterEqual<T>(left: Expr<T>, right: SubtypeExprOrValue<NoInfer
   }) as BooleanExpr;
 }
 
+// ============================================================================
+// Aliases for standalone comparison functions
+// ============================================================================
+
+/** Alias for {@link equal} */
+export const equals = equal;
+/** Alias for {@link equal} */
+export const eq = equal;
+
+/** Alias for {@link notEqual} */
+export const notEquals = notEqual;
+/** Alias for {@link notEqual} */
+export const ne = notEqual;
+
+/** Alias for {@link less} */
+export const lessThan = less;
+/** Alias for {@link less} */
+export const lt = less;
+
+/** Alias for {@link lessEqual} */
+export const lessThanOrEqual = lessEqual;
+/** Alias for {@link lessEqual} */
+export const lte = lessEqual;
+/** Alias for {@link lessEqual} */
+export const le = lessEqual;
+
+/** Alias for {@link greater} */
+export const greaterThan = greater;
+/** Alias for {@link greater} */
+export const gt = greater;
+
+/** Alias for {@link greaterEqual} */
+export const greaterThanOrEqual = greaterEqual;
+/** Alias for {@link greaterEqual} */
+export const gte = greaterEqual;
+/** Alias for {@link greaterEqual} */
+export const ge = greaterEqual;
+
 /** Test if the first value is the same object the second.
  * For mutable collections, such as arrays, this means that they are the same object in memory.
  * For immutable data types, such as integers and strings, this is equivalent to equality.
@@ -1984,5 +2022,20 @@ Object.assign(Expr, {
   greater,
   greaterEqual,
   is,
-  match: matchExpr
+  match: matchExpr,
+  // Comparison aliases
+  equals,
+  eq,
+  notEquals,
+  ne,
+  lessThan,
+  lt,
+  lessThanOrEqual,
+  lte,
+  le,
+  greaterThan,
+  gt,
+  greaterThanOrEqual,
+  gte,
+  ge,
 });

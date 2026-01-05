@@ -1359,4 +1359,16 @@ await describe("Array", (test) => {
         $(assert.equal(other_stack, expected));
         $(assert.equal(other_stack, stack));
     });
+
+    test("Equality method aliases", $ => {
+        // Test short aliases (eq, ne)
+        $(assert.equal(East.value([1n, 2n, 3n]).eq([1n, 2n, 3n]), true));
+        $(assert.equal(East.value([1n, 2n, 3n]).eq([1n, 2n]), false));
+        $(assert.equal(East.value([1n, 2n, 3n]).ne([1n, 2n]), true));
+        $(assert.equal(East.value([1n, 2n, 3n]).ne([1n, 2n, 3n]), false));
+
+        // Test medium aliases (equal, notEqual)
+        $(assert.equal(East.value([1n, 2n, 3n]).equal([1n, 2n, 3n]), true));
+        $(assert.equal(East.value([1n, 2n, 3n]).notEqual([1n, 2n]), true));
+    });
 });
