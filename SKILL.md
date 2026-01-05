@@ -46,21 +46,21 @@ Task → What do you need?
     │   └─ Function → FunctionType<I, O>, AsyncFunctionType<I, O>
     │
     ├─ Create TypeScript Values for East Types
-    │   ├─ Null → null
-    │   ├─ Boolean → true, false
-    │   ├─ Integer → 42n (bigint literal)
-    │   ├─ Float → 3.14 (number literal)
-    │   ├─ String → "hello"
-    │   ├─ DateTime → new Date("2025-01-01T00:00:00Z")
-    │   ├─ Blob → new Uint8Array([...])
-    │   ├─ Array → [1n, 2n, 3n]
-    │   ├─ Set → new Set([1n, 2n, 3n])
-    │   ├─ Dict → new Map([["a", 1n], ["b", 2n]])
-    │   ├─ Struct → { field1: value1, field2: value2 }
-    │   ├─ Variant (import from package)
+    │   ├─ NullType → null
+    │   ├─ BooleanType → true, false
+    │   ├─ IntegerType → 42n (bigint literal)
+    │   ├─ FloatType → 3.14 (number literal)
+    │   ├─ StringType → "hello"
+    │   ├─ DateTimeType → new Date("2025-01-01T00:00:00Z")
+    │   ├─ BlobType → new Uint8Array([...])
+    │   ├─ ArrayType(T) → [1n, 2n, 3n]
+    │   ├─ SetType(K) → new Set([1n, 2n, 3n])
+    │   ├─ DictType(K, V) → new Map([["a", 1n], ["b", 2n]])
+    │   ├─ StructType({...}) → { field1: value1, field2: value2 }
+    │   ├─ VariantType({...}) (use helpers from package)
     │   │   ├─ Option type → some(value), none  ← preferred for Option/Maybe
     │   │   └─ Other variants → variant("caseName", value)
-    │   └─ Reference (import from package) → ref(value)
+    │   └─ RefType(T) (use helper from package) → ref(value)
     │
     ├─ Write a Function (East.*)
     │   ├─ Synchronous → East.function([inputs], output, ($, ...args) => { ... })
