@@ -29,8 +29,8 @@ export { type CallableFunctionExpr, FunctionExpr } from './function.js';
 export { type CallableAsyncFunctionExpr, AsyncFunctionExpr } from './asyncfunction.js';
 
 // Import factory implementation
-import { from, equal, notEqual, less, lessEqual, print, is, greaterEqual, greater, func, str, platform, asyncFunction, asyncPlatform, compile, compileAsync, equals, eq, notEquals, ne, lessThan, lt, lessThanOrEqual, lte, le, greaterThan, gt, greaterThanOrEqual, gte, ge } from './block.js';
-export { BlockBuilder, type AsyncPlatformDefinition, type PlatformDefinition, equals, eq, notEquals, ne, lessThan, lt, lessThanOrEqual, lte, le, greaterThan, gt, greaterThanOrEqual, gte, ge } from './block.js';
+import { from, equal, notEqual, less, lessEqual, print, is, greaterEqual, greater, func, str, platform, asyncFunction, asyncPlatform, compile, compileAsync, equals, eq, notEquals, ne, lessThan, lt, lessThanOrEqual, lte, le, greaterThan, gt, greaterThanOrEqual, gte, ge, diff, applyPatch, composePatch, invertPatch } from './block.js';
+export { BlockBuilder, type AsyncPlatformDefinition, type PlatformDefinition, equals, eq, notEquals, ne, lessThan, lt, lessThanOrEqual, lte, le, greaterThan, gt, greaterThanOrEqual, gte, ge, diff, applyPatch, composePatch, invertPatch } from './block.js';
 
 // Import standard libraries
 import IntegerLib from './libs/integer.js';
@@ -444,6 +444,75 @@ export const East = {
    * ```
    */
   is,
+
+  // ============================================================================
+  // Patch Operations
+  // ============================================================================
+
+  /**
+   * Compute the difference between two values of the same type.
+   * Returns a patch that, when applied to `before`, produces `after`.
+   *
+   * @param before - The original value
+   * @param after - The modified value
+   * @returns A patch describing the changes
+   *
+   * @example
+   * ```ts
+   * const before = East.value([1n, 2n, 3n]);
+   * const after = East.value([1n, 4n, 3n]);
+   * const patch = East.diff(before, after);
+   * ```
+   */
+  diff,
+
+  /**
+   * Apply a patch to a value, producing the modified value.
+   *
+   * @param value - The value to patch
+   * @param patch - The patch to apply
+   * @returns The patched value
+   * @throws East runtime error if the patch conflicts with the value
+   *
+   * @example
+   * ```ts
+   * const result = East.applyPatch(original, patch);
+   * ```
+   */
+  applyPatch,
+
+  /**
+   * Compose two patches into a single patch.
+   * The result is a patch that has the same effect as applying `first` then `second`.
+   *
+   * @param first - The first patch to apply
+   * @param second - The second patch to apply
+   * @param type - The East type of the values being patched
+   * @returns A composed patch
+   * @throws East runtime error if the patches are incompatible
+   *
+   * @example
+   * ```ts
+   * const composed = East.composePatch(patch1, patch2, ArrayType(IntegerType));
+   * ```
+   */
+  composePatch,
+
+  /**
+   * Invert a patch, producing a patch that undoes the original.
+   * Applying the inverted patch to the "after" value produces the "before" value.
+   *
+   * @param patch - The patch to invert
+   * @param type - The East type of the values being patched
+   * @returns An inverted patch
+   *
+   * @example
+   * ```ts
+   * const inverted = East.invertPatch(patch, ArrayType(IntegerType));
+   * const original = East.applyPatch(modified, inverted);
+   * ```
+   */
+  invertPatch,
 
   // Root stdlib
 

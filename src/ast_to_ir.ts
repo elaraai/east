@@ -182,7 +182,7 @@ export function ast_to_ir(ast: AST, ctx: Ctx = { local_ctx: new Map(), parent_ct
               );
             }
             arg_ir = variant("As", {
-              type: toEastTypeValue(arg.type),
+              type: toEastTypeValue(expectedType),
               value: arg_ir,
               location: toLocationValue(ast.location),
             });

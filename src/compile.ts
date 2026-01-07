@@ -5,6 +5,7 @@
 import { type BuiltinName } from "./builtins.js";
 import { type IR, type LocationValue, printLocationValue } from "./ir.js";
 import { compareFor, equalFor, greaterEqualFor, greaterFor, isFor, lessEqualFor, lessFor, notEqualFor } from "./comparison.js";
+import { diffFor, applyFor, composeFor, invertFor, ConflictError } from "./patch/index.js";
 import { printFor, parseFor } from "./serialization/east.js";
 import { variant, type option } from "./containers/variant.js";
 import { EastError } from "./error.js";
@@ -1136,6 +1137,34 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue, platform
   LessEqual: (_location: LocationValue, _platformDef: PlatformFunction[], T: EastTypeValue) => lessEqualFor(T),
   Greater: (_location: LocationValue, _platformDef: PlatformFunction[], T: EastTypeValue) => greaterFor(T),
   GreaterEqual: (_location: LocationValue, _platformDef: PlatformFunction[], T: EastTypeValue) => greaterEqualFor(T),
+  Diff: (_location: LocationValue, _platformDef: PlatformFunction[], T: EastTypeValue) => diffFor(T),
+  ApplyPatch: (location: LocationValue, _platformDef: PlatformFunction[], T: EastTypeValue) => {
+    const apply = applyFor(T);
+    return (base: any, patch: any) => {
+      try {
+        return apply(base, patch);
+      } catch (e) {
+        if (e instanceof ConflictError) {
+          throw new EastError(e.message, { location });
+        }
+        throw e;
+      }
+    };
+  },
+  ComposePatch: (location: LocationValue, _platformDef: PlatformFunction[], T: EastTypeValue) => {
+    const compose = composeFor(T);
+    return (first: any, second: any) => {
+      try {
+        return compose(first, second);
+      } catch (e) {
+        if (e instanceof ConflictError) {
+          throw new EastError(e.message, { location });
+        }
+        throw e;
+      }
+    };
+  },
+  InvertPatch: (_location: LocationValue, _platformDef: PlatformFunction[], T: EastTypeValue) => invertFor(T),
   BooleanNot: (_location: LocationValue) => (x: boolean) => !x,
   BooleanOr: (_location: LocationValue) => (x: boolean, y: boolean) => x || y,
   BooleanAnd: (_location: LocationValue) => (x: boolean, y: boolean) => x && y,
