@@ -14,6 +14,7 @@ export type BuiltinType = {
 
 /** @internal */
 export type BuiltinName = "Is" | "Equal" | "NotEqual" | "Less" | "LessEqual" | "Greater" | "GreaterEqual"
+  | "Diff" | "ApplyPatch" | "ComposePatch" | "InvertPatch"
   | "BooleanNot" | "BooleanOr" | "BooleanAnd" | "BooleanXor"
   | "IntegerToFloat" | "IntegerNegate" | "IntegerAdd" | "IntegerSubtract" | "IntegerMultiply" | "IntegerDivide" | "IntegerRemainder" | "IntegerPow" | "IntegerAbs" | "IntegerSign" | "IntegerLog"
   | "FloatToInteger" | "FloatNegate" | "FloatAdd" | "FloatSubtract" | "FloatMultiply" | "FloatDivide" | "FloatRemainder" | "FloatPow" | "FloatAbs" | "FloatSign" | "FloatSqrt" | "FloatExp" | "FloatLog" | "FloatSin" | "FloatCos" | "FloatTan"
@@ -62,6 +63,28 @@ export const Builtins: Record<BuiltinName, BuiltinType> = {
     type_parameters: ["T"],
     inputs: ["T", "T"] as const,
     output: BooleanType,
+  },
+  // Patch operations - P is the computed PatchType passed from expression building
+  // We use two type parameters because the patch type structure varies based on T
+  Diff: {
+    type_parameters: ["T", "P"],
+    inputs: ["T", "T"] as const,
+    output: "P",
+  },
+  ApplyPatch: {
+    type_parameters: ["T", "P"],
+    inputs: ["T", "P"] as const,
+    output: "T",
+  },
+  ComposePatch: {
+    type_parameters: ["T", "P"],
+    inputs: ["P", "P"] as const,
+    output: "P",
+  },
+  InvertPatch: {
+    type_parameters: ["T", "P"],
+    inputs: ["P"] as const,
+    output: "P",
   },
   BooleanNot: {
     type_parameters: [],

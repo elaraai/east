@@ -902,7 +902,6 @@ await describe("DateTime", (test) => {
     test("Comparison method aliases", $ => {
         const d1 = East.value(new Date("2024-01-01T00:00:00.000Z"));
         const d2 = East.value(new Date("2024-06-15T12:30:00.000Z"));
-        const d3 = East.value(new Date("2024-01-01T00:00:00.000Z")); // Same as d1
 
         // Test short aliases (eq, ne, gt, lt, gte, lte, ge, le)
         $(assert.equal(d1.eq(new Date("2024-01-01T00:00:00.000Z")), true));

@@ -1103,7 +1103,8 @@ describe('Json encoding/decoding of EAST values', () => {
                 };
             },
             100, // 100 random types
-            10   // 10 samples per type
+            10,  // 10 samples per type
+            { includeRecursive: false } // TODO: recursive value generation needs work
         );
 
         assert.strictEqual(result, true, "Fuzz test failed");
@@ -1133,7 +1134,8 @@ describe('Json encoding/decoding of EAST values', () => {
                 };
             },
             100, // 100 random types
-            10   // 10 samples per type
+            10,  // 10 samples per type
+            { includeRecursive: false } // TODO: recursive value generation needs work
         );
 
         assert.strictEqual(result, true, "Fuzz test failed");

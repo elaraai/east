@@ -43,7 +43,8 @@ Task → What do you need?
     │   ├─ Primitive → IntegerType, FloatType, StringType, BooleanType, DateTimeType, BlobType, NullType
     │   ├─ Collection → ArrayType(T), SetType(K), DictType(K, V), RefType(T)
     │   ├─ Compound → StructType({...}), VariantType({...}), RecursiveType(...)
-    │   └─ Function → FunctionType<I, O>, AsyncFunctionType<I, O>
+    │   ├─ Function → FunctionType<I, O>, AsyncFunctionType<I, O>
+    │   └─ Patch → PatchType(T) (compute patch type for any East type)
     │
     ├─ Create TypeScript Values for East Types
     │   ├─ NullType → null
@@ -161,6 +162,12 @@ Task → What do you need?
     ├─ Conversion (East.*)
     │   └─ To string → East.print(expr)
     │
+    ├─ Patch Operations (East.*)
+    │   ├─ Compute diff → East.diff(before, after) → returns patch
+    │   ├─ Apply patch → East.applyPatch(value, patch) → returns patched value
+    │   ├─ Compose patches → East.composePatch(first, second, type) → returns combined patch
+    │   └─ Invert patch → East.invertPatch(patch, type) → returns undo patch
+    │
     └─ Serialization
         ├─ IR → fn.toIR(), ir.toJSON(), EastIR.fromJSON(data).compile(platform)
         └─ Data → East.Blob.encodeBeast(value, 'v2'), blob.decodeBeast(type, 'v2')
@@ -189,6 +196,7 @@ Task → What do you need?
 | `StructType<Fields>` | `{...}` | Immutable |
 | `VariantType<Cases>` | `variant` | Immutable |
 | `FunctionType<I, O>` | Function | Immutable |
+| `PatchType<T>` | `variant` | Immutable |
 
 ## Key Patterns
 

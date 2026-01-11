@@ -29,6 +29,7 @@ import type { PlatformFunction } from "../platform.js";
 import { toEastTypeValue } from "../type_of_type.js";
 import { RefExpr } from "./ref.js";
 import { AsyncFunctionExpr, createAsyncFunctionExpr, type CallableAsyncFunctionExpr } from "./asyncfunction.js";
+import { PatchType, type PatchTypeOf } from "../patch/index.js";
 
 /** A factory function to help build `Expr` from AST.
  * We inject this into each concrete `Expr` type so they can create new expressions recursively, without having circular dependencies between JavaScript modules.
@@ -951,6 +952,82 @@ export function print(value: Expr): StringExpr {
     type_parameters: [valueAst.type],
     arguments: [valueAst],
   }) as StringExpr;
+}
+
+// ============================================================================
+// Patch Operations
+// ============================================================================
+
+/** Compute the difference between two values of the same type.
+ * Returns a patch that, when applied to `before`, produces `after`.
+ */
+export function diff<T extends EastType>(before: Expr<T>, after: Expr<T>): ExprType<PatchTypeOf<T>> {
+  const beforeAst = Expr.ast(before);
+  const afterAst = Expr.ast(after);
+  const valueType = beforeAst.type;
+  const patchType = PatchType(valueType);
+  return fromAst({
+    ast_type: "Builtin",
+    type: patchType,
+    location: get_location(2),
+    builtin: "Diff",
+    type_parameters: [valueType, patchType],
+    arguments: [beforeAst, afterAst],
+  }) as ExprType<PatchTypeOf<T>>;
+}
+
+/** Apply a patch to a value, producing the modified value.
+ * @throws East runtime error if the patch conflicts with the value (e.g., deleting a non-existent key)
+ */
+export function applyPatch<T extends EastType>(value: Expr<T>, patch: Expr<PatchTypeOf<T>>): ExprType<T> {
+  const valueAst = Expr.ast(value);
+  const patchAst = Expr.ast(patch);
+  const valueType = valueAst.type;
+  const patchType = patchAst.type;
+  return fromAst({
+    ast_type: "Builtin",
+    type: valueType,
+    location: get_location(2),
+    builtin: "ApplyPatch",
+    type_parameters: [valueType, patchType],
+    arguments: [valueAst, patchAst],
+  }) as ExprType<T>;
+}
+
+/** Compose two patches into a single patch.
+ * The result is a patch that has the same effect as applying `first` then `second`.
+ * @throws East runtime error if the patches are incompatible (second expects different intermediate state)
+ */
+export function composePatch<T extends EastType>(first: Expr<PatchTypeOf<T>>, second: Expr<PatchTypeOf<T>>, type: T): ExprType<PatchTypeOf<T>> {
+  const firstAst = Expr.ast(first);
+  const secondAst = Expr.ast(second);
+  const valueType = type as EastType;
+  const patchType = PatchType(valueType);
+  return fromAst({
+    ast_type: "Builtin",
+    type: patchType,
+    location: get_location(2),
+    builtin: "ComposePatch",
+    type_parameters: [valueType, patchType],
+    arguments: [firstAst, secondAst],
+  }) as ExprType<PatchTypeOf<T>>;
+}
+
+/** Invert a patch, producing a patch that undoes the original.
+ * Applying the inverted patch to the "after" value produces the "before" value.
+ */
+export function invertPatch<T extends EastType>(patch: Expr<PatchTypeOf<T>>, type: T): ExprType<PatchTypeOf<T>> {
+  const patchAst = Expr.ast(patch);
+  const valueType = type as EastType;
+  const patchType = PatchType(valueType);
+  return fromAst({
+    ast_type: "Builtin",
+    type: patchType,
+    location: get_location(2),
+    builtin: "InvertPatch",
+    type_parameters: [valueType, patchType],
+    arguments: [patchAst],
+  }) as ExprType<PatchTypeOf<T>>;
 }
 
 /** Callable helper type for synchronous platform functions. */
@@ -2038,4 +2115,9 @@ Object.assign(Expr, {
   greaterThanOrEqual,
   gte,
   ge,
+  // Patch operations
+  diff,
+  applyPatch,
+  composePatch,
+  invertPatch,
 });
