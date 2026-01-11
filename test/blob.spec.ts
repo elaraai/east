@@ -2353,8 +2353,6 @@ await describe("Blob", (test) => {
 
   test("Equality method aliases", $ => {
     const b1 = East.value(Uint8Array.from([1, 2, 3]));
-    const b2 = East.value(Uint8Array.from([1, 2, 3]));
-    const b3 = East.value(Uint8Array.from([1, 2]));
 
     // Test short aliases (eq, ne)
     $(assert.equal(b1.eq(Uint8Array.from([1, 2, 3])), true));

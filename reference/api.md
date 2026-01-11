@@ -7,8 +7,10 @@ Complete function signatures, types, and arguments for the East language.
 ## Table of Contents
 
 - [East Namespace](#east-namespace)
+  - [Patch Operations](#patch-operations)
 - [BlockBuilder Operations](#blockbuilder-operations)
 - [Types](#types)
+  - [Patch Types](#patch-types)
 - [Boolean Expressions](#boolean-expressions)
 - [Integer Expressions](#integer-expressions)
 - [Float Expressions](#float-expressions)
@@ -70,6 +72,15 @@ All comparison functions have multiple aliases for convenience:
 | `East.min<T extends EastType>(a: Expr<T>, b: Expr<T> \| ValueTypeOf<T>): Expr<T>` | Minimum (total ordering) |
 | `East.max<T extends EastType>(a: Expr<T>, b: Expr<T> \| ValueTypeOf<T>): Expr<T>` | Maximum (total ordering) |
 | `East.clamp<T extends EastType>(x: Expr<T>, min: Expr<T> \| ValueTypeOf<T>, max: Expr<T> \| ValueTypeOf<T>): Expr<T>` | Clamp between min and max |
+
+### Patch Operations
+
+| Signature | Description |
+|-----------|-------------|
+| `East.diff<T extends EastType>(before: Expr<T>, after: Expr<T>): Expr<PatchType<T>>` | Compute structural difference between two values |
+| `East.applyPatch<T extends EastType>(value: Expr<T>, patch: Expr<PatchType<T>>): Expr<T>` | Apply a patch to a value |
+| `East.composePatch<T extends EastType>(first: Expr<PatchType<T>>, second: Expr<PatchType<T>>, type: T): Expr<PatchType<T>>` | Combine two patches into one |
+| `East.invertPatch<T extends EastType>(patch: Expr<PatchType<T>>, type: T): Expr<PatchType<T>>` | Invert a patch (for undo operations) |
 
 ---
 
@@ -160,6 +171,21 @@ import { FunctionType, AsyncFunctionType } from "@elaraai/east";
 FunctionType([IntegerType, IntegerType], IntegerType)  // (int, int) => int
 AsyncFunctionType([StringType], BlobType)              // async (string) => blob
 ```
+
+### Patch Types
+
+```typescript
+import { PatchType } from "@elaraai/east";
+
+PatchType(IntegerType)     // Patch for Integer → VariantType<{ unchanged, replace }>
+PatchType(ArrayType(T))    // Patch for Array → VariantType<{ unchanged, replace, patch }>
+PatchType(StructType(...)) // Patch for Struct → VariantType<{ unchanged, replace, patch }>
+```
+
+Patch types are variant types with these cases:
+- `unchanged`: No changes (value is `null`)
+- `replace`: Complete replacement (value is `{ before: T, after: T }`)
+- `patch`: Structural changes (only for compound types like Array, Dict, Set, Struct, Variant)
 
 ---
 

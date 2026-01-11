@@ -15,7 +15,7 @@ import { isVariant, variant, type variant as VariantValue } from "../containers/
 import { equalFor, compareFor } from "../comparison.js";
 import { printFor } from "../serialization/east.js";
 import { SortedMap } from "../containers/sortedmap.js";
-import { type ComposeContext, ConflictError, resolveType } from "./types.js";
+import { type ComposeContext, ConflictError } from "./types.js";
 import { applyFor } from "./apply.js";
 import { invertFor } from "./invert.js";
 
@@ -112,7 +112,6 @@ export function composeFor(type: EastTypeValue | EastType, ctx: ComposeContext =
     const keyCompare = compareFor(t.value);
 
     // Pass full context so recursive type references can be resolved
-    const setEqual = equalFor(t, ctx.equal);
     const apply = applyFor(t, { apply: ctx.apply, types: ctx.types, equal: ctx.equal, print: ctx.print });
     const invert = invertFor(t, { invert: ctx.invert, types: ctx.types, equal: ctx.equal });
 

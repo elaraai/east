@@ -17,7 +17,6 @@ import {
   ArrayType,
   DictType,
   IntegerType,
-  RecursiveType,
 } from "../types.js";
 
 /**

@@ -7,10 +7,13 @@ import { describe, test } from "node:test";
 import { variant } from '../containers/variant.js';
 import { SortedMap } from '../containers/sortedmap.js';
 import { SortedSet } from '../containers/sortedset.js';
-import { diffFor, applyFor, composeFor, invertFor, PatchType, ConflictError } from './index.js';
-import { ArrayType, BlobType, BooleanType, DateTimeType, DictType, FloatType, IntegerType, NullType, SetType, StringType, StructType, VariantType, RecursiveType, isTypeEqual, type EastType } from '../types.js';
+import { diffFor } from './diff.js';
+import { applyFor } from './apply.js';
+import { composeFor } from './compose.js';
+import { invertFor } from './invert.js';
+import { PatchType } from './index.js';
+import { ArrayType, BooleanType, DictType, FloatType, IntegerType, NullType, SetType, StringType, StructType, VariantType, isTypeEqual } from '../types.js';
 import { equalFor } from '../comparison.js';
-import { printFor } from '../serialization/east.js';
 import { generateFuzzTestCases } from './fuzz.js';
 
 describe('Patch system for EAST values', () => {

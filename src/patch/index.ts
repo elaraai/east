@@ -15,21 +15,11 @@
  * @module
  */
 
-// Re-export types
+// Re-export types for public API
 export {
-  type DiffContext,
-  type ApplyContext,
-  type ComposeContext,
-  type InvertContext,
   type PatchTypeOf,
   ConflictError,
 } from "./types.js";
 
 // Re-export PatchType constructor
 export { PatchType } from "./type_of_patch.js";
-
-// Re-export core operations
-export { diffFor } from "./diff.js";
-export { applyFor } from "./apply.js";
-export { invertFor } from "./invert.js";
-export { composeFor } from "./compose.js";

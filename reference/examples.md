@@ -15,6 +15,7 @@ Working code examples for common East use cases.
 - [Variants and Pattern Matching](#variants-and-pattern-matching)
 - [Error Handling](#error-handling)
 - [Standard Library](#standard-library)
+- [Patch Operations](#patch-operations)
 - [Serialization](#serialization)
 
 ---
@@ -673,6 +674,84 @@ const csvOps = East.function([BlobType], BlobType, ($, csvBlob) => {
 
     $.return(outputCsv);
 });
+```
+
+---
+
+## Patch Operations
+
+### Computing and Applying Diffs
+
+```typescript
+import { East, IntegerType, ArrayType, StructType, StringType, PatchType } from "@elaraai/east";
+
+const PersonType = StructType({ name: StringType, age: IntegerType });
+
+// Compute the difference between two values
+const computeDiff = East.function(
+    [PersonType, PersonType],
+    PatchType(PersonType),
+    ($, before, after) => {
+        $.return(East.diff(before, after));
+    }
+);
+
+// Apply a patch to a value
+const applyDiff = East.function(
+    [PersonType, PatchType(PersonType)],
+    PersonType,
+    ($, original, patch) => {
+        $.return(East.applyPatch(original, patch));
+    }
+);
+
+const compiled = East.compile(computeDiff, []);
+const patch = compiled(
+    { name: "Alice", age: 30n },
+    { name: "Alice", age: 31n }
+);
+// patch = { type: "patch", value: { name: unchanged, age: replace(30n, 31n) } }
+```
+
+### Undo with Inverted Patches
+
+```typescript
+import { East, IntegerType, ArrayType, StructType, StringType, PatchType } from "@elaraai/east";
+
+const DocumentType = StructType({ title: StringType, version: IntegerType });
+
+// Track changes with undo capability
+const editWithUndo = East.function(
+    [DocumentType, DocumentType],
+    StructType({ result: DocumentType, undo: PatchType(DocumentType) }),
+    ($, original, edited) => {
+        const patch = $.let(East.diff(original, edited));
+        const undoPatch = $.let(East.invertPatch(patch, DocumentType));
+        $.return({ result: edited, undo: undoPatch });
+    }
+);
+
+const compiled = East.compile(editWithUndo, []);
+const result = compiled(
+    { title: "Draft", version: 1n },
+    { title: "Final", version: 2n }
+);
+// result.undo can be applied to result.result to get back the original
+```
+
+### Composing Sequential Patches
+
+```typescript
+import { East, IntegerType, ArrayType, PatchType } from "@elaraai/east";
+
+// Combine multiple patches into one
+const combinePatches = East.function(
+    [PatchType(ArrayType(IntegerType)), PatchType(ArrayType(IntegerType))],
+    PatchType(ArrayType(IntegerType)),
+    ($, first, second) => {
+        $.return(East.composePatch(first, second, ArrayType(IntegerType)));
+    }
+);
 ```
 
 ---

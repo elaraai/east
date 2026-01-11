@@ -3,7 +3,7 @@
  * Dual-licensed under AGPL-3.0 and commercial license. See LICENSE for details.
  */
 import { East, ArrayType, IntegerType, StringType, NullType, SetType, DictType, StructType, VariantType, variant, FloatType, BooleanType, DateTimeType, SortedSet, RefType, ref, RecursiveType } from "../src/index.js";
-import type { EastType, ValueTypeOf } from "../src/index.js";
+import type { ValueTypeOf } from "../src/index.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
 import { generateFuzzTestCases } from "../src/patch/fuzz.js";
 

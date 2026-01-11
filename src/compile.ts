@@ -5,7 +5,11 @@
 import { type BuiltinName } from "./builtins.js";
 import { type IR, type LocationValue, printLocationValue } from "./ir.js";
 import { compareFor, equalFor, greaterEqualFor, greaterFor, isFor, lessEqualFor, lessFor, notEqualFor } from "./comparison.js";
-import { diffFor, applyFor, composeFor, invertFor, ConflictError } from "./patch/index.js";
+import { diffFor } from "./patch/diff.js";
+import { applyFor } from "./patch/apply.js";
+import { composeFor } from "./patch/compose.js";
+import { invertFor } from "./patch/invert.js";
+import { ConflictError } from "./patch/index.js";
 import { printFor, parseFor } from "./serialization/east.js";
 import { variant, type option } from "./containers/variant.js";
 import { EastError } from "./error.js";

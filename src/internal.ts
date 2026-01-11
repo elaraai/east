@@ -23,6 +23,12 @@ export * from './type_of_type.js';
 export * from './types.js';
 export * from './fuzz.js';
 export { decodeBeast2For, encodeBeast2For } from './serialization/beast2.js';
+// Patch system internals - value-level operations
+export { diffFor } from './patch/diff.js';
+export { applyFor } from './patch/apply.js';
+export { invertFor } from './patch/invert.js';
+export { composeFor } from './patch/compose.js';
+export { type DiffContext, type ApplyContext, type ComposeContext, type InvertContext } from './patch/types.js';
 export * from './datetime_format/types.js';
 export * from './datetime_format/tokenize.js';
 export * from './datetime_format/print.js';

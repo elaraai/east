@@ -437,7 +437,7 @@ function buildValueGenerator(
   } else if (type.type === "AsyncFunction") {
     let outputGen: (depth: number) => any;
     const ret = (depth: number) => {
-      return async (..._args: any[]) => outputGen(depth);
+      return (..._args: any[]) => Promise.resolve(outputGen(depth));
     };
     ctx.generators.push(ret);
     outputGen = buildValueGenerator(type.value.output, ctx);

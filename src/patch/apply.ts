@@ -17,7 +17,7 @@ import { printFor } from "../serialization/east.js";
 import { SortedMap } from "../containers/sortedmap.js";
 import { SortedSet } from "../containers/sortedset.js";
 import type { ref } from "../containers/ref.js";
-import { type ApplyContext, ConflictError, resolveType } from "./types.js";
+import { type ApplyContext, ConflictError } from "./types.js";
 
 export function applyFor(type: EastTypeValue, ctx?: ApplyContext): (base: any, patch: any) => any;
 export function applyFor<T extends EastType>(type: T): (base: ValueTypeOf<T>, patch: any) => ValueTypeOf<T>;
