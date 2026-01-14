@@ -46,6 +46,10 @@ export type PlatformDefinition = {
   inputs: EastTypeValue[],
   output: EastTypeValue,
   type: 'sync' | 'async',
+  // Generic platform function fields (optional for non-generic functions)
+  type_parameters?: string[];
+  inputsFn?: (...typeParams: EastTypeValue[]) => EastTypeValue[];
+  outputsFn?: (...typeParams: EastTypeValue[]) => EastTypeValue;
 };
 
 export type AnalyzedIR<T extends IR = IR> = T & { value: { isAsync: boolean } };
@@ -124,13 +128,13 @@ export function analyzeIR<T extends IR>(
   const analysis = new Map<IR, { captured?: boolean }>();
 
   // Build a lookup map for platform functions
-  const platformMap = new Map<string, { inputs: EastTypeValue[], output: EastTypeValue, type: 'sync' | 'async' }>();
+  const platformMap = new Map<string, PlatformDefinition>();
   for (const p of platformDef) {
     if (platformMap.has(p.name)) {
       throw new Error(`Duplicate platform function definition for '${p.name}'`);
     }
 
-    platformMap.set(p.name, { inputs: p.inputs, output: p.output, type: p.type });
+    platformMap.set(p.name, p);
   }
 
   // Track circular references
@@ -409,10 +413,36 @@ export function analyzeIR<T extends IR>(
         );
       }
 
-      // Validate argument count
-      if (node.value.arguments.length !== platformFn.inputs.length) {
+      // Handle generic platform functions
+      const typeParams = node.value.type_parameters ?? [];
+      const expectedTypeParamCount = platformFn.type_parameters?.length ?? 0;
+
+      if (typeParams.length !== expectedTypeParamCount) {
         throw new Error(
-          `Platform function '${node.value.name}' expects ${platformFn.inputs.length} arguments ` +
+          `Platform function '${node.value.name}' expects ${expectedTypeParamCount} ` +
+          `type parameters, got ${typeParams.length} ` +
+          `at ${printLocationValue(node.value.location)}`
+        );
+      }
+
+      // Compute concrete input/output types by substituting type parameters
+      let inputTypes: EastTypeValue[];
+      let outputType: EastTypeValue;
+
+      if (expectedTypeParamCount > 0 && platformFn.inputsFn && platformFn.outputsFn) {
+        // Generic platform function - use callbacks to compute types
+        inputTypes = platformFn.inputsFn(...typeParams);
+        outputType = platformFn.outputsFn(...typeParams);
+      } else {
+        // Non-generic - use stored concrete types
+        inputTypes = platformFn.inputs;
+        outputType = platformFn.output;
+      }
+
+      // Validate argument count (now using computed inputTypes)
+      if (node.value.arguments.length !== inputTypes.length) {
+        throw new Error(
+          `Platform function '${node.value.name}' expects ${inputTypes.length} arguments ` +
           `but got ${node.value.arguments.length} ` +
           `at ${printLocationValue(node.value.location)}`
         );
@@ -429,9 +459,9 @@ export function analyzeIR<T extends IR>(
           isAsync = true;
         }
 
-        // Validate argument type exactly matches expected
+        // Validate argument type exactly matches expected (using computed inputTypes)
         // (Subtyping should be handled by explicit As nodes)
-        const expectedType = platformFn.inputs[i]!;
+        const expectedType = inputTypes[i]!;
         if (argAnalyzed.value.type.type !== "Never" && !isTypeValueEqual(argAnalyzed.value.type, expectedType)) {
           throw new Error(
             `Platform function '${node.value.name}' argument ${i + 1} ` +
@@ -449,11 +479,11 @@ export function analyzeIR<T extends IR>(
         isAsync = true;
       }
 
-      // Validate return type matches
-      if (!isTypeValueEqual(node.value.type, platformFn.output)) {
+      // Validate return type matches (using computed outputType)
+      if (!isTypeValueEqual(node.value.type, outputType)) {
         throw new Error(
           `Platform function '${node.value.name}' return type ` +
-          `expected to be ${printTypeValue(platformFn.output)} ` +
+          `expected to be ${printTypeValue(outputType)} ` +
           `but IR has ${printTypeValue(node.value.type)} ` +
           `at ${printLocationValue(node.value.location)}`
         );

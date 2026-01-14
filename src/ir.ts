@@ -265,6 +265,7 @@ export type PlatformIR = variant<"Platform", {
   type: EastTypeValue,
   location: LocationValue,
   name: string,
+  type_parameters: EastTypeValue[],
   arguments: any[], // IR[]
   async: boolean,
 }>;
@@ -331,5 +332,5 @@ export const IRType = RecursiveType(ir => VariantType({
   Continue: StructType({ type: EastTypeType, location: LocationType, label: IRLabelType }),
   Break: StructType({ type: EastTypeType, location: LocationType, label: IRLabelType }),
   Builtin: StructType({ type: EastTypeType, location: LocationType, builtin: StringType, type_parameters: ArrayType(EastTypeType), arguments: ArrayType(ir) }),
-  Platform: StructType({ type: EastTypeType, location: LocationType, name: StringType, arguments: ArrayType(ir), async: BooleanType }),
+  Platform: StructType({ type: EastTypeType, location: LocationType, name: StringType, type_parameters: ArrayType(EastTypeType), arguments: ArrayType(ir), async: BooleanType }),
 }));

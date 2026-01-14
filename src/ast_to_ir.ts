@@ -200,6 +200,7 @@ export function ast_to_ir(ast: AST, ctx: Ctx = { local_ctx: new Map(), parent_ct
         type: toEastTypeValue(ast.type),
         location: toLocationValue(ast.location),
         name: ast.name,
+        type_parameters: ast.type_parameters.map(tp => toEastTypeValue(tp)),
         arguments: ast.arguments.map(ast => ast_to_ir(ast, ctx)), // type equality handled at Expr/AST level
         async: ast.async,
       });

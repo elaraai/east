@@ -303,6 +303,7 @@ export type PlatformAST = {
   type: EastType,
   location: Location,
   name: string,
+  type_parameters: EastType[],
   arguments: AST[],
   async: boolean,
 };
