@@ -83,7 +83,7 @@ export type RefType<T = any> = { type: "Ref", value: T };
  * @returns A reference type
  * @throws When the element type contains functions
  */
-export function RefType<T>(type: T): RefType<T> {
+export function RefType<const T>(type: T): RefType<T> {
   return { type: "Ref", value: type };
 };
 
@@ -101,7 +101,7 @@ export type ArrayType<T = any> = { type: "Array", value: T };
  * @returns An Array type
  * @throws When the element type contains functions
  */
-export function ArrayType<T>(type: T): ArrayType<T> {
+export function ArrayType<const T>(type: T): ArrayType<T> {
   return { type: "Array", value: type };
 };
 
@@ -122,7 +122,7 @@ export type SetType<T = any> = { type: "Set", key: T };
  * @returns A Set type
  * @throws When the key type is not immutable
  */
-export function SetType<T>(type: T): SetType<T> {
+export function SetType<const T>(type: T): SetType<T> {
   if (typeof type !== "string" && !isImmutableType(type as EastType)) {
     throw new Error(`Set key type must be an immutable type, got ${printType(type as EastType)}`);
   }
@@ -149,7 +149,7 @@ export type DictType<K = any, T = any> = { type: "Dict", key: K, value: T };
  * @returns A Dict type
  * @throws When the key type is not immutable or value type contains functions
  */
-export function DictType<K, T>(key: K, value: T): DictType<K, T> {
+export function DictType<const K, const T>(key: K, value: T): DictType<K, T> {
   if (typeof key !== "string" && !isImmutableType(key as EastType)) {
     throw new Error(`Dict key type must be an immutable type, got ${printType(key as EastType)}`);
   }
@@ -172,7 +172,7 @@ export type StructType<Fields extends { [K in string]: any } = { [K in string]: 
  * @param field_types - Object mapping field names to {@link EastType} instances
  * @returns A Struct type
  */
-export function StructType<Fields extends { [K in string]: any }>(field_types: Fields): StructType<Fields> {
+export function StructType<const Fields extends { [K in string]: any }>(field_types: Fields): StructType<Fields> {
   return { type: "Struct", fields: field_types };
 };
 
@@ -192,7 +192,7 @@ export type VariantType<Cases extends { [K in string]: any } = { [K in string]: 
  * @param case_types - Object mapping case names to {@link EastType} instances
  * @returns A Variant type with cases sorted alphabetically
  */
-export function VariantType<Cases extends { [K in string]: any }>(case_types: Cases): VariantType<Cases> {
+export function VariantType<const Cases extends { [K in string]: any }>(case_types: Cases): VariantType<Cases> {
   // Cases are sorted alphabetically by their name
   const cases_sorted = Object.fromEntries(Object.entries(case_types).sort((x, y) => x[0] < y[0] ? -1 : x[0] === y[0] ? 0 : 1)) as Cases;
   return { type: "Variant", cases: cases_sorted };
@@ -360,7 +360,7 @@ export type FunctionType<I extends any[] = any[], O extends any = any> = { type:
  * 
  * @see {@link AsyncFunctionType} for asynchronous functions.
  */
-export function FunctionType<const I extends any[], O extends any>(inputs: I, output: O): FunctionType<I, O> {
+export function FunctionType<const I extends any[], const O extends any>(inputs: I, output: O): FunctionType<I, O> {
   return { type: "Function", inputs, output };
 };
 
@@ -387,7 +387,7 @@ export type AsyncFunctionType<I extends any[] = any[], O extends any = any> = { 
  * 
  * @see {@link AsyncFunctionType} for asynchronous functions.
  */
-export function AsyncFunctionType<const I extends any[], O extends any>(inputs: I, output: O): AsyncFunctionType<I, O> {
+export function AsyncFunctionType<const I extends any[], const O extends any>(inputs: I, output: O): AsyncFunctionType<I, O> {
   return { type: "AsyncFunction", inputs, output };
 };
 
