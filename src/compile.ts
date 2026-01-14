@@ -1091,10 +1091,29 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
 
       return compile_internal(a, ctx, platform, asyncPlatformFns, platformDef, false, compilingNodes)
     });
-    const evaluator = platform[ir.value.name];
-    if (evaluator === undefined) {
-      throw new Error(`Evaluator for platform function ${JSON.stringify(ir.value.name)} not found at ${printLocationValue(ir.value.location)}`);
+
+    // Look up platform function definition to check if generic
+    const platformFn = platformDef.find(p => p.name === ir.value.name);
+
+    const typeParams = ir.value.type_parameters ?? [];
+
+    // Get evaluator - for generic functions, call factory with type params
+    let evaluator: (...args: any[]) => any;
+    if (typeParams.length > 0 && platformFn?.type_parameters && platformFn.type_parameters.length > 0) {
+      // Generic platform function - fn is a factory that takes type params
+      if (!platformFn.fn) {
+        throw new Error(`Generic platform function '${ir.value.name}' has no implementation at ${printLocationValue(ir.value.location)}`);
+      }
+      evaluator = platformFn.fn(...typeParams);
+    } else {
+      // Non-generic - use platform map for backwards compatibility
+      const platformEvaluator = platform[ir.value.name];
+      if (platformEvaluator === undefined) {
+        throw new Error(`Evaluator for platform function ${JSON.stringify(ir.value.name)} not found at ${printLocationValue(ir.value.location)}`);
+      }
+      evaluator = platformEvaluator;
     }
+
     if (argsAsync) {
       return async (ctx: Record<string, any>) => {
         const args_resolved: any[] = [];

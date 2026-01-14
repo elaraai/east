@@ -29,8 +29,8 @@ export { type CallableFunctionExpr, FunctionExpr } from './function.js';
 export { type CallableAsyncFunctionExpr, AsyncFunctionExpr } from './asyncfunction.js';
 
 // Import factory implementation
-import { from, equal, notEqual, less, lessEqual, print, is, greaterEqual, greater, func, str, platform, asyncFunction, asyncPlatform, compile, compileAsync, equals, eq, notEquals, ne, lessThan, lt, lessThanOrEqual, lte, le, greaterThan, gt, greaterThanOrEqual, gte, ge, diff, applyPatch, composePatch, invertPatch } from './block.js';
-export { BlockBuilder, type AsyncPlatformDefinition, type PlatformDefinition, equals, eq, notEquals, ne, lessThan, lt, lessThanOrEqual, lte, le, greaterThan, gt, greaterThanOrEqual, gte, ge, diff, applyPatch, composePatch, invertPatch } from './block.js';
+import { from, equal, notEqual, less, lessEqual, print, is, greaterEqual, greater, func, str, platform, asyncFunction, asyncPlatform, genericPlatform, asyncGenericPlatform, compile, compileAsync, equals, eq, notEquals, ne, lessThan, lt, lessThanOrEqual, lte, le, greaterThan, gt, greaterThanOrEqual, gte, ge, diff, applyPatch, composePatch, invertPatch } from './block.js';
+export { BlockBuilder, type AsyncPlatformDefinition, type PlatformDefinition, type GenericPlatformDefinition, type AsyncGenericPlatformDefinition, equals, eq, notEquals, ne, lessThan, lt, lessThanOrEqual, lte, le, greaterThan, gt, greaterThanOrEqual, gte, ge, diff, applyPatch, composePatch, invertPatch } from './block.js';
 
 // Import standard libraries
 import IntegerLib from './libs/integer.js';
@@ -276,6 +276,79 @@ export const East = {
    * ```
    */
   asyncPlatform,
+
+  /**
+   * Defines a generic (polymorphic) platform function with type parameters.
+   * Type parameters are passed at call time and flow through to the implementation.
+   *
+   * @param name - The name of the platform function
+   * @param typeParams - Array of type parameter names (e.g., `["T", "U"]`)
+   * @param inputsFn - Callback that receives placeholder types and returns input types
+   * @param outputFn - Callback that receives placeholder types and returns output type
+   * @returns A callable generic platform function helper
+   *
+   * @see {@link platform} for non-generic platform functions.
+   * @see {@link asyncGenericPlatform} for async generic platform functions.
+   *
+   * @example
+   * ```ts
+   * // Define a generic log function
+   * const log = East.genericPlatform(
+   *   "log",
+   *   ["T"],
+   *   (T) => [T],
+   *   (_T) => NullType
+   * );
+   *
+   * // Use it - type is passed first, then value
+   * const myFunction = East.function([StringType], NullType, ($, s) => {
+   *   $(log(StringType, s));
+   * });
+   *
+   * // Implementation receives type params as a factory
+   * const platform = [
+   *   log.implement((T) => (value) => {
+   *     console.log(printFor(T)(value));
+   *     return null;
+   *   }),
+   * ];
+   * ```
+   */
+  genericPlatform,
+
+  /**
+   * Defines an asynchronous generic (polymorphic) platform function with type parameters.
+   * The async variant of `genericPlatform`.
+   *
+   * @param name - The name of the platform function
+   * @param typeParams - Array of type parameter names (e.g., `["T", "U"]`)
+   * @param inputsFn - Callback that receives placeholder types and returns input types
+   * @param outputFn - Callback that receives placeholder types and returns output type
+   * @returns A callable async generic platform function helper
+   *
+   * @see {@link genericPlatform} for sync generic platform functions.
+   * @see {@link asyncPlatform} for non-generic async platform functions.
+   *
+   * @example
+   * ```ts
+   * // Define an async generic fetch function
+   * const fetchAs = East.asyncGenericPlatform(
+   *   "fetchAs",
+   *   ["T"],
+   *   (_T) => [StringType],  // URL input
+   *   (T) => T               // Returns parsed value of type T
+   * );
+   *
+   * // Implementation receives type params and returns async function
+   * const platform = [
+   *   fetchAs.implement((T) => async (url) => {
+   *     const response = await fetch(url);
+   *     return parseFor(T)(await response.text());
+   *   }),
+   * ];
+   * ```
+   */
+  asyncGenericPlatform,
 
   /**
    * Converts any East expression to its string representation.

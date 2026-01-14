@@ -265,6 +265,7 @@ export type PlatformIR = variant<"Platform", {
   type: EastTypeValue,
   location: LocationValue,
   name: string,
+  type_parameters: EastTypeValue[],
   arguments: any[], // IR[]
   async: boolean,
 }>;
