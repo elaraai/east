@@ -36,7 +36,7 @@ jobs:
         with:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
-          repositories: east,east-node,east-py
+          repositories: east,east-node
 
       - uses: actions/checkout@v4
         with:
@@ -130,8 +130,8 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           # Only trigger direct dependents - they cascade to their dependents
-          # east -> east-node, east-py -> e3 -> east-ui
-          REPOS="elaraai/east-node elaraai/east-py"
+          # east -> east-node -> east-py, e3 -> east-ui
+          REPOS="elaraai/east-node"
           FAILED=""
 
           for repo in $REPOS; do
@@ -149,4 +149,4 @@ jobs:
             exit 1
           fi
 
-          echo "Successfully triggered update-deps in dependent repos (cascade will continue)"
+          echo "Successfully triggered update-deps in east-node (cascade continues to east-py, e3, east-ui)"
