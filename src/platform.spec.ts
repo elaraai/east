@@ -49,40 +49,35 @@ describe("platform functions", () => {
 
     describe("genericPlatform", () => {
         test("can define a generic log function with 1 type parameter", () => {
-            const log = East.genericPlatform(
-                "log",
+            const getTypeName = East.genericPlatform(
+                "getTypeName",
                 ["T"],
-                (T) => [T],
-                (_T) => NullType
+                ["T"],
+                StringType
             );
 
-            let logged: { type: EastTypeValue, value: unknown } | undefined = undefined;
             const platform = [
-                log.implement((T: EastTypeValue) => (value: unknown) => {
-                    logged = { type: T, value };
-                    return null;
+                getTypeName.implement((T: EastTypeValue) => (_value: unknown) => {
+                    return T.type;
                 }),
             ];
 
-            const f = East.function([IntegerType], NullType, ($, input) => {
-                $(log(IntegerType, input));
-                $.return(null);
+            const f = East.function([IntegerType], StringType, ($, input) => {
+                $.return(getTypeName([IntegerType], input));
             });
 
             const f_compiled = East.compile(f, platform);
-            f_compiled(42n);
+            const result = f_compiled(42n);
 
-            assert.ok(logged !== undefined);
-            assert.strictEqual(logged.value, 42n);
-            assert.strictEqual(logged.type.type, "Integer");
+            assert.strictEqual(result, "Integer");
         });
 
         test("can use type parameter to format output", () => {
             const genericPrint = East.genericPlatform(
                 "genericPrint",
                 ["T"],
-                (T) => [T],
-                (_T) => StringType
+                ["T"],
+                StringType
             );
 
             const platform = [
@@ -93,14 +88,14 @@ describe("platform functions", () => {
 
             // Test with Integer
             const f1 = East.function([IntegerType], StringType, ($, input) => {
-                $.return(genericPrint(IntegerType, input));
+                $.return(genericPrint([IntegerType], input));
             });
             const f1_compiled = East.compile(f1, platform);
             assert.strictEqual(f1_compiled(42n), "42");
 
             // Test with String
             const f2 = East.function([StringType], StringType, ($, input) => {
-                $.return(genericPrint(StringType, input));
+                $.return(genericPrint([StringType], input));
             });
             const f2_compiled = East.compile(f2, platform);
             assert.strictEqual(f2_compiled("hello"), '"hello"');
@@ -110,8 +105,8 @@ describe("platform functions", () => {
             const wrap = East.genericPlatform(
                 "wrap",
                 ["T"],
-                (T) => [T],
-                (T) => ArrayType(T)
+                ["T"],
+                ArrayType("T")
             );
 
             const platform = [
@@ -121,7 +116,7 @@ describe("platform functions", () => {
             ];
 
             const f = East.function([IntegerType], ArrayType(IntegerType), ($, input) => {
-                $.return(wrap(IntegerType, input));
+                $.return(wrap([IntegerType], input));
             });
 
             const f_compiled = East.compile(f, platform);
@@ -134,8 +129,8 @@ describe("platform functions", () => {
             const pair = East.genericPlatform(
                 "pair",
                 ["A", "B"],
-                (A, B) => [A, B],
-                (A, B) => StructType({ first: A, second: B })
+                ["A", "B"],
+                StructType({ first: "A", second: "B" })
             );
 
             const platform = [
@@ -148,7 +143,7 @@ describe("platform functions", () => {
                 [IntegerType, StringType],
                 StructType({ first: IntegerType, second: StringType }),
                 ($, a, b) => {
-                    $.return(pair(IntegerType, StringType, a, b));
+                    $.return(pair([IntegerType, StringType], a, b));
                 }
             );
 
@@ -162,8 +157,8 @@ describe("platform functions", () => {
             const map = East.genericPlatform(
                 "map",
                 ["T", "U"],
-                (T, U) => [T, FunctionType([T], U)],
-                (_T, U) => U
+                ["T", FunctionType(["T"], "U")],
+                "U"
             );
 
             const platform = [
@@ -174,11 +169,11 @@ describe("platform functions", () => {
 
             // Map Integer -> String
             const intToString = East.function([IntegerType], StringType, ($, x) => {
-                $.return(x.print());
+                $.return(East.str`${x}`);
             });
 
             const f = East.function([IntegerType], StringType, ($, input) => {
-                $.return(map(IntegerType, StringType, input, intToString));
+                $.return(map([IntegerType, StringType], input, intToString));
             });
 
             const f_compiled = East.compile(f, platform);
@@ -191,13 +186,13 @@ describe("platform functions", () => {
             const log = East.genericPlatform(
                 "log",
                 ["T"],
-                (T) => [T],
-                (_T) => NullType
+                ["T"],
+                NullType
             );
 
             assert.throws(() => {
                 // @ts-expect-error - intentionally passing invalid type
-                log("not a type", 42n);
+                log(["not a type"], 42n);
             }, /expects type parameter/);
         });
 
@@ -205,18 +200,18 @@ describe("platform functions", () => {
             const log = East.genericPlatform(
                 "log",
                 ["T"],
-                (T) => [T],
-                (_T) => NullType
+                ["T"],
+                NullType
             );
 
             assert.throws(() => {
                 // @ts-expect-error - missing value argument
-                log(IntegerType);
+                log([IntegerType]);
             }, /expects 1 value arguments/);
 
             assert.throws(() => {
                 // @ts-expect-error - too many value arguments
-                log(IntegerType, 1n, 2n);
+                log([IntegerType], 1n, 2n);
             }, /expects 1 value arguments/);
         });
     });
@@ -226,8 +221,8 @@ describe("platform functions", () => {
             const asyncFetch = East.asyncGenericPlatform(
                 "asyncFetch",
                 ["T"],
-                (_T) => [StringType],
-                (T) => T
+                [StringType],
+                "T"
             );
 
             const platform = [
@@ -241,11 +236,11 @@ describe("platform functions", () => {
                 }),
             ];
 
-            const f = East.asyncFunction([StringType], IntegerType, async ($, url) => {
-                $.return(asyncFetch(IntegerType, url));
+            const f = East.asyncFunction([StringType], IntegerType, ($, url) => {
+                $.return(asyncFetch([IntegerType], url));
             });
 
-            const f_compiled = East.compile(f, platform);
+            const f_compiled = East.compileAsync(f, platform);
             const result = await f_compiled("http://example.com");
 
             assert.strictEqual(result, 42n);
@@ -255,8 +250,8 @@ describe("platform functions", () => {
             const asyncWrap = East.asyncGenericPlatform(
                 "asyncWrap",
                 ["T"],
-                (T) => [T],
-                (T) => ArrayType(T)
+                ["T"],
+                ArrayType("T")
             );
 
             const platform = [
@@ -266,11 +261,11 @@ describe("platform functions", () => {
                 }),
             ];
 
-            const f = East.asyncFunction([StringType], ArrayType(StringType), async ($, input) => {
-                $.return(asyncWrap(StringType, input));
+            const f = East.asyncFunction([StringType], ArrayType(StringType), ($, input) => {
+                $.return(asyncWrap([StringType], input));
             });
 
-            const f_compiled = East.compile(f, platform);
+            const f_compiled = East.compileAsync(f, platform);
             const result = await f_compiled("hello");
 
             assert.deepStrictEqual(result, ["hello", "hello"]);
@@ -282,13 +277,13 @@ describe("platform functions", () => {
             const wrap = East.genericPlatform(
                 "wrap",
                 ["T"],
-                (T) => [T],
-                (T) => ArrayType(T)
+                ["T"],
+                ArrayType("T")
             );
 
             // This should compile - the return type is ArrayType(IntegerType)
             const f = East.function([IntegerType], ArrayType(IntegerType), ($, input) => {
-                $.return(wrap(IntegerType, input));
+                $.return(wrap([IntegerType], input));
             });
 
             // Verify the function was created successfully
@@ -299,8 +294,8 @@ describe("platform functions", () => {
             const identity = East.genericPlatform(
                 "identity",
                 ["T"],
-                (T) => [T],
-                (T) => T
+                ["T"],
+                "T"
             );
 
             const platform = [
@@ -309,21 +304,21 @@ describe("platform functions", () => {
 
             // Use with Integer
             const f1 = East.function([IntegerType], IntegerType, ($, input) => {
-                $.return(identity(IntegerType, input));
+                $.return(identity([IntegerType], input));
             });
             const f1_compiled = East.compile(f1, platform);
             assert.strictEqual(f1_compiled(42n), 42n);
 
             // Use with String
             const f2 = East.function([StringType], StringType, ($, input) => {
-                $.return(identity(StringType, input));
+                $.return(identity([StringType], input));
             });
             const f2_compiled = East.compile(f2, platform);
             assert.strictEqual(f2_compiled("hello"), "hello");
 
             // Use with Float
             const f3 = East.function([FloatType], FloatType, ($, input) => {
-                $.return(identity(FloatType, input));
+                $.return(identity([FloatType], input));
             });
             const f3_compiled = East.compile(f3, platform);
             assert.strictEqual(f3_compiled(3.14), 3.14);

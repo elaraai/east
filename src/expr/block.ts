@@ -5,7 +5,7 @@
 
 import { type AST, type IfElseAST, type Label, type TryCatchAST, type VariableAST } from "../ast.js";
 import { get_location, printLocation, type Location } from "../location.js";
-import { type EastType, FunctionType, isSubtype, NullType, printType, isTypeEqual, StringType, NeverType, VariantType, BooleanType, TypeUnion, IntegerType, StructType, ArrayType, type ValueTypeOf, AsyncFunctionType } from "../types.js";
+import { type EastType, FunctionType, isSubtype, NullType, printType, isTypeEqual, StringType, NeverType, VariantType, BooleanType, TypeUnion, IntegerType, StructType, ArrayType, type ValueTypeOf, AsyncFunctionType, type RefType, type SetType, type DictType, type RecursiveType, type RecursiveTypeMarker } from "../types.js";
 
 import type { ExprType, SubtypeExprOrValue, TypeOf } from "./types.js";
 import { AstSymbol, Expr, TypeSymbol } from "./expr.js";
@@ -27,6 +27,7 @@ import { type CallableFunctionExpr, createFunctionExpr, FunctionExpr } from "./f
 import { valueOrExprToAst, valueOrExprToAstTyped } from "./ast.js";
 import type { PlatformFunction } from "../platform.js";
 import { toEastTypeValue, type EastTypeValue } from "../type_of_type.js";
+import { isVariant } from "../containers/variant.js";
 import { RefExpr } from "./ref.js";
 import { AsyncFunctionExpr, createAsyncFunctionExpr, type CallableAsyncFunctionExpr } from "./asyncfunction.js";
 import { PatchType, type PatchTypeOf } from "../patch/index.js";
@@ -1249,53 +1250,96 @@ export function asyncPlatform<const Inputs extends EastType[], Output extends Ea
 // Generic Platform Functions
 // =============================================================================
 
-// Placeholder type branded by its index position for generic platform functions
-declare const PlaceholderBrand: unique symbol;
-type Placeholder<K extends PropertyKey> = EastType & {
-  readonly [PlaceholderBrand]: K
+// Helper to find index of a string in a tuple
+type IndexOf<T extends readonly string[], S extends string, Acc extends unknown[] = []> =
+  T extends readonly [infer First, ...infer Rest extends readonly string[]]
+    ? First extends S
+      ? Acc['length']
+      : IndexOf<Rest, S, [...Acc, unknown]>
+    : never;
+
+// Helper type to zip parameter names with type arguments into a record
+// E.g., ZipToRecord<["A", "B"], [IntegerType, StringType]> = { A: IntegerType, B: StringType }
+type ZipToRecord<Names extends readonly string[], Types extends readonly unknown[]> = {
+  [K in Names[number]]: Types[IndexOf<Names, K>]
 };
 
-// Map type params array to placeholder types
-type Placeholders<TParams extends readonly string[]> = {
-  [K in keyof TParams]: TParams[K] extends string ? Placeholder<K> : never
-};
+// Type-level substitution: replaces string keys with actual types from TypeArgs
+type ApplyTypeArgs<TypeArgs extends Record<string, EastType>, T> =
+  T extends keyof TypeArgs ? TypeArgs[T] :
+  T extends RefType<infer U> ? RefType<ApplyTypeArgs<TypeArgs, U>> :
+  T extends ArrayType<infer U> ? ArrayType<ApplyTypeArgs<TypeArgs, U>> :
+  T extends SetType<infer K> ? SetType<ApplyTypeArgs<TypeArgs, K>> :
+  T extends DictType<infer K, infer V> ? DictType<ApplyTypeArgs<TypeArgs, K>, ApplyTypeArgs<TypeArgs, V>> :
+  T extends StructType<infer Fields> ? StructType<{ [K in keyof Fields]: ApplyTypeArgs<TypeArgs, Fields[K]> }> :
+  // RecursiveType must be checked BEFORE VariantType to preserve the wrapper
+  T extends RecursiveType<infer U> ? RecursiveType<ApplyTypeArgs<TypeArgs, U>> :
+  T extends VariantType<infer Cases> ? VariantType<{ [K in keyof Cases]: ApplyTypeArgs<TypeArgs, Cases[K]> }> :
+  T extends RecursiveTypeMarker ? T : // Self-reference - leave alone
+  T extends FunctionType<infer Ins, infer Out> ? FunctionType<
+    { [K in keyof Ins]: ApplyTypeArgs<TypeArgs, Ins[K]> },
+    ApplyTypeArgs<TypeArgs, Out>
+  > :
+  T;
 
-// Create runtime placeholder values from type params (used for type inference only)
-function createPlaceholders<TParams extends readonly string[]>(
-  typeParams: TParams
-): Placeholders<TParams> {
-  return typeParams.map(() => ({ type: "Null" } as any)) as Placeholders<TParams>;
+// Runtime type substitution function
+function applyTypeArgs<T extends EastType | string>(
+  typeArgs: Record<string, EastType>,
+  t: T
+): EastType {
+  if (typeof t === 'string') {
+    const ret = typeArgs[t];
+    if (ret === undefined) {
+      throw new Error(`Unexpected type argument ${t}`);
+    }
+    return ret;
+  } else if (t.type === "Ref") {
+    return { type: "Ref", value: applyTypeArgs(typeArgs, (t as any).value) } as EastType;
+  } else if (t.type === "Array") {
+    return { type: "Array", value: applyTypeArgs(typeArgs, (t as any).value) } as EastType;
+  } else if (t.type === "Set") {
+    return { type: "Set", key: applyTypeArgs(typeArgs, (t as any).key) } as EastType;
+  } else if (t.type === "Dict") {
+    return { type: "Dict", key: applyTypeArgs(typeArgs, (t as any).key), value: applyTypeArgs(typeArgs, (t as any).value) } as EastType;
+  } else if (t.type === "Struct") {
+    const newFields: Record<string, EastType> = {};
+    for (const k in (t as any).fields) {
+      newFields[k] = applyTypeArgs(typeArgs, (t as any).fields[k]);
+    }
+    return { type: "Struct", fields: newFields } as EastType;
+  } else if (t.type === "Variant") {
+    const newCases: Record<string, EastType> = {};
+    for (const k in (t as any).cases) {
+      newCases[k] = applyTypeArgs(typeArgs, (t as any).cases[k]);
+    }
+    return { type: "Variant", cases: newCases } as EastType;
+  } else if (t.type === "Function") {
+    const newInputs = (t as any).inputs.map((inputType: any) => applyTypeArgs(typeArgs, inputType));
+    const newOutput = applyTypeArgs(typeArgs, (t as any).output);
+    return { type: "Function", inputs: newInputs, output: newOutput } as EastType;
+  } else if (t.type === "Recursive") {
+    if ((t as any).node === undefined) {
+      // RecursiveTypeMarker (self-reference) - leave alone
+      return t as EastType;
+    }
+    return { type: "Recursive", node: applyTypeArgs(typeArgs, (t as any).node) } as EastType;
+  } else {
+    return t as EastType;
+  }
 }
 
-// Substitute all placeholders with actual types from the tuple
-type SubstituteAll<Type, ActualTypes extends readonly EastType[]> =
-  [Type] extends [Placeholder<infer K>]
-    ? K extends keyof ActualTypes
-      ? ActualTypes[K]
-      : Type
-    : [Type] extends [{ type: "Function"; inputs: infer I extends EastType[]; output: infer O extends EastType }]
-      ? { type: "Function"; inputs: SubstituteAllArray<I, ActualTypes>; output: SubstituteAll<O, ActualTypes> }
-      : [Type] extends [{ type: "Array"; element: infer E extends EastType }]
-        ? { type: "Array"; element: SubstituteAll<E, ActualTypes> }
-        : Type;
-
-type SubstituteAllArray<Types extends readonly EastType[], ActualTypes extends readonly EastType[]> = {
-  [K in keyof Types]: Types[K] extends EastType ? SubstituteAll<Types[K], ActualTypes> : never
-};
-
-// Map to SubtypeExprOrValue for call arguments
-type ToExprArgs<Types extends readonly EastType[]> = {
-  [K in keyof Types]: Types[K] extends EastType ? SubtypeExprOrValue<Types[K]> : never
-};
-
-// Callable type with substitution at call time
+// Callable type: type args as array, then value args
 type GenericPlatformCallable<
   TParams extends readonly string[],
-  Inputs extends readonly EastType[],
-  Output extends EastType
-> = <ActualTypes extends { [K in keyof TParams]: EastType }>(
-  ...args: [...ActualTypes, ...ToExprArgs<SubstituteAllArray<Inputs, ActualTypes>>]
-) => ExprType<SubstituteAll<Output, ActualTypes>>;
+  Inputs extends readonly (EastType | string)[],
+  Output extends EastType | string
+> = <TypeArgs extends readonly EastType[] & { [K in keyof TParams]: EastType }>(
+  type_args: TypeArgs,
+  ...args: { [K in keyof Inputs]: SubtypeExprOrValue<ApplyTypeArgs<
+    ZipToRecord<TParams, TypeArgs>,
+    Inputs[K]
+  >> }
+) => ExprType<ApplyTypeArgs<ZipToRecord<TParams, TypeArgs>, Output>>;
 
 /** Definition for a generic platform function with `.implement` method.
  *
@@ -1307,8 +1351,8 @@ type GenericPlatformCallable<
  */
 export type GenericPlatformDefinition<
   TParams extends readonly string[],
-  Inputs extends readonly EastType[],
-  Output extends EastType
+  Inputs extends readonly (EastType | string)[],
+  Output extends EastType | string
 > = GenericPlatformCallable<TParams, Inputs, Output> & {
   implement: (factory: (...typeParams: { [K in keyof TParams]: EastTypeValue }) => (...args: unknown[]) => unknown) => PlatformFunction;
 };
@@ -1321,8 +1365,8 @@ export type GenericPlatformDefinition<
  *
  * @param name - The name of the platform function
  * @param typeParams - Array of type parameter names (e.g., `["T", "U"]`)
- * @param inputsFn - Callback that receives placeholder types and returns input types
- * @param outputFn - Callback that receives placeholder types and returns output type
+ * @param inputs - Array of input types, can contain string placeholders like `"T"`
+ * @param output - Output type, can be a string placeholder like `"T"`
  * @returns A callable function that creates Platform AST nodes when invoked
  *
  * @example
@@ -1331,13 +1375,13 @@ export type GenericPlatformDefinition<
  * const log = East.genericPlatform(
  *   "log",
  *   ["T"],
- *   (T) => [T],
- *   (_T) => NullType
+ *   ["T"],      // Input is type parameter T
+ *   NullType
  * );
  *
- * // Use it in East code - type is passed first, then value
+ * // Use it in East code - type args as array, then value args
  * const myFunction = East.function([StringType], NullType, ($, s) => {
- *   $(log(StringType, s));
+ *   $(log([StringType], s));
  * });
  *
  * // Implementation receives type params as a factory
@@ -1355,35 +1399,46 @@ export type GenericPlatformDefinition<
  * const map = East.genericPlatform(
  *   "map",
  *   ["T", "U"],
- *   (T, U) => [T, FunctionType([T], U)],
- *   (_T, U) => U
+ *   ["T", FunctionType(["T"], "U")],  // String placeholders in nested types
+ *   "U"
  * );
  *
- * // Call with both type parameters, then value arguments
- * map(StringType, IntegerType, myString, myMapperFn)
+ * // Call with type args array, then value arguments
+ * map([StringType, IntegerType], myString, myMapperFn)
  * ```
  */
 export function genericPlatform<
   const TParams extends readonly string[],
-  const Inputs extends readonly EastType[],
-  Output extends EastType
+  const Inputs extends readonly (EastType | string)[],
+  Output extends EastType | string
 >(
   name: string,
   typeParams: TParams,
-  inputsFn: (...placeholders: Placeholders<TParams>) => Inputs,
-  outputFn: (...placeholders: Placeholders<TParams>) => Output
+  inputs: Inputs,
+  output: Output
 ): GenericPlatformDefinition<TParams, Inputs, Output> {
   const numTypeParams = typeParams.length;
-  const placeholders = createPlaceholders(typeParams);
 
-  const fn = (...args: any[]): any => {
-    // First N args are type parameters
-    const typeArgs = args.slice(0, numTypeParams) as EastType[];
-    const valueArgs = args.slice(numTypeParams);
+  const fn = (type_args: EastType[], ...valueArgs: any[]): any => {
+    // Validate type args array
+    if (!Array.isArray(type_args)) {
+      throw new Error(
+        `Generic platform function '${name}' expects type arguments as an array, ` +
+        `got ${typeof type_args}`
+      );
+    }
+
+    // Validate type args count
+    if (type_args.length !== numTypeParams) {
+      throw new Error(
+        `Generic platform function '${name}' expects ${numTypeParams} type parameters, ` +
+        `got ${type_args.length}`
+      );
+    }
 
     // Validate type args are EastTypes
     for (let i = 0; i < numTypeParams; i++) {
-      const typeArg = typeArgs[i];
+      const typeArg = type_args[i];
       if (!typeArg || typeof typeArg !== 'object' || !('type' in typeArg)) {
         throw new Error(
           `Generic platform function '${name}' expects type parameter ${i + 1} ` +
@@ -1392,9 +1447,15 @@ export function genericPlatform<
       }
     }
 
-    // Compute concrete types using the callbacks
-    const inputTypes = inputsFn(...(typeArgs as any));
-    const outputType = outputFn(...(typeArgs as any));
+    // Build type argument map
+    const typeArgMap: Record<string, EastType> = {};
+    typeParams.forEach((param, idx) => {
+      typeArgMap[param] = type_args[idx]!;
+    });
+
+    // Apply type substitution to get concrete input/output types
+    const inputTypes = inputs.map(t => applyTypeArgs(typeArgMap, t));
+    const outputType = applyTypeArgs(typeArgMap, output);
 
     // Validate value args count
     if (valueArgs.length !== inputTypes.length) {
@@ -1434,7 +1495,7 @@ export function genericPlatform<
       type: outputType,
       location: get_location(2),
       name: name,
-      type_parameters: typeArgs,
+      type_parameters: type_args,
       arguments: argAsts,
       async: false,
     });
@@ -1443,20 +1504,33 @@ export function genericPlatform<
   fn.implement = (
     factory: (...typeParams: any[]) => (...args: any[]) => any
   ): PlatformFunction => {
-    // Use placeholders to compute template types for the signature
-    const templateInputs = inputsFn(...placeholders);
-    const templateOutput = outputFn(...placeholders);
-
     return {
       name,
       type_parameters: [...typeParams],
-      inputs: [],  // Not used for generic functions
-      output: toEastTypeValue(templateOutput),  // Placeholder output for type info
-      inputsFn: (...tps) => templateInputs.map((_, i) => {
-        const concreteInputs = inputsFn(...(tps as any));
-        return toEastTypeValue(concreteInputs[i]!);
-      }),
-      outputsFn: (...tps) => toEastTypeValue(outputFn(...(tps as any))),
+      inputs: [],  // Computed at call time via inputsFn
+      output: toEastTypeValue(NullType),  // Placeholder
+      inputsFn: (...tps: EastTypeValue[]) => {
+        const typeArgMap: Record<string, EastTypeValue> = {};
+        typeParams.forEach((param, idx) => {
+          typeArgMap[param] = tps[idx]!;
+        });
+        return inputs.map(t => {
+          if (typeof t === 'string') return typeArgMap[t]!;
+          let result: EastType | EastTypeValue = applyTypeArgs(typeArgMap as any, t);
+          if (!isVariant(result)) result = toEastTypeValue(result);
+          return result as EastTypeValue;
+        });
+      },
+      outputsFn: (...tps: EastTypeValue[]) => {
+        const typeArgMap: Record<string, EastTypeValue> = {};
+        typeParams.forEach((param, idx) => {
+          typeArgMap[param] = tps[idx]!;
+        });
+        if (typeof output === 'string') return typeArgMap[output]!;
+        let result: EastType | EastTypeValue = applyTypeArgs(typeArgMap as any, output);
+        if (!isVariant(result)) result = toEastTypeValue(result);
+        return result as EastTypeValue;
+      },
       type: 'sync' as const,
       fn: factory,
     };
@@ -1465,14 +1539,18 @@ export function genericPlatform<
   return fn as GenericPlatformDefinition<TParams, Inputs, Output>;
 }
 
-// Async callable type with substitution at call time
+// Async callable type: type args as array, then value args
 type AsyncGenericPlatformCallable<
   TParams extends readonly string[],
-  Inputs extends readonly EastType[],
-  Output extends EastType
-> = <ActualTypes extends { [K in keyof TParams]: EastType }>(
-  ...args: [...ActualTypes, ...ToExprArgs<SubstituteAllArray<Inputs, ActualTypes>>]
-) => ExprType<SubstituteAll<Output, ActualTypes>>;
+  Inputs extends readonly (EastType | string)[],
+  Output extends EastType | string
+> = <TypeArgs extends readonly EastType[] & { [K in keyof TParams]: EastType }>(
+  type_args: TypeArgs,
+  ...args: { [K in keyof Inputs]: SubtypeExprOrValue<ApplyTypeArgs<
+    ZipToRecord<TParams, TypeArgs>,
+    Inputs[K]
+  >> }
+) => ExprType<ApplyTypeArgs<ZipToRecord<TParams, TypeArgs>, Output>>;
 
 /** Definition for an async generic platform function with `.implement` method.
  *
@@ -1484,8 +1562,8 @@ type AsyncGenericPlatformCallable<
  */
 export type AsyncGenericPlatformDefinition<
   TParams extends readonly string[],
-  Inputs extends readonly EastType[],
-  Output extends EastType
+  Inputs extends readonly (EastType | string)[],
+  Output extends EastType | string
 > = AsyncGenericPlatformCallable<TParams, Inputs, Output> & {
   implement: (factory: (...typeParams: { [K in keyof TParams]: EastTypeValue }) => (...args: unknown[]) => Promise<unknown>) => PlatformFunction;
 };
@@ -1497,8 +1575,8 @@ export type AsyncGenericPlatformDefinition<
  *
  * @param name - The name of the platform function
  * @param typeParams - Array of type parameter names (e.g., `["T", "U"]`)
- * @param inputsFn - Callback that receives placeholder types and returns input types
- * @param outputFn - Callback that receives placeholder types and returns output type
+ * @param inputs - Array of input types, can contain string placeholders like `"T"`
+ * @param output - Output type, can be a string placeholder like `"T"`
  * @returns A callable function that creates Platform AST nodes when invoked
  *
  * @see {@link genericPlatform} for synchronous generic platform functions
@@ -1509,8 +1587,8 @@ export type AsyncGenericPlatformDefinition<
  * const fetchAs = East.asyncGenericPlatform(
  *   "fetchAs",
  *   ["T"],
- *   (_T) => [StringType],  // URL input
- *   (T) => T               // Returns parsed value of type T
+ *   [StringType],  // URL input
+ *   "T"            // Returns parsed value of type T
  * );
  *
  * // Implementation receives type params and returns async function
@@ -1524,25 +1602,36 @@ export type AsyncGenericPlatformDefinition<
  */
 export function asyncGenericPlatform<
   const TParams extends readonly string[],
-  const Inputs extends readonly EastType[],
-  Output extends EastType
+  const Inputs extends readonly (EastType | string)[],
+  Output extends EastType | string
 >(
   name: string,
   typeParams: TParams,
-  inputsFn: (...placeholders: Placeholders<TParams>) => Inputs,
-  outputFn: (...placeholders: Placeholders<TParams>) => Output
+  inputs: Inputs,
+  output: Output
 ): AsyncGenericPlatformDefinition<TParams, Inputs, Output> {
   const numTypeParams = typeParams.length;
-  const placeholders = createPlaceholders(typeParams);
 
-  const fn = (...args: any[]): any => {
-    // First N args are type parameters
-    const typeArgs = args.slice(0, numTypeParams) as EastType[];
-    const valueArgs = args.slice(numTypeParams);
+  const fn = (type_args: EastType[], ...valueArgs: any[]): any => {
+    // Validate type args array
+    if (!Array.isArray(type_args)) {
+      throw new Error(
+        `Generic platform function '${name}' expects type arguments as an array, ` +
+        `got ${typeof type_args}`
+      );
+    }
+
+    // Validate type args count
+    if (type_args.length !== numTypeParams) {
+      throw new Error(
+        `Generic platform function '${name}' expects ${numTypeParams} type parameters, ` +
+        `got ${type_args.length}`
+      );
+    }
 
     // Validate type args are EastTypes
     for (let i = 0; i < numTypeParams; i++) {
-      const typeArg = typeArgs[i];
+      const typeArg = type_args[i];
       if (!typeArg || typeof typeArg !== 'object' || !('type' in typeArg)) {
         throw new Error(
           `Generic platform function '${name}' expects type parameter ${i + 1} ` +
@@ -1551,9 +1640,15 @@ export function asyncGenericPlatform<
       }
     }
 
-    // Compute concrete types using the callbacks
-    const inputTypes = inputsFn(...(typeArgs as any));
-    const outputType = outputFn(...(typeArgs as any));
+    // Build type argument map
+    const typeArgMap: Record<string, EastType> = {};
+    typeParams.forEach((param, idx) => {
+      typeArgMap[param] = type_args[idx]!;
+    });
+
+    // Apply type substitution to get concrete input/output types
+    const inputTypes = inputs.map(t => applyTypeArgs(typeArgMap, t));
+    const outputType = applyTypeArgs(typeArgMap, output);
 
     // Validate value args count
     if (valueArgs.length !== inputTypes.length) {
@@ -1593,7 +1688,7 @@ export function asyncGenericPlatform<
       type: outputType,
       location: get_location(2),
       name: name,
-      type_parameters: typeArgs,
+      type_parameters: type_args,
       arguments: argAsts,
       async: true,
     });
@@ -1602,20 +1697,33 @@ export function asyncGenericPlatform<
   fn.implement = (
     factory: (...typeParams: any[]) => (...args: any[]) => Promise<any>
   ): PlatformFunction => {
-    // Use placeholders to compute template types for the signature
-    const templateInputs = inputsFn(...placeholders);
-    const templateOutput = outputFn(...placeholders);
-
     return {
       name,
       type_parameters: [...typeParams],
-      inputs: [],  // Not used for generic functions
-      output: toEastTypeValue(templateOutput),  // Placeholder output for type info
-      inputsFn: (...tps) => templateInputs.map((_, i) => {
-        const concreteInputs = inputsFn(...(tps as any));
-        return toEastTypeValue(concreteInputs[i]!);
-      }),
-      outputsFn: (...tps) => toEastTypeValue(outputFn(...(tps as any))),
+      inputs: [],  // Computed at call time via inputsFn
+      output: toEastTypeValue(NullType),  // Placeholder
+      inputsFn: (...tps: EastTypeValue[]) => {
+        const typeArgMap: Record<string, EastTypeValue> = {};
+        typeParams.forEach((param, idx) => {
+          typeArgMap[param] = tps[idx]!;
+        });
+        return inputs.map(t => {
+          if (typeof t === 'string') return typeArgMap[t]!;
+          let result: EastType | EastTypeValue = applyTypeArgs(typeArgMap as any, t);
+          if (!isVariant(result)) result = toEastTypeValue(result);
+          return result as EastTypeValue;
+        });
+      },
+      outputsFn: (...tps: EastTypeValue[]) => {
+        const typeArgMap: Record<string, EastTypeValue> = {};
+        typeParams.forEach((param, idx) => {
+          typeArgMap[param] = tps[idx]!;
+        });
+        if (typeof output === 'string') return typeArgMap[output]!;
+        let result: EastType | EastTypeValue = applyTypeArgs(typeArgMap as any, output);
+        if (!isVariant(result)) result = toEastTypeValue(result);
+        return result as EastTypeValue;
+      },
       type: 'async' as const,
       fn: factory,
     };

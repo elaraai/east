@@ -119,7 +119,7 @@ export function toEastTypeValue(type: EastType | string, stack: EastType[] = [],
   }
 
   if (isVariant(type)) {
-    throw new Error(`Type is already an EastTypeValue`);
+    return type as EastTypeValue;  // Already converted, return as-is
   }
 
   // Memoization for top-level calls (empty stack, not in recursive context)

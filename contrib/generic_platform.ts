@@ -5,6 +5,8 @@ import {
   type DictType,
   type VariantType,
   type ValueTypeOf,
+  type RecursiveType,
+  type RecursiveTypeMarker,
   ArrayType,
   FunctionType,
   StringType,
@@ -37,6 +39,20 @@ type PlatformFunction = {
 // GENERIC PLATFORM DEFINITION TYPE (returned by genericPlatform)
 // =============================================================================
 
+// Helper to find index of a string in a tuple
+type IndexOf<T extends readonly string[], S extends string, Acc extends unknown[] = []> =
+  T extends readonly [infer First, ...infer Rest extends readonly string[]]
+    ? First extends S
+      ? Acc['length']
+      : IndexOf<Rest, S, [...Acc, unknown]>
+    : never;
+
+// Helper type to zip parameter names with type arguments into a record
+// E.g., ZipToRecord<["A", "B"], [IntegerType, StringType]> = { A: IntegerType, B: StringType }
+type ZipToRecord<Names extends readonly string[], Types extends readonly unknown[]> = {
+  [K in Names[number]]: Types[IndexOf<Names, K>]
+};
+
 type ApplyTypeArgs<TypeArgs extends Record<string, EastType>, T> =
   T extends keyof TypeArgs ? TypeArgs[T] :
   T extends RefType<infer U> ? RefType<ApplyTypeArgs<TypeArgs, U>> :
@@ -44,12 +60,14 @@ type ApplyTypeArgs<TypeArgs extends Record<string, EastType>, T> =
   T extends SetType<infer U> ? SetType<ApplyTypeArgs<TypeArgs, U>> :
   T extends DictType<infer K, infer V> ? DictType<ApplyTypeArgs<TypeArgs, K>, ApplyTypeArgs<TypeArgs, V>> :
   T extends StructType<infer Fields> ? StructType<{ [K in keyof Fields]: ApplyTypeArgs<TypeArgs, Fields[K]> }> :
+  // RecursiveType must be checked BEFORE VariantType to preserve the wrapper
+  T extends RecursiveType<infer U> ? RecursiveType<ApplyTypeArgs<TypeArgs, U>> :
   T extends VariantType<infer Options> ? VariantType<{ [K in keyof Options]: ApplyTypeArgs<TypeArgs, Options[K]> }> :
+  T extends RecursiveTypeMarker ? T : // Self-reference - leave alone
   T extends FunctionType<infer Ins, infer Out> ? FunctionType<
     { [K in keyof Ins]: ApplyTypeArgs<TypeArgs, Ins[K]> },
     ApplyTypeArgs<TypeArgs, Out>
   > :
-  // TODO Recursive types?
   T;
 
 function applyTypeArgs<TypeArgs extends Record<string, EastType>, T extends EastType | string>(typeArgs: TypeArgs, t: T): ApplyTypeArgs<TypeArgs, T> {
@@ -84,7 +102,12 @@ function applyTypeArgs<TypeArgs extends Record<string, EastType>, T extends East
     const newOutput = applyTypeArgs(typeArgs, t.output);
     return { type: "Function", inputs: newInputs, output: newOutput } as ApplyTypeArgs<TypeArgs, T>;
   } else if (t.type === "Recursive") {
-    throw new Error("TODO");
+    // RecursiveType - recurse into the inner node, preserving the wrapper
+    if (t.node === undefined) {
+      // This is a RecursiveTypeMarker (self-reference) - leave it alone
+      return t as ApplyTypeArgs<TypeArgs, T>;
+    }
+    return { type: "Recursive", node: applyTypeArgs(typeArgs, t.node) } as ApplyTypeArgs<TypeArgs, T>;
   } else {
     return t as ApplyTypeArgs<TypeArgs, T>;
   }
@@ -94,13 +117,13 @@ type GenericPlatformCallable<
   TParams extends readonly string[],
   Inputs extends readonly (EastType | string)[],
   Output extends EastType | string
-> = <TypeArgs extends { [K in keyof TParams]: EastType }>(
+> = <TypeArgs extends readonly EastType[] & { [K in keyof TParams]: EastType }>(
   type_args: TypeArgs,
   ...args: { [K in keyof Inputs]: SubtypeExprOrValue<ApplyTypeArgs<
-    { [P in TParams[number]]: TypeArgs[P & keyof TypeArgs] },
+    ZipToRecord<TParams, TypeArgs>,
     Inputs[K]
   >> }
-) => ExprType<ApplyTypeArgs<{ [P in TParams[number]]: TypeArgs[P & keyof TypeArgs] }, Output>>;
+) => ExprType<ApplyTypeArgs<ZipToRecord<TParams, TypeArgs>, Output>>;
 
 
 /** Definition for a generic platform function with `.implement` method.
@@ -114,12 +137,9 @@ type GenericPlatformDefinition<
   Inputs extends readonly (EastType | string)[],
   Output extends EastType | string
 > = GenericPlatformCallable<TParams, Inputs, Output> & {
-  implement: <TypeArgs extends { [K in keyof TParams]: EastType }>(
-    factory: (...type_args: TypeArgs) =>
-      (...args: { [K in keyof Inputs]: ValueTypeOf<ApplyTypeArgs<
-        { [P in TParams[number]]: TypeArgs[P & keyof TypeArgs] },
-        Inputs[K]
-      >> }) => ValueTypeOf<ApplyTypeArgs<{ [P in TParams[number]]: TypeArgs[P & keyof TypeArgs] }, Output>>
+  implement: (
+    factory: (...type_args: { [K in keyof TParams]: EastTypeValue }) =>
+      (...args: unknown[]) => unknown
   ) => PlatformFunction;
 };
 
@@ -139,7 +159,7 @@ function genericPlatform<
 ): GenericPlatformDefinition<TParams, Inputs, Output> {
   // The callable (for use in East code)
   const fn = ((
-    ...type_args: EastType[],
+    type_args: EastType[],
     ...args: unknown[]
   ) => {
     // Map type parameters to provided types
@@ -231,7 +251,9 @@ const alns_optimize = genericPlatform(
     ArrayType(FunctionType(["S"], "S")), // repair_operators: Array<S -> S>
     ALNSConfigType,
   ],
-  ALNSResultType("S")
+  StructType({
+    solution: ["S"],
+  })
 );
 
 const s = ArrayType(IntegerType);
@@ -273,3 +295,26 @@ const alns_platform: PlatformFunction = alns_optimize.implement((S) => (
     solution: initial_solution,
   };
 });
+
+// =============================================================================
+// Example: pair (multi-type-parameter test)
+// =============================================================================
+
+const pair = genericPlatform(
+  "pair",
+  ["A", "B"],
+  ["A", "B"],
+  StructType({ first: "A", second: "B" })
+);
+
+// This should infer: StructType<{ first: IntegerType, second: StringType }>
+// NOT: StructType<{ first: IntegerType | StringType, second: IntegerType | StringType }>
+const pair_expr = pair(
+  [IntegerType, StringType],
+  42n,
+  "hello"
+);
+
+// Type check: access the fields - if inference is correct, these should have distinct types
+const _first = pair_expr.first;   // Should be IntegerExpr
+const _second = pair_expr.second; // Should be StringExpr
