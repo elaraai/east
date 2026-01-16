@@ -1173,7 +1173,7 @@ await describe("Function", (test) => {
         const b = $.let(20n);
         const c = $.let(12n);
 
-        const sumCaptures = $.let(East.function([], IntegerType, ($) => {
+        const sumCaptures = $.let(East.function([], IntegerType, (_$) => {
             return a.add(b).add(c);
         }));
 
@@ -1188,7 +1188,7 @@ await describe("Function", (test) => {
 
         const arr = $.let([1n, 2n, 3n], ArrayType(IntegerType));
 
-        const getLength = $.let(East.function([], IntegerType, ($) => {
+        const getLength = $.let(East.function([], IntegerType, (_$) => {
             return arr.length();
         }));
 
@@ -1244,7 +1244,7 @@ await describe("Function", (test) => {
 
         const point = $.const({ x: 10n, y: 32n }, PointType);
 
-        const getSum = $.let(East.function([], IntegerType, ($) => {
+        const getSum = $.let(East.function([], IntegerType, (_$) => {
             return point.x.add(point.y);
         }));
 
@@ -1300,7 +1300,7 @@ await describe("Function", (test) => {
         const counter = $.let(0n);
 
         // Closure that reads the mutable capture
-        const get = $.let(East.function([], IntegerType, ($) => {
+        const get = $.let(East.function([], IntegerType, (_$) => {
             return counter;
         }));
 
@@ -1332,7 +1332,7 @@ await describe("Function", (test) => {
             $.assign(counter, counter.add(1n));
         }));
 
-        const get = $.let(East.function([], IntegerType, ($) => {
+        const get = $.let(East.function([], IntegerType, (_$) => {
             return counter;
         }));
 
@@ -1363,7 +1363,7 @@ await describe("Function", (test) => {
                 $.assign(counter, counter.add(1n));
             }));
 
-            const get = $.let(East.function([], IntegerType, ($) => {
+            const get = $.let(East.function([], IntegerType, (_$) => {
                 return counter;
             }));
 
@@ -1402,7 +1402,7 @@ await describe("Function", (test) => {
                 $.assign(counter, counter.add(1n));
             }));
 
-            const get = $.let(East.function([], IntegerType, ($) => {
+            const get = $.let(East.function([], IntegerType, (_$) => {
                 return counter;
             }));
 
@@ -1429,7 +1429,7 @@ await describe("Function", (test) => {
 
         const x = $.let(42n);
 
-        const getAsync = $.let(East.asyncFunction([], IntegerType, ($) => {
+        const getAsync = $.let(East.asyncFunction([], IntegerType, (_$) => {
             return x;
         }));
 
@@ -1447,17 +1447,17 @@ await describe("Function", (test) => {
         const value = $.let(42n);
 
         // C captures value
-        const c = $.let(East.function([], IntegerType, ($) => {
+        const c = $.let(East.function([], IntegerType, (_$) => {
             return value;
         }));
 
         // B captures C
-        const b = $.let(East.function([], InnerType, ($) => {
+        const b = $.let(East.function([], InnerType, (_$) => {
             return c;
         }));
 
         // A captures B
-        const a = $.let(East.function([], MiddleType, ($) => {
+        const a = $.let(East.function([], MiddleType, (_$) => {
             return b;
         }));
 
@@ -1476,7 +1476,7 @@ await describe("Function", (test) => {
         const point = $.const({ x: 10n, y: 32n }, PointType);
 
         // Closure that returns the sum of x and y
-        const getSum = $.let(East.function([], IntegerType, ($) => {
+        const getSum = $.let(East.function([], IntegerType, (_$) => {
             return point.x.add(point.y);
         }));
 
@@ -1491,7 +1491,7 @@ await describe("Function", (test) => {
 
         const s = $.let(new Set([1n, 2n, 3n]), SetType(IntegerType));
 
-        const getSize = $.let(East.function([], IntegerType, ($) => {
+        const getSize = $.let(East.function([], IntegerType, (_$) => {
             return s.size();
         }));
 
@@ -1521,7 +1521,7 @@ await describe("Function", (test) => {
         const FnType = FunctionType([IntegerType, IntegerType], IntegerType);
 
         // Function with no captures - just uses parameters
-        const add = $.let(East.function([IntegerType, IntegerType], IntegerType, ($, a, b) => {
+        const add = $.let(East.function([IntegerType, IntegerType], IntegerType, (_$, a, b) => {
             return a.add(b);
         }));
 
@@ -1546,7 +1546,7 @@ await describe("Function", (test) => {
         const list1 = $.const(variant("cons", { head: 1n, tail: list2 }), ListType);
 
         // Closure that gets the head of the list
-        const getHead = $.let(East.function([], IntegerType, ($) => {
+        const getHead = $.let(East.function([], IntegerType, (_$) => {
             return list1.unwrap().match({
                 cons: (_$, data) => data.head,
                 nil: _$ => 0n
@@ -1565,7 +1565,7 @@ await describe("Function", (test) => {
 
         const maybeVal = $.const(variant("some", 42n), MaybeIntType);
 
-        const extract = $.let(East.function([], IntegerType, ($) => {
+        const extract = $.let(East.function([], IntegerType, (_$) => {
             return maybeVal.match({
                 some: (_$, n) => n,
                 none: _$ => 0n
@@ -1584,7 +1584,7 @@ await describe("Function", (test) => {
         // Capture a specific datetime
         const dt = $.const(new Date("2025-06-15T12:00:00Z"), DateTimeType);
 
-        const getYear = $.let(East.function([], IntegerType, ($) => {
+        const getYear = $.let(East.function([], IntegerType, (_$) => {
             return dt.getYear();
         }));
 
@@ -1600,7 +1600,7 @@ await describe("Function", (test) => {
         // Capture a blob
         const b = $.const(new Uint8Array([1, 2, 3, 4, 5]), BlobType);
 
-        const getLength = $.let(East.function([], IntegerType, ($) => {
+        const getLength = $.let(East.function([], IntegerType, (_$) => {
             return b.size();
         }));
 
