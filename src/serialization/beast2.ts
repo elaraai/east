@@ -16,7 +16,8 @@ import {
 } from "./binary-utils.js";
 import { printFor } from "./east.js";
 import { ref } from "../containers/ref.js";
-import { EAST_IR_SYMBOL, compile_internal } from "../compile.js";
+import { EAST_IR_SYMBOL, EAST_CAPTURES_SYMBOL, compile_internal, type RuntimeContext } from "../compile.js";
+import { InternalError } from "../error.js";
 import { IRType, type FunctionIR, type AsyncFunctionIR } from "../ir.js";
 import type { PlatformFunction } from "../platform.js";
 import { analyzeIR } from "../analyze.js";
@@ -216,16 +217,35 @@ export function encodeBeast2ValueToBufferFor(type: EastTypeValue, typeCtx: Beast
         );
       }
 
-      if (ir.value.captures.length > 0) {
-        throw new Error(
-          `Cannot serialize closure with ${ir.value.captures.length} captured variable(s): ` +
-          `${ir.value.captures.map((v: any) => v.value.name).join(", ")}. ` +
-          `Only free functions (no captures) can be serialized.`
-        );
-      }
-
       // Serialize the IR
       irEncoder(ir, writer, ctx);
+
+      // Serialize capture values
+      const captures = value[EAST_CAPTURES_SYMBOL] as RuntimeContext | undefined;
+      const captureCount = ir.value.captures.length;
+
+      // Write number of captures
+      writer.writeVarint(captureCount);
+
+      // Serialize each capture value using its type from the IR
+      for (const captureVar of ir.value.captures) {
+        const name = captureVar.value.name;
+        const captureType = captureVar.value.type;
+
+        // Captured variables are stored as variants - extract the value
+        if (!captures) {
+          throw new InternalError(`Function has captures in IR but no EAST_CAPTURES_SYMBOL`);
+        }
+        const captureEntry = captures[name];
+        if (!captureEntry) {
+          throw new InternalError(`Capture '${name}' not found in function's capture context`);
+        }
+        const captureValue = captureEntry.value;
+
+        // Get encoder for this capture's type and encode the value
+        const captureEncoder = encodeBeast2ValueToBufferFor(captureType, typeCtx);
+        captureEncoder(captureValue, writer, ctx);
+      }
     };
   } else if (type.type === "AsyncFunction") {
     return (value: any, writer: BufferWriter, ctx: Beast2EncodeContext = { refs: new Map() }) => {
@@ -239,16 +259,35 @@ export function encodeBeast2ValueToBufferFor(type: EastTypeValue, typeCtx: Beast
         );
       }
 
-      if (ir.value.captures.length > 0) {
-        throw new Error(
-          `Cannot serialize async closure with ${ir.value.captures.length} captured variable(s): ` +
-          `${ir.value.captures.map((v: any) => v.value.name).join(", ")}. ` +
-          `Only free async functions (no captures) can be serialized.`
-        );
-      }
-
       // Serialize the IR
       irEncoder(ir, writer, ctx);
+
+      // Serialize capture values
+      const captures = value[EAST_CAPTURES_SYMBOL] as RuntimeContext | undefined;
+      const captureCount = ir.value.captures.length;
+
+      // Write number of captures
+      writer.writeVarint(captureCount);
+
+      // Serialize each capture value using its type from the IR
+      for (const captureVar of ir.value.captures) {
+        const name = captureVar.value.name;
+        const captureType = captureVar.value.type;
+
+        // Captured variables are stored as variants - extract the value
+        if (!captures) {
+          throw new InternalError(`AsyncFunction has captures in IR but no EAST_CAPTURES_SYMBOL`);
+        }
+        const captureEntry = captures[name];
+        if (!captureEntry) {
+          throw new InternalError(`Capture '${name}' not found in async function's capture context`);
+        }
+        const captureValue = captureEntry.value;
+
+        // Get encoder for this capture's type and encode the value
+        const captureEncoder = encodeBeast2ValueToBufferFor(captureType, typeCtx);
+        captureEncoder(captureValue, writer, ctx);
+      }
     };
   } else {
     throw new Error(`Unhandled type ${(type satisfies never as EastTypeValue).type}`);
@@ -455,6 +494,7 @@ export function decodeBeast2ValueFor(type: EastTypeValue | EastType, typeCtx: Be
     return (buffer: Uint8Array, offset: number, ctx: Beast2DecodeContext = { refs: new Map() }): [any, number] => {
       // Decode the IR
       const [ir, newOffset] = irDecoder(buffer, offset, ctx);
+      let currentOffset = newOffset;
 
       // Validate it's a FunctionIR
       if (ir.type !== "Function") {
@@ -463,17 +503,62 @@ export function decodeBeast2ValueFor(type: EastTypeValue | EastType, typeCtx: Be
         );
       }
 
-      // Analyze and compile the function (compile_internal attaches IR automatically)
+      // Decode capture count
+      const [captureCount, offsetAfterCount] = readVarint(buffer, currentOffset);
+      currentOffset = offsetAfterCount;
+
+      if (captureCount !== ir.value.captures.length) {
+        throw new Error(
+          `Capture count mismatch: IR has ${ir.value.captures.length} captures, ` +
+          `but serialized data has ${captureCount}`
+        );
+      }
+
+      // Decode capture values
+      const captureContext: RuntimeContext = {};
+      for (const captureVar of ir.value.captures) {
+        const name = captureVar.value.name;
+        const captureType = captureVar.value.type;
+
+        // Get decoder for this capture's type and decode the value
+        const captureDecoder = decodeBeast2ValueFor(captureType, typeCtx, options);
+        const [captureValue, nextOffset] = captureDecoder(buffer, currentOffset, ctx);
+        currentOffset = nextOffset;
+
+        // Wrap captures in appropriate variants
+        captureContext[name] = captureVar.value.mutable
+          ? variant("boxed", captureValue)
+          : variant("value", captureValue);
+      }
+
+      // Build variable context from captures for analyzeIR
+      const variableContext: Record<string, { type: EastTypeValue; mutable: boolean; definedBy: any; captured: boolean }> = {};
+      for (const captureVar of ir.value.captures) {
+        variableContext[captureVar.value.name] = {
+          type: captureVar.value.type,
+          mutable: captureVar.value.mutable,
+          definedBy: captureVar,
+          captured: true  // Already captured from outer scope
+        };
+      }
+
+      // Build type context for compile_internal
+      const typeContext: Record<string, EastTypeValue> = {};
+      for (const captureVar of ir.value.captures) {
+        typeContext[captureVar.value.name] = captureVar.value.type;
+      }
+
+      // Analyze and compile the function with capture context
       let fn: any;
       try {
-        const analyzedIR = analyzeIR(ir, platform, {});
-        const compiled = compile_internal(analyzedIR, {}, platformFns, asyncPlatformFns, platform, true, new Set());
-        fn = compiled({});
+        const analyzedIR = analyzeIR(ir, platform, variableContext);
+        const compiled = compile_internal(analyzedIR, typeContext, platformFns, asyncPlatformFns, platform, true, new Set());
+        fn = compiled(captureContext);
       } catch (e: unknown) {
         throw new Error(`Failed to compile decoded function: ${(e as Error).message}`);
       }
 
-      return [fn, newOffset];
+      return [fn, currentOffset];
     };
   } else if (type.type === "AsyncFunction") {
     // Convert platform to internal format
@@ -484,6 +569,7 @@ export function decodeBeast2ValueFor(type: EastTypeValue | EastType, typeCtx: Be
     return (buffer: Uint8Array, offset: number, ctx: Beast2DecodeContext = { refs: new Map() }): [any, number] => {
       // Decode the IR
       const [ir, newOffset] = irDecoder(buffer, offset, ctx);
+      let currentOffset = newOffset;
 
       // Validate it's an AsyncFunctionIR
       if (ir.type !== "AsyncFunction") {
@@ -492,17 +578,62 @@ export function decodeBeast2ValueFor(type: EastTypeValue | EastType, typeCtx: Be
         );
       }
 
-      // Analyze and compile the function (compile_internal attaches IR automatically)
+      // Decode capture count
+      const [captureCount, offsetAfterCount] = readVarint(buffer, currentOffset);
+      currentOffset = offsetAfterCount;
+
+      if (captureCount !== ir.value.captures.length) {
+        throw new Error(
+          `Capture count mismatch: IR has ${ir.value.captures.length} captures, ` +
+          `but serialized data has ${captureCount}`
+        );
+      }
+
+      // Decode capture values
+      const captureContext: RuntimeContext = {};
+      for (const captureVar of ir.value.captures) {
+        const name = captureVar.value.name;
+        const captureType = captureVar.value.type;
+
+        // Get decoder for this capture's type and decode the value
+        const captureDecoder = decodeBeast2ValueFor(captureType, typeCtx, options);
+        const [captureValue, nextOffset] = captureDecoder(buffer, currentOffset, ctx);
+        currentOffset = nextOffset;
+
+        // Wrap captures in appropriate variants
+        captureContext[name] = captureVar.value.mutable
+          ? variant("boxed", captureValue)
+          : variant("value", captureValue);
+      }
+
+      // Build variable context from captures for analyzeIR
+      const variableContext: Record<string, { type: EastTypeValue; mutable: boolean; definedBy: any; captured: boolean }> = {};
+      for (const captureVar of ir.value.captures) {
+        variableContext[captureVar.value.name] = {
+          type: captureVar.value.type,
+          mutable: captureVar.value.mutable,
+          definedBy: captureVar,
+          captured: true  // Already captured from outer scope
+        };
+      }
+
+      // Build type context for compile_internal
+      const typeContext: Record<string, EastTypeValue> = {};
+      for (const captureVar of ir.value.captures) {
+        typeContext[captureVar.value.name] = captureVar.value.type;
+      }
+
+      // Analyze and compile the function with capture context
       let fn: any;
       try {
-        const analyzedIR = analyzeIR(ir, platform, {});
-        const compiled = compile_internal(analyzedIR, {}, platformFns, asyncPlatformFns, platform, true, new Set());
-        fn = compiled({});
+        const analyzedIR = analyzeIR(ir, platform, variableContext);
+        const compiled = compile_internal(analyzedIR, typeContext, platformFns, asyncPlatformFns, platform, true, new Set());
+        fn = compiled(captureContext);
       } catch (e: unknown) {
         throw new Error(`Failed to compile decoded async function: ${(e as Error).message}`);
       }
 
-      return [fn, newOffset];
+      return [fn, currentOffset];
     };
   } else {
     throw new Error(`Unhandled type ${(type satisfies never as EastTypeValue).type}`);
@@ -654,7 +785,7 @@ export function decodeBeast2For(type: EastTypeValue | EastType, options?: Beast2
 // =============================================================================
 
 // Re-export for convenience
-export { EAST_IR_SYMBOL } from "../compile.js";
+export { EAST_IR_SYMBOL, EAST_CAPTURES_SYMBOL } from "../compile.js";
 
 import { EastIR, AsyncEastIR } from "../eastir.js";
 

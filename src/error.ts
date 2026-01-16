@@ -4,6 +4,17 @@
  */
 import type { LocationValue } from "./ir.js";
 
+/**
+ * Internal error for invariant violations in the East compiler/runtime.
+ * These indicate bugs in East itself, not user errors.
+ */
+export class InternalError extends Error {
+  constructor(message: string) {
+    super(`Internal East error: ${message}`);
+    this.name = "InternalError";
+  }
+}
+
 export class EastError extends Error {
   public location: LocationValue[];
   public eastMessage: string;
