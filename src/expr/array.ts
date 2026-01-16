@@ -75,7 +75,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: IntegerType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "ArraySize",
       type_parameters: [this.value_type as EastType],
       arguments: [this[AstSymbol]],
@@ -102,7 +102,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: IntegerType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "ArraySize",
       type_parameters: [this.value_type as EastType],
       arguments: [this[AstSymbol]],
@@ -132,7 +132,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: BooleanType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "ArrayHas",
       type_parameters: [this.value_type as EastType],
       arguments: [this[AstSymbol], keyAst],
@@ -173,7 +173,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
       return this[FactorySymbol]({
         ast_type: "Builtin",
         type: this.value_type as EastType,
-        location: get_location(2),
+        location: get_location(),
         builtin: "ArrayGetOrDefault",
         type_parameters: [this.value_type as EastType],
         arguments: [this[AstSymbol], keyAst, defaultFnAst],
@@ -182,7 +182,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
       return this[FactorySymbol]({
         ast_type: "Builtin",
         type: this.value_type as EastType,
-        location: get_location(2),
+        location: get_location(),
         builtin: "ArrayGet",
         type_parameters: [this.value_type as EastType],
         arguments: [this[AstSymbol], keyAst],
@@ -225,7 +225,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
       return this[FactorySymbol]({
         ast_type: "Builtin",
         type: this.value_type as EastType,
-        location: get_location(2),
+        location: get_location(),
         builtin: "ArrayGetOrDefault",
         type_parameters: [this.value_type as EastType],
         arguments: [this[AstSymbol], keyAst, defaultFnAst],
@@ -234,7 +234,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
       return this[FactorySymbol]({
         ast_type: "Builtin",
         type: this.value_type as EastType,
-        location: get_location(2),
+        location: get_location(),
         builtin: "ArrayGet",
         type_parameters: [this.value_type as EastType],
         arguments: [this[AstSymbol], keyAst],
@@ -265,7 +265,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: OptionType(this.value_type),
-      location: get_location(2),
+      location: get_location(),
       builtin: "ArrayTryGet",
       type_parameters: [this.value_type as EastType],
       arguments: [this[AstSymbol], keyAst],
@@ -298,7 +298,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: NullType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "ArrayUpdate",
       type_parameters: [this.value_type as EastType],
       arguments: [this[AstSymbol], keyAst, valueAst],
@@ -312,7 +312,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
    * @see {@link update} for simply replacing the value.
    */
   merge<T2>(key: Expr<IntegerType> | bigint, value: Expr<T2>, updateFn: SubtypeExprOrValue<FunctionType<[T, NoInfer<T2>, IntegerType], T>>): ExprType<NullType> {
-    const location = get_location(2);
+    const location = get_location();
     const keyAst = valueOrExprToAstTyped(key, IntegerType);
     const value2Type = value[TypeSymbol];
 
@@ -350,7 +350,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: NullType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "ArrayPushLast",
       type_parameters: [this.value_type as EastType],
       arguments: [this[AstSymbol], valueAst],
@@ -377,7 +377,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: this.value_type as EastType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "ArrayPopLast",
       type_parameters: [this.value_type as EastType],
       arguments: [this[AstSymbol]],
@@ -406,7 +406,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: NullType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "ArrayPushFirst",
       type_parameters: [this.value_type as EastType],
       arguments: [this[AstSymbol], valueAst],
@@ -433,7 +433,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: this.value_type as EastType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "ArrayPopFirst",
       type_parameters: [this.value_type as EastType],
       arguments: [this[AstSymbol]],
@@ -462,7 +462,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: NullType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "ArrayAppend",
       type_parameters: [this.value_type as EastType],
       arguments: [this[AstSymbol], arrayExpr[AstSymbol]],
@@ -492,7 +492,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: NullType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "ArrayPrepend",
       type_parameters: [this.value_type as EastType],
       arguments: [this[AstSymbol], arrayExpr[AstSymbol]],
@@ -542,7 +542,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: NullType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "ArrayMergeAll",
       type_parameters: [this.value_type as EastType, value2Type as EastType],
       arguments: [this[AstSymbol], array[AstSymbol], mergeFnExpr[AstSymbol]],
@@ -568,7 +568,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: NullType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "ArrayClear",
       type_parameters: [this.value_type as EastType],
       arguments: [this[AstSymbol]],
@@ -625,7 +625,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: NullType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "ArraySortInPlace",
       type_parameters: [this.value_type as EastType, projectedType],
       arguments: [this[AstSymbol], byExpr[AstSymbol]],
@@ -681,7 +681,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: this[TypeSymbol],
-      location: get_location(2),
+      location: get_location(),
       builtin: "ArraySort",
       type_parameters: [this.value_type as EastType, projectedType],
       arguments: [this[AstSymbol], byExpr[AstSymbol]],
@@ -709,7 +709,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: NullType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "ArrayReverseInPlace",
       type_parameters: [this.value_type as EastType],
       arguments: [this[AstSymbol]],
@@ -739,7 +739,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: this[TypeSymbol],
-      location: get_location(2),
+      location: get_location(),
       builtin: "ArrayReverse",
       type_parameters: [this.value_type as EastType],
       arguments: [this[AstSymbol]],
@@ -789,7 +789,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: BooleanType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "ArrayIsSorted",
       type_parameters: [this.value_type as EastType, projectedType],
       arguments: [this[AstSymbol], byExpr[AstSymbol]],
@@ -848,7 +848,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: IntegerType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "ArrayFindSortedFirst",
       type_parameters: [this.value_type as EastType, projectedType],
       arguments: [this[AstSymbol], valueAst, byExpr[AstSymbol]],
@@ -895,7 +895,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: IntegerType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "ArrayFindSortedLast",
       type_parameters: [this.value_type as EastType, projectedType],
       arguments: [this[AstSymbol], valueAst, byExpr[AstSymbol]],
@@ -941,7 +941,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: StructType({ start: IntegerType, end: IntegerType }),
-      location: get_location(2),
+      location: get_location(),
       builtin: "ArrayFindSortedRange",
       type_parameters: [this.value_type as EastType, projectedType],
       arguments: [this[AstSymbol], valueAst, byExpr[AstSymbol]],
@@ -975,7 +975,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: this[TypeSymbol],
-      location: get_location(2),
+      location: get_location(),
       builtin: "ArraySlice",
       type_parameters: [this.value_type as EastType],
       arguments: [this[AstSymbol], startExpr[AstSymbol], endExpr[AstSymbol]],
@@ -1006,7 +1006,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: this[TypeSymbol],
-      location: get_location(2),
+      location: get_location(),
       builtin: "ArrayConcat",
       type_parameters: [this.value_type as EastType],
       arguments: [this[AstSymbol], otherExpr[AstSymbol]],
@@ -1046,7 +1046,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
 
     let default_function_ast;
     if (onMissing === undefined) {
-      const location = get_location(2);
+      const location = get_location();
       const default_function = Expr.function([IntegerType], this.value_type as EastType, ($, key) => $.error(Expr.str`Cannot get key ${key} from array`, location));
       default_function_ast = Expr.ast(default_function);
     } else {
@@ -1058,7 +1058,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: this[TypeSymbol],
-      location: get_location(2),
+      location: get_location(),
       builtin: "ArrayGetKeys",
       type_parameters: [this.value_type as EastType],
       arguments: [this[AstSymbol], keysExpr[AstSymbol], default_function_ast],
@@ -1095,7 +1095,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: NullType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "ArrayForEach",
       type_parameters: [this.value_type as EastType, returnType],
       arguments: [this[AstSymbol], fn[AstSymbol]],
@@ -1126,7 +1126,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: this[TypeSymbol],
-      location: get_location(2),
+      location: get_location(),
       builtin: "ArrayCopy",
       type_parameters: [this.value_type as EastType],
       arguments: [this[AstSymbol]],
@@ -1192,7 +1192,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
         return this[FactorySymbol]({
           ast_type: "Builtin",
           type: ArrayType(output_type),
-          location: get_location(2),
+          location: get_location(),
           builtin: "ArrayMap",
           type_parameters: [this.value_type as EastType, output_type],
           arguments: [this[AstSymbol], fn[AstSymbol]],
@@ -1267,7 +1267,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
 
       return this[FactorySymbol]({
         ast_type: "Builtin",
-        location: get_location(2),
+        location: get_location(),
         type: this[TypeSymbol],
         builtin: "ArrayFilter",
         type_parameters: [this.value_type as EastType],
@@ -1336,7 +1336,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: ArrayType(someType as EastType),
-      location: get_location(2),
+      location: get_location(),
       builtin: "ArrayFilterMap",
       type_parameters: [this.value_type as EastType, someType as EastType],
       arguments: [this[AstSymbol], fnAst],
@@ -1374,7 +1374,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: returnType as EastType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "ArrayFirstMap",
       type_parameters: [this.value_type as EastType, someType as EastType],
       arguments: [this[AstSymbol], fnAst],
@@ -1544,7 +1544,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: returnType as EastType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "ArrayFold",
       type_parameters: [this.value_type as EastType, returnType as EastType],
       arguments: [this[AstSymbol], initAst, combineAst],
@@ -1569,7 +1569,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: mapType as EastType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "ArrayMapReduce",
       type_parameters: [this.value_type as EastType, mapType],
       arguments: [this[AstSymbol], mapAst, combineAst],
@@ -2115,7 +2115,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: StringType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "ArrayStringJoin",
       type_parameters: [],
       arguments: [this[AstSymbol], stringAst],
@@ -2163,7 +2163,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: SetType(keyType as EastType),
-      location: get_location(2),
+      location: get_location(),
       builtin: "ArrayToSet",
       type_parameters: [this.value_type as EastType, keyType as EastType],
       arguments: [this[AstSymbol], keyFnAst],
@@ -2226,7 +2226,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
 
     let onConflictAst;
     if (onConflictFn === undefined) {
-      const location = get_location(2);
+      const location = get_location();
       const onConflictFunction = Expr.function([valueType, valueType, keyType], valueType, ($, existing, value, key) => $.error(Expr.str`Cannot insert duplicate key ${key} into dict`, location));
       onConflictAst = Expr.ast(onConflictFunction);
     } else {
@@ -2236,7 +2236,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: DictType(keyType, valueType),
-      location: get_location(2),
+      location: get_location(),
       builtin: "ArrayToDict",
       type_parameters: [this.value_type as EastType, keyType, valueType],
       arguments: [this[AstSymbol], keyFnAst, valueFnAst, onConflictAst],
@@ -2293,7 +2293,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: ArrayType(elementType as EastType),
-      location: get_location(2),
+      location: get_location(),
       builtin: "ArrayFlattenToArray",
       type_parameters: [this.value_type as EastType, elementType as EastType],
       arguments: [this[AstSymbol], fnAst],
@@ -2336,7 +2336,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: SetType(elementType as EastType),
-      location: get_location(2),
+      location: get_location(),
       builtin: "ArrayFlattenToSet",
       type_parameters: [this.value_type as EastType, elementType as EastType],
       arguments: [this[AstSymbol], fnAst],
@@ -2382,7 +2382,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
 
     let onConflictAst;
     if (onConflictFn === undefined) {
-      const location = get_location(2);
+      const location = get_location();
       const onConflictFunction = Expr.function([valueType, valueType, keyType], valueType, ($, existing, value, key) => $.error(Expr.str`Cannot insert duplicate key ${key} into dict`, location));
       onConflictAst = Expr.ast(onConflictFunction);
     } else {
@@ -2392,7 +2392,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: DictType(keyType as EastType, valueType as EastType),
-      location: get_location(2),
+      location: get_location(),
       builtin: "ArrayFlattenToDict",
       type_parameters: [this.value_type as EastType, keyType as EastType, valueType as EastType],
       arguments: [this[AstSymbol], fnAst, onConflictAst],
@@ -2460,7 +2460,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: DictType(keyType as EastType, initType as EastType),
-      location: get_location(2),
+      location: get_location(),
       builtin: "ArrayGroupFold",
       type_parameters: [this.value_type as EastType, keyType as EastType, initType as EastType],
       arguments: [this[AstSymbol], keyFnAst, initFnAst, reduceFnAst],
@@ -3076,7 +3076,7 @@ export class ArrayExpr<T extends any> extends Expr<ArrayType<T>> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: BlobType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "ArrayEncodeCsv",
       type_parameters: [this.value_type as EastType, CsvSerializeConfigType],
       arguments: [this[AstSymbol], configAst],

@@ -48,7 +48,7 @@ export default {
       return Expr.fromAst({
         ast_type: "Builtin",
         type: BlobType,
-        location: get_location(2),
+        location: get_location(),
         builtin: "BlobEncodeBeast",
         type_parameters: [Expr.type(value)],
         arguments: [Expr.ast(value)],
@@ -57,7 +57,7 @@ export default {
       return Expr.fromAst({
         ast_type: "Builtin",
         type: BlobType,
-        location: get_location(2),
+        location: get_location(),
         builtin: "BlobEncodeBeast2",
         type_parameters: [Expr.type(value)],
         arguments: [Expr.ast(value)],

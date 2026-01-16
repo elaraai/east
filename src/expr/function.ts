@@ -39,7 +39,7 @@ export class FunctionExpr<I extends any[], O extends any> extends Expr<FunctionT
     return this[FactorySymbol]({
       ast_type: "Call",
       type: this.output_type as EastType,
-      location: get_location(2),
+      location: get_location(),
       function: this[AstSymbol],
       arguments: inputs,
     }) as FunctionReturnType<O>;

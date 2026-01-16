@@ -183,7 +183,7 @@ function genericPlatform<
     return {
       ast_type: "Platform",
       type: output_type,
-      location: get_location(2),
+      location: get_location(),
       name,
       arguments: arg_asts,
       async: false,

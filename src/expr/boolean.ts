@@ -61,7 +61,7 @@ export class BooleanExpr extends Expr<BooleanType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: BooleanType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "BooleanNot",
       type_parameters: [],
       arguments: [this[AstSymbol]],
@@ -150,7 +150,7 @@ export class BooleanExpr extends Expr<BooleanType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: BooleanType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "BooleanOr",
       type_parameters: [],
       arguments: [this[AstSymbol], yAst],
@@ -185,7 +185,7 @@ export class BooleanExpr extends Expr<BooleanType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: BooleanType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "BooleanAnd",
       type_parameters: [],
       arguments: [this[AstSymbol], yAst],
@@ -219,7 +219,7 @@ export class BooleanExpr extends Expr<BooleanType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: BooleanType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "BooleanXor",
       type_parameters: [],
       arguments: [this[AstSymbol], yAst],
@@ -266,7 +266,7 @@ export class BooleanExpr extends Expr<BooleanType> {
     return this[FactorySymbol]({
       ast_type: "IfElse",
       type,
-      location: get_location(2),
+      location: get_location(),
       ifs: [{
         predicate: this[AstSymbol],
         body: true_expr[AstSymbol],

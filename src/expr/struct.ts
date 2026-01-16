@@ -65,7 +65,7 @@ const _StructExpr = class StructExpr<Fields extends Record<string, any>> extends
         get: () => this[FactorySymbol]({
           ast_type: "GetField",
           type,
-          location: get_location(2),
+          location: get_location(),
           field: key,
           struct: ast,
         }),

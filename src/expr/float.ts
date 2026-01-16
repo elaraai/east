@@ -63,7 +63,7 @@ export class FloatExpr extends Expr<FloatType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: FloatType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "FloatNegate",
       type_parameters: [],
       arguments: [this[AstSymbol]],
@@ -118,7 +118,7 @@ export class FloatExpr extends Expr<FloatType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: FloatType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "FloatAdd",
       type_parameters: [],
       arguments: [this[AstSymbol], rightAst],
@@ -167,7 +167,7 @@ export class FloatExpr extends Expr<FloatType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: FloatType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "FloatSubtract",
       type_parameters: [],
       arguments: [this[AstSymbol], rightAst],
@@ -216,7 +216,7 @@ export class FloatExpr extends Expr<FloatType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: FloatType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "FloatMultiply",
       type_parameters: [],
       arguments: [this[AstSymbol], rightAst],
@@ -268,7 +268,7 @@ export class FloatExpr extends Expr<FloatType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: FloatType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "FloatDivide",
       type_parameters: [],
       arguments: [this[AstSymbol], rightAst],
@@ -317,7 +317,7 @@ export class FloatExpr extends Expr<FloatType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: FloatType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "FloatRemainder",
       type_parameters: [],
       arguments: [this[AstSymbol], rightAst],
@@ -367,7 +367,7 @@ export class FloatExpr extends Expr<FloatType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: FloatType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "FloatPow",
       type_parameters: [],
       arguments: [this[AstSymbol], rightAst],
@@ -395,7 +395,7 @@ export class FloatExpr extends Expr<FloatType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: FloatType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "FloatAbs",
       type_parameters: [],
       arguments: [this[AstSymbol]],
@@ -423,7 +423,7 @@ export class FloatExpr extends Expr<FloatType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: FloatType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "FloatSign",
       type_parameters: [],
       arguments: [this[AstSymbol]],
@@ -453,7 +453,7 @@ export class FloatExpr extends Expr<FloatType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: FloatType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "FloatSqrt",
       type_parameters: [],
       arguments: [this[AstSymbol]],
@@ -481,7 +481,7 @@ export class FloatExpr extends Expr<FloatType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: FloatType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "FloatExp",
       type_parameters: [],
       arguments: [this[AstSymbol]],
@@ -512,7 +512,7 @@ export class FloatExpr extends Expr<FloatType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: FloatType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "FloatLog",
       type_parameters: [],
       arguments: [this[AstSymbol]],
@@ -540,7 +540,7 @@ export class FloatExpr extends Expr<FloatType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: FloatType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "FloatSin",
       type_parameters: [],
       arguments: [this[AstSymbol]],
@@ -568,7 +568,7 @@ export class FloatExpr extends Expr<FloatType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: FloatType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "FloatCos",
       type_parameters: [],
       arguments: [this[AstSymbol]],
@@ -596,7 +596,7 @@ export class FloatExpr extends Expr<FloatType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: FloatType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "FloatTan",
       type_parameters: [],
       arguments: [this[AstSymbol]],
@@ -628,7 +628,7 @@ export class FloatExpr extends Expr<FloatType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: IntegerType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "FloatToInteger",
       type_parameters: [],
       arguments: [this[AstSymbol]],

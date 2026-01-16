@@ -74,7 +74,7 @@ export class SetExpr<K extends any> extends Expr<SetType<K>> {
     return Expr.fromAst({
       ast_type: "Builtin",
       type: IntegerType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "SetSize",
       type_parameters: [this.key_type as EastType],
       arguments: [this[AstSymbol]],
@@ -103,7 +103,7 @@ export class SetExpr<K extends any> extends Expr<SetType<K>> {
     return Expr.fromAst({
       ast_type: "Builtin",
       type: BooleanType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "SetHas",
       type_parameters: [this.key_type as EastType],
       arguments: [this[AstSymbol], valueAst],
@@ -133,7 +133,7 @@ export class SetExpr<K extends any> extends Expr<SetType<K>> {
    * ```
    */
   insert(key: SubtypeExprOrValue<K>): NullExpr {
-    const location = get_location(2);
+    const location = get_location();
     const keyAst = valueOrExprToAstTyped(key, this.key_type as EastType);
 
     return Expr.fromAst({
@@ -171,7 +171,7 @@ export class SetExpr<K extends any> extends Expr<SetType<K>> {
     return Expr.fromAst({
       ast_type: "Builtin",
       type: BooleanType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "SetTryInsert",
       type_parameters: [this.key_type as EastType],
       arguments: [this[AstSymbol], keyAst],
@@ -202,7 +202,7 @@ export class SetExpr<K extends any> extends Expr<SetType<K>> {
    * ```
    */
   delete(key: SubtypeExprOrValue<K>): NullExpr {
-    const location = get_location(2);
+    const location = get_location();
     const keyAst = valueOrExprToAstTyped(key, this.key_type as EastType);
 
     return Expr.fromAst({
@@ -240,7 +240,7 @@ export class SetExpr<K extends any> extends Expr<SetType<K>> {
     return Expr.fromAst({
       ast_type: "Builtin",
       type: BooleanType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "SetTryDelete",
       type_parameters: [this.key_type as EastType],
       arguments: [this[AstSymbol], keyAst],
@@ -269,7 +269,7 @@ export class SetExpr<K extends any> extends Expr<SetType<K>> {
     return Expr.fromAst({
       ast_type: "Builtin",
       type: NullType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "SetClear",
       type_parameters: [this.key_type as EastType],
       arguments: [this[AstSymbol]],
@@ -301,7 +301,7 @@ export class SetExpr<K extends any> extends Expr<SetType<K>> {
     return Expr.fromAst({
       ast_type: "Builtin",
       type: NullType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "SetUnionInPlace",
       type_parameters: [this.key_type as EastType],
       arguments: [this[AstSymbol], otherAst],
@@ -330,7 +330,7 @@ export class SetExpr<K extends any> extends Expr<SetType<K>> {
     return Expr.fromAst({
       ast_type: "Builtin",
       type: this[TypeSymbol],
-      location: get_location(2),
+      location: get_location(),
       builtin: "SetUnion",
       type_parameters: [this.key_type as EastType],
       arguments: [this[AstSymbol], otherAst],
@@ -357,7 +357,7 @@ export class SetExpr<K extends any> extends Expr<SetType<K>> {
     return Expr.fromAst({
       ast_type: "Builtin",
       type: this[TypeSymbol],
-      location: get_location(2),
+      location: get_location(),
       builtin: "SetIntersect",
       type_parameters: [this.key_type as EastType],
       arguments: [this[AstSymbol], otherAst],
@@ -384,7 +384,7 @@ export class SetExpr<K extends any> extends Expr<SetType<K>> {
     return Expr.fromAst({
       ast_type: "Builtin",
       type: this[TypeSymbol],
-      location: get_location(2),
+      location: get_location(),
       builtin: "SetDiff",
       type_parameters: [this.key_type as EastType],
       arguments: [this[AstSymbol], otherAst],
@@ -411,7 +411,7 @@ export class SetExpr<K extends any> extends Expr<SetType<K>> {
     return Expr.fromAst({
       ast_type: "Builtin",
       type: this[TypeSymbol],
-      location: get_location(2),
+      location: get_location(),
       builtin: "SetSymDiff",
       type_parameters: [this.key_type as EastType],
       arguments: [this[AstSymbol], otherAst],
@@ -439,7 +439,7 @@ export class SetExpr<K extends any> extends Expr<SetType<K>> {
     return Expr.fromAst({
       ast_type: "Builtin",
       type: BooleanType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "SetIsSubset",
       type_parameters: [this.key_type as EastType],
       arguments: [this[AstSymbol], otherAst],
@@ -467,7 +467,7 @@ export class SetExpr<K extends any> extends Expr<SetType<K>> {
     return Expr.fromAst({
       ast_type: "Builtin",
       type: BooleanType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "SetIsSubset",
       type_parameters: [this.key_type as EastType],
       arguments: [otherAst, this[AstSymbol]], // Note: arguments swapped for superset
@@ -495,7 +495,7 @@ export class SetExpr<K extends any> extends Expr<SetType<K>> {
     return Expr.fromAst({
       ast_type: "Builtin",
       type: BooleanType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "SetIsDisjoint",
       type_parameters: [this.key_type as EastType],
       arguments: [this[AstSymbol], otherAst],
@@ -523,7 +523,7 @@ export class SetExpr<K extends any> extends Expr<SetType<K>> {
     return Expr.fromAst({
       ast_type: "Builtin",
       type: this[TypeSymbol],
-      location: get_location(2),
+      location: get_location(),
       builtin: "SetCopy",
       type_parameters: [this.key_type as EastType],
       arguments: [this[AstSymbol]],
@@ -550,7 +550,7 @@ export class SetExpr<K extends any> extends Expr<SetType<K>> {
     return Expr.fromAst({
       ast_type: "Builtin",
       type: this[TypeSymbol],
-      location: get_location(2),
+      location: get_location(),
       builtin: "SetFilter",
       type_parameters: [this.key_type as EastType],
       arguments: [this[AstSymbol], Expr.ast(predExpr as any)],
@@ -600,7 +600,7 @@ export class SetExpr<K extends any> extends Expr<SetType<K>> {
     return Expr.fromAst({
       ast_type: "Builtin",
       type: DictType(this.key_type, valueType),
-      location: get_location(2),
+      location: get_location(),
       builtin: "SetFilterMap",
       type_parameters: [this.key_type as EastType, valueType],
       arguments: [this[AstSymbol], Expr.ast(fnExpr as any)],
@@ -651,7 +651,7 @@ export class SetExpr<K extends any> extends Expr<SetType<K>> {
     return Expr.fromAst({
       ast_type: "Builtin",
       type: returnType as EastType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "SetFirstMap",
       type_parameters: [this.key_type as EastType, someType as EastType],
       arguments: [this[AstSymbol], fnAst],
@@ -684,7 +684,7 @@ export class SetExpr<K extends any> extends Expr<SetType<K>> {
     return Expr.fromAst({
       ast_type: "Builtin",
       type: NullType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "SetForEach",
       type_parameters: [this.key_type as EastType, returnType],
       arguments: [this[AstSymbol], Expr.ast(fnExpr as any)],
@@ -723,7 +723,7 @@ export class SetExpr<K extends any> extends Expr<SetType<K>> {
     return Expr.fromAst({
       ast_type: "Builtin",
       type: DictType(this.key_type, returnType),
-      location: get_location(2),
+      location: get_location(),
       builtin: "SetMap",
       type_parameters: [this.key_type as EastType, returnType],
       arguments: [this[AstSymbol], Expr.ast(fnExpr as any)],
@@ -763,7 +763,7 @@ export class SetExpr<K extends any> extends Expr<SetType<K>> {
     return Expr.fromAst({
       ast_type: "Builtin",
       type: mapType as EastType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "SetMapReduce",
       type_parameters: [this.key_type as EastType, mapType],
       arguments: [this[AstSymbol], mapAst, combineAst],
@@ -797,7 +797,7 @@ export class SetExpr<K extends any> extends Expr<SetType<K>> {
     return Expr.fromAst({
       ast_type: "Builtin",
       type: returnType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "SetReduce",
       type_parameters: [this.key_type as EastType, returnType],
       arguments: [this[AstSymbol], Expr.ast(fnExpr as any), initAst],
@@ -850,7 +850,7 @@ export class SetExpr<K extends any> extends Expr<SetType<K>> {
     return Expr.fromAst({
       ast_type: "Builtin",
       type: ArrayType(returnType),
-      location: get_location(2),
+      location: get_location(),
       builtin: "SetToArray",
       type_parameters: [this.key_type as EastType, returnType],
       arguments: [this[AstSymbol], Expr.ast(fnExpr as any)],
@@ -897,7 +897,7 @@ export class SetExpr<K extends any> extends Expr<SetType<K>> {
     return Expr.fromAst({
       ast_type: "Builtin",
       type: SetType(keyType),
-      location: get_location(2),
+      location: get_location(),
       builtin: "SetToSet",
       type_parameters: [this.key_type as EastType, keyType as EastType],
       arguments: [this[AstSymbol], keyFnAst],
@@ -956,7 +956,7 @@ export class SetExpr<K extends any> extends Expr<SetType<K>> {
 
     let onConflictAst;
     if (onConflictFn === undefined) {
-      const location = get_location(2);
+      const location = get_location();
       const onConflictFunction = Expr.function([valueType, valueType, keyType], valueType, ($, existing, value, key) => $.error(Expr.str`Cannot insert duplicate key ${key} into dict`, location));
       onConflictAst = Expr.ast(onConflictFunction);
     } else {
@@ -966,7 +966,7 @@ export class SetExpr<K extends any> extends Expr<SetType<K>> {
     return Expr.fromAst({
       ast_type: "Builtin",
       type: DictType(keyType, valueType),
-      location: get_location(2),
+      location: get_location(),
       builtin: "SetToDict",
       type_parameters: [this.key_type as EastType, keyType, valueType],
       arguments: [this[AstSymbol], keyFnAst, valueFnAst, onConflictAst],
@@ -1013,7 +1013,7 @@ export class SetExpr<K extends any> extends Expr<SetType<K>> {
     return Expr.fromAst({
       ast_type: "Builtin",
       type: ArrayType(elementType as EastType),
-      location: get_location(2),
+      location: get_location(),
       builtin: "SetFlattenToArray",
       type_parameters: [this.key_type as EastType, elementType as EastType],
       arguments: [this[AstSymbol], fnAst],
@@ -1059,7 +1059,7 @@ export class SetExpr<K extends any> extends Expr<SetType<K>> {
     return Expr.fromAst({
       ast_type: "Builtin",
       type: SetType(elementType as EastType),
-      location: get_location(2),
+      location: get_location(),
       builtin: "SetFlattenToSet",
       type_parameters: [this.key_type as EastType, elementType as EastType],
       arguments: [this[AstSymbol], fnAst],
@@ -1108,7 +1108,7 @@ export class SetExpr<K extends any> extends Expr<SetType<K>> {
 
     let onConflictAst;
     if (onConflictFn === undefined) {
-      const location = get_location(2);
+      const location = get_location();
       const onConflictFunction = Expr.function([valueType, valueType, keyType], valueType, ($, existing, value, key) => $.error(Expr.str`Cannot insert duplicate key ${key} into dict`, location));
       onConflictAst = Expr.ast(onConflictFunction);
     } else {
@@ -1118,7 +1118,7 @@ export class SetExpr<K extends any> extends Expr<SetType<K>> {
     return Expr.fromAst({
       ast_type: "Builtin",
       type: DictType(keyType as EastType, valueType as EastType),
-      location: get_location(2),
+      location: get_location(),
       builtin: "SetFlattenToDict",
       type_parameters: [this.key_type as EastType, keyType as EastType, valueType as EastType],
       arguments: [this[AstSymbol], fnAst, onConflictAst],
@@ -1165,7 +1165,7 @@ export class SetExpr<K extends any> extends Expr<SetType<K>> {
     return Expr.fromAst({
       ast_type: "Builtin",
       type: DictType(keyType as EastType, initType as EastType),
-      location: get_location(2),
+      location: get_location(),
       builtin: "SetGroupFold",
       type_parameters: [this.key_type as EastType, keyType as EastType, initType as EastType],
       arguments: [this[AstSymbol], keyFnAst, initFnAst, reduceFnAst],
@@ -1583,14 +1583,14 @@ export class SetExpr<K extends any> extends Expr<SetType<K>> {
       const paramVariable: AST = {
         ast_type: "Variable",
         type: this.key_type as EastType,
-        location: get_location(2),
+        location: get_location(),
         mutable: false,
       };
       // Check if boolean is NOT true, then return some(null) to stop, otherwise return none to continue
       const notCondition: AST = {
         ast_type: "Builtin",
         type: BooleanType,
-        location: get_location(2),
+        location: get_location(),
         builtin: "BooleanNot",
         type_parameters: [],
         arguments: [paramVariable]
@@ -1598,23 +1598,23 @@ export class SetExpr<K extends any> extends Expr<SetType<K>> {
       const checkFnAst: AST = {
         ast_type: "Function",
         type: FunctionType([this.key_type as EastType], optionType) as any,
-        location: get_location(2),
+        location: get_location(),
         parameters: [paramVariable as any],
         body: {
           ast_type: "IfElse",
           type: optionType as any,
-          location: get_location(2),
+          location: get_location(),
           ifs: [{
             predicate: notCondition,
-            body: { ast_type: "Variant", type: optionType as any, location: get_location(2), case: "some", value: { ast_type: "Value", type: NullType, location: get_location(2), value: null } }
+            body: { ast_type: "Variant", type: optionType as any, location: get_location(), case: "some", value: { ast_type: "Value", type: NullType, location: get_location(), value: null } }
           }],
-          else_body: { ast_type: "Variant", type: optionType as any, location: get_location(2), case: "none", value: { ast_type: "Value", type: NullType, location: get_location(2), value: null } }
+          else_body: { ast_type: "Variant", type: optionType as any, location: get_location(), case: "none", value: { ast_type: "Value", type: NullType, location: get_location(), value: null } }
         }
       };
       const result: any = Expr.fromAst({
         ast_type: "Builtin",
         type: optionType as any,
-        location: get_location(2),
+        location: get_location(),
         builtin: "SetFirstMap",
         type_parameters: [this.key_type as EastType, NullType],
         arguments: [this[AstSymbol], checkFnAst],
@@ -1678,30 +1678,30 @@ export class SetExpr<K extends any> extends Expr<SetType<K>> {
       const paramVariable: AST = {
         ast_type: "Variable",
         type: this.key_type as EastType,
-        location: get_location(2),
+        location: get_location(),
         mutable: false,
       };
       // Check if boolean is true, then return some(null) to stop, otherwise return none to continue
       const checkFnAst: AST = {
         ast_type: "Function",
         type: FunctionType([this.key_type as EastType], optionType) as any,
-        location: get_location(2),
+        location: get_location(),
         parameters: [paramVariable as any],
         body: {
           ast_type: "IfElse",
           type: optionType as any,
-          location: get_location(2),
+          location: get_location(),
           ifs: [{
             predicate: paramVariable,
-            body: { ast_type: "Variant", type: optionType as any, location: get_location(2), case: "some", value: { ast_type: "Value", type: NullType, location: get_location(2), value: null } }
+            body: { ast_type: "Variant", type: optionType as any, location: get_location(), case: "some", value: { ast_type: "Value", type: NullType, location: get_location(), value: null } }
           }],
-          else_body: { ast_type: "Variant", type: optionType as any, location: get_location(2), case: "none", value: { ast_type: "Value", type: NullType, location: get_location(2), value: null } }
+          else_body: { ast_type: "Variant", type: optionType as any, location: get_location(), case: "none", value: { ast_type: "Value", type: NullType, location: get_location(), value: null } }
         }
       };
       const result: any = Expr.fromAst({
         ast_type: "Builtin",
         type: optionType as any,
-        location: get_location(2),
+        location: get_location(),
         builtin: "SetFirstMap",
         type_parameters: [this.key_type as EastType, NullType],
         arguments: [this[AstSymbol], checkFnAst],

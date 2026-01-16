@@ -62,7 +62,7 @@ export class RefExpr<T extends any> extends Expr<RefType<T>> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: this.value_type as EastType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "RefGet",
       type_parameters: [this.value_type as EastType],
       arguments: [Expr.ast(this)],
@@ -92,7 +92,7 @@ export class RefExpr<T extends any> extends Expr<RefType<T>> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: NullType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "RefUpdate",
       type_parameters: [this.value_type as EastType],
       arguments: [Expr.ast(this), Expr.ast(value)],
@@ -123,7 +123,7 @@ export class RefExpr<T extends any> extends Expr<RefType<T>> {
    * @see {@link update} for simply replacing the value.
    */
   merge<T2>(value: Expr<T2>, updateFn: SubtypeExprOrValue<FunctionType<[T, NoInfer<T2>], T>>): ExprType<NullType> {
-    const location = get_location(2);
+    const location = get_location();
     const value2Type = value[TypeSymbol];
 
     const updateFnExpr = Expr.from(updateFn as any, FunctionType([value2Type, this.value_type], this.value_type));

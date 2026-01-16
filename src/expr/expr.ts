@@ -88,7 +88,7 @@ export abstract class Expr<T = any> {
   }
 
   /** Create an error expression. */
-  static error(message: SubtypeExprOrValue<StringType>, location?: Location): ExprType<NeverType> {
+  static error(message: SubtypeExprOrValue<StringType>, location?: Location[]): ExprType<NeverType> {
     // Note that this static method is overridden later
     throw new Error("Method used before initialization");
     void message; void location;
