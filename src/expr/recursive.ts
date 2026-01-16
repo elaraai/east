@@ -68,7 +68,7 @@ export class RecursiveExpr<T> extends Expr<RecursiveType<T>> {
     const unwrapAst: AST = {
       ast_type: "UnwrapRecursive",
       type: this.nodeType as AST["type"],
-      location: get_location(2),
+      location: get_location(),
       value: this[AstSymbol],
     };
     return this[FactorySymbol](unwrapAst) as ExprType<T>;
@@ -101,7 +101,7 @@ export class RecursiveExpr<T> extends Expr<RecursiveType<T>> {
     const wrapAst: AST = {
       ast_type: "WrapRecursive",
       type: type,
-      location: get_location(2),
+      location: get_location(),
       value: valueAst,
     };
     return factory(wrapAst) as RecursiveExpr<T>;

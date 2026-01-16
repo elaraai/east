@@ -62,7 +62,7 @@ export class IntegerExpr extends Expr<IntegerType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: IntegerType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "IntegerNegate",
       type_parameters: [],
       arguments: [this[AstSymbol]],
@@ -97,7 +97,7 @@ export class IntegerExpr extends Expr<IntegerType> {
       return this[FactorySymbol]({
         ast_type: "Builtin",
         type: FloatType,
-        location: get_location(2),
+        location: get_location(),
         builtin: "FloatAdd",
         type_parameters: [],
         arguments: [this.toFloat()[AstSymbol], rightAst],
@@ -106,7 +106,7 @@ export class IntegerExpr extends Expr<IntegerType> {
       return this[FactorySymbol]({
         ast_type: "Builtin",
         type: IntegerType,
-        location: get_location(2),
+        location: get_location(),
         builtin: "IntegerAdd",
         type_parameters: [],
         arguments: [this[AstSymbol], rightAst],
@@ -138,7 +138,7 @@ export class IntegerExpr extends Expr<IntegerType> {
       return this[FactorySymbol]({
         ast_type: "Builtin",
         type: FloatType,
-        location: get_location(2),
+        location: get_location(),
         builtin: "FloatSubtract",
         type_parameters: [],
         arguments: [this.toFloat()[AstSymbol], rightAst],
@@ -147,7 +147,7 @@ export class IntegerExpr extends Expr<IntegerType> {
       return this[FactorySymbol]({
         ast_type: "Builtin",
         type: IntegerType,
-        location: get_location(2),
+        location: get_location(),
         builtin: "IntegerSubtract",
         type_parameters: [],
         arguments: [this[AstSymbol], rightAst],
@@ -179,7 +179,7 @@ export class IntegerExpr extends Expr<IntegerType> {
       return this[FactorySymbol]({
         ast_type: "Builtin",
         type: FloatType,
-        location: get_location(2),
+        location: get_location(),
         builtin: "FloatMultiply",
         type_parameters: [],
         arguments: [this.toFloat()[AstSymbol], rightAst],
@@ -188,7 +188,7 @@ export class IntegerExpr extends Expr<IntegerType> {
       return this[FactorySymbol]({
         ast_type: "Builtin",
         type: IntegerType,
-        location: get_location(2),
+        location: get_location(),
         builtin: "IntegerMultiply",
         type_parameters: [],
         arguments: [this[AstSymbol], rightAst],
@@ -225,7 +225,7 @@ export class IntegerExpr extends Expr<IntegerType> {
       return this[FactorySymbol]({
         ast_type: "Builtin",
         type: FloatType,
-        location: get_location(2),
+        location: get_location(),
         builtin: "FloatDivide",
         type_parameters: [],
         arguments: [this.toFloat()[AstSymbol], rightAst],
@@ -234,7 +234,7 @@ export class IntegerExpr extends Expr<IntegerType> {
       return this[FactorySymbol]({
         ast_type: "Builtin",
         type: IntegerType,
-        location: get_location(2),
+        location: get_location(),
         builtin: "IntegerDivide",
         type_parameters: [],
         arguments: [this[AstSymbol], rightAst],
@@ -271,7 +271,7 @@ export class IntegerExpr extends Expr<IntegerType> {
       return this[FactorySymbol]({
         ast_type: "Builtin",
         type: FloatType,
-        location: get_location(2),
+        location: get_location(),
         builtin: "FloatRemainder",
         type_parameters: [],
         arguments: [this.toFloat()[AstSymbol], rightAst],
@@ -280,7 +280,7 @@ export class IntegerExpr extends Expr<IntegerType> {
       return this[FactorySymbol]({
         ast_type: "Builtin",
         type: IntegerType,
-        location: get_location(2),
+        location: get_location(),
         builtin: "IntegerRemainder",
         type_parameters: [],
         arguments: [this[AstSymbol], rightAst],
@@ -317,7 +317,7 @@ export class IntegerExpr extends Expr<IntegerType> {
       return this[FactorySymbol]({
         ast_type: "Builtin",
         type: FloatType,
-        location: get_location(2),
+        location: get_location(),
         builtin: "FloatPow",
         type_parameters: [],
         arguments: [this.toFloat()[AstSymbol], rightAst],
@@ -326,7 +326,7 @@ export class IntegerExpr extends Expr<IntegerType> {
       return this[FactorySymbol]({
         ast_type: "Builtin",
         type: IntegerType,
-        location: get_location(2),
+        location: get_location(),
         builtin: "IntegerPow",
         type_parameters: [],
         arguments: [this[AstSymbol], rightAst],
@@ -354,7 +354,7 @@ export class IntegerExpr extends Expr<IntegerType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: IntegerType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "IntegerAbs",
       type_parameters: [],
       arguments: [this[AstSymbol]],
@@ -381,7 +381,7 @@ export class IntegerExpr extends Expr<IntegerType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: IntegerType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "IntegerSign",
       type_parameters: [],
       arguments: [this[AstSymbol]],
@@ -413,7 +413,7 @@ export class IntegerExpr extends Expr<IntegerType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: IntegerType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "IntegerLog",
       type_parameters: [],
       arguments: [this[AstSymbol], baseAst],
@@ -442,7 +442,7 @@ export class IntegerExpr extends Expr<IntegerType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: FloatType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "IntegerToFloat",
       type_parameters: [],
       arguments: [this[AstSymbol]],

@@ -68,7 +68,7 @@ export class DateTimeExpr extends Expr<DateTimeType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: IntegerType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "DateTimeGetYear",
       type_parameters: [],
       arguments: [this[AstSymbol]],
@@ -94,7 +94,7 @@ export class DateTimeExpr extends Expr<DateTimeType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: IntegerType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "DateTimeGetMonth",
       type_parameters: [],
       arguments: [this[AstSymbol]],
@@ -120,7 +120,7 @@ export class DateTimeExpr extends Expr<DateTimeType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: IntegerType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "DateTimeGetDayOfMonth",
       type_parameters: [],
       arguments: [this[AstSymbol]],
@@ -146,7 +146,7 @@ export class DateTimeExpr extends Expr<DateTimeType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: IntegerType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "DateTimeGetHour",
       type_parameters: [],
       arguments: [this[AstSymbol]],
@@ -172,7 +172,7 @@ export class DateTimeExpr extends Expr<DateTimeType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: IntegerType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "DateTimeGetMinute",
       type_parameters: [],
       arguments: [this[AstSymbol]],
@@ -198,7 +198,7 @@ export class DateTimeExpr extends Expr<DateTimeType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: IntegerType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "DateTimeGetSecond",
       type_parameters: [],
       arguments: [this[AstSymbol]],
@@ -224,7 +224,7 @@ export class DateTimeExpr extends Expr<DateTimeType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: IntegerType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "DateTimeGetDayOfWeek",
       type_parameters: [],
       arguments: [this[AstSymbol]],
@@ -250,7 +250,7 @@ export class DateTimeExpr extends Expr<DateTimeType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: IntegerType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "DateTimeGetMillisecond",
       type_parameters: [],
       arguments: [this[AstSymbol]],
@@ -291,7 +291,7 @@ export class DateTimeExpr extends Expr<DateTimeType> {
       ms = this[FactorySymbol]({
         ast_type: "Builtin",
         type: IntegerType,
-        location: get_location(2),
+        location: get_location(),
         builtin: "FloatToInteger",
         type_parameters: [],
         arguments: [milliseconds[AstSymbol]],
@@ -303,7 +303,7 @@ export class DateTimeExpr extends Expr<DateTimeType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: DateTimeType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "DateTimeAddMilliseconds",
       type_parameters: [],
       arguments: [this[AstSymbol], ms[AstSymbol]],
@@ -340,7 +340,7 @@ export class DateTimeExpr extends Expr<DateTimeType> {
       const negated = this[FactorySymbol]({
         ast_type: "Builtin",
         type: IntegerType,
-        location: get_location(2),
+        location: get_location(),
         builtin: "IntegerNegate",
         type_parameters: [],
         arguments: [milliseconds[AstSymbol]],
@@ -351,7 +351,7 @@ export class DateTimeExpr extends Expr<DateTimeType> {
       const negated = this[FactorySymbol]({
         ast_type: "Builtin",
         type: FloatType,
-        location: get_location(2),
+        location: get_location(),
         builtin: "FloatNegate",
         type_parameters: [],
         arguments: [milliseconds[AstSymbol]],
@@ -530,7 +530,7 @@ export class DateTimeExpr extends Expr<DateTimeType> {
       ms = this[FactorySymbol]({
         ast_type: "Builtin",
         type: IntegerType,
-        location: get_location(2),
+        location: get_location(),
         builtin: "IntegerMultiply",
         type_parameters: [],
         arguments: [value[AstSymbol], factorExpr[AstSymbol]],
@@ -540,7 +540,7 @@ export class DateTimeExpr extends Expr<DateTimeType> {
       const intValue = this[FactorySymbol]({
         ast_type: "Builtin",
         type: IntegerType,
-        location: get_location(2),
+        location: get_location(),
         builtin: "FloatToInteger",
         type_parameters: [],
         arguments: [value[AstSymbol]],
@@ -550,7 +550,7 @@ export class DateTimeExpr extends Expr<DateTimeType> {
       ms = this[FactorySymbol]({
         ast_type: "Builtin",
         type: IntegerType,
-        location: get_location(2),
+        location: get_location(),
         builtin: "IntegerMultiply",
         type_parameters: [],
         arguments: [intValue[AstSymbol], factorExpr[AstSymbol]],
@@ -581,7 +581,7 @@ export class DateTimeExpr extends Expr<DateTimeType> {
       negatedValue = this[FactorySymbol]({
         ast_type: "Builtin",
         type: IntegerType,
-        location: get_location(2),
+        location: get_location(),
         builtin: "IntegerNegate",
         type_parameters: [],
         arguments: [value[AstSymbol]],
@@ -591,7 +591,7 @@ export class DateTimeExpr extends Expr<DateTimeType> {
       negatedValue = this[FactorySymbol]({
         ast_type: "Builtin",
         type: FloatType,
-        location: get_location(2),
+        location: get_location(),
         builtin: "FloatNegate",
         type_parameters: [],
         arguments: [value[AstSymbol]],
@@ -626,7 +626,7 @@ export class DateTimeExpr extends Expr<DateTimeType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: IntegerType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "DateTimeDurationMilliseconds",
       type_parameters: [],
       arguments: [otherAst, this[AstSymbol]],
@@ -657,7 +657,7 @@ export class DateTimeExpr extends Expr<DateTimeType> {
     const millisecondsFloat = this[FactorySymbol]({
       ast_type: "Builtin",
       type: FloatType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "IntegerToFloat",
       type_parameters: [],
       arguments: [milliseconds[AstSymbol]],
@@ -668,7 +668,7 @@ export class DateTimeExpr extends Expr<DateTimeType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: FloatType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "FloatDivide",
       type_parameters: [],
       arguments: [millisecondsFloat[AstSymbol], divisor[AstSymbol]],
@@ -699,7 +699,7 @@ export class DateTimeExpr extends Expr<DateTimeType> {
     const millisecondsFloat = this[FactorySymbol]({
       ast_type: "Builtin",
       type: FloatType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "IntegerToFloat",
       type_parameters: [],
       arguments: [milliseconds[AstSymbol]],
@@ -710,7 +710,7 @@ export class DateTimeExpr extends Expr<DateTimeType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: FloatType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "FloatDivide",
       type_parameters: [],
       arguments: [millisecondsFloat[AstSymbol], divisor[AstSymbol]],
@@ -741,7 +741,7 @@ export class DateTimeExpr extends Expr<DateTimeType> {
     const millisecondsFloat = this[FactorySymbol]({
       ast_type: "Builtin",
       type: FloatType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "IntegerToFloat",
       type_parameters: [],
       arguments: [milliseconds[AstSymbol]],
@@ -752,7 +752,7 @@ export class DateTimeExpr extends Expr<DateTimeType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: FloatType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "FloatDivide",
       type_parameters: [],
       arguments: [millisecondsFloat[AstSymbol], divisor[AstSymbol]],
@@ -783,7 +783,7 @@ export class DateTimeExpr extends Expr<DateTimeType> {
     const millisecondsFloat = this[FactorySymbol]({
       ast_type: "Builtin",
       type: FloatType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "IntegerToFloat",
       type_parameters: [],
       arguments: [milliseconds[AstSymbol]],
@@ -794,7 +794,7 @@ export class DateTimeExpr extends Expr<DateTimeType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: FloatType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "FloatDivide",
       type_parameters: [],
       arguments: [millisecondsFloat[AstSymbol], divisor[AstSymbol]],
@@ -825,7 +825,7 @@ export class DateTimeExpr extends Expr<DateTimeType> {
     const millisecondsFloat = this[FactorySymbol]({
       ast_type: "Builtin",
       type: FloatType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "IntegerToFloat",
       type_parameters: [],
       arguments: [milliseconds[AstSymbol]],
@@ -836,7 +836,7 @@ export class DateTimeExpr extends Expr<DateTimeType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: FloatType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "FloatDivide",
       type_parameters: [],
       arguments: [millisecondsFloat[AstSymbol], divisor[AstSymbol]],
@@ -862,7 +862,7 @@ export class DateTimeExpr extends Expr<DateTimeType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: IntegerType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "DateTimeToEpochMilliseconds",
       type_parameters: [],
       arguments: [this[AstSymbol]],
@@ -915,7 +915,7 @@ export class DateTimeExpr extends Expr<DateTimeType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: StringType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "DateTimePrintFormat",
       type_parameters: [],
       arguments: [this[AstSymbol], tokensArray[AstSymbol]],
@@ -1094,7 +1094,7 @@ export function fromEpochMilliseconds(milliseconds: IntegerExpr | bigint): DateT
   return Expr.fromAst({
     ast_type: "Builtin",
     type: DateTimeType,
-    location: get_location(2),
+    location: get_location(),
     builtin: "DateTimeFromEpochMilliseconds",
     type_parameters: [],
     arguments: [millis[AstSymbol]],
@@ -1127,7 +1127,7 @@ export function fromComponents(
   return Expr.fromAst({
     ast_type: "Builtin",
     type: DateTimeType,
-    location: get_location(2),
+    location: get_location(),
     builtin: "DateTimeFromComponents",
     type_parameters: [],
     arguments: [y[AstSymbol], mo[AstSymbol], d[AstSymbol], h[AstSymbol], mi[AstSymbol], s[AstSymbol], ms[AstSymbol]],
@@ -1200,7 +1200,7 @@ export function parseFormatted(input: string | StringExpr, formatString: string)
   return Expr.fromAst({
     ast_type: "Builtin",
     type: DateTimeType,
-    location: get_location(2),
+    location: get_location(),
     builtin: "DateTimeParseFormat",
     type_parameters: [],
     arguments: [inputExpr[AstSymbol], tokensArray[AstSymbol]],

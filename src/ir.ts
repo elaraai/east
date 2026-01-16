@@ -22,8 +22,22 @@ export type LocationValue = {
   column: bigint,
 };
 
-export function printLocationValue(location: LocationValue): string {
+/**
+ * Formats a single location as a human-readable string.
+ */
+export function printSingleLocationValue(location: LocationValue): string {
   return `${location.filename} ${location.line}:${location.column}`;
+}
+
+/**
+ * Formats an array of locations as a stack trace string.
+ */
+export function printLocationValue(locations: LocationValue[]): string {
+  if (locations.length === 0) return '<unknown>';
+  const [first, ...rest] = locations;
+  const header = printSingleLocationValue(first!);
+  if (rest.length === 0) return header;
+  return header + '\n' + rest.map(loc => `  at ${printSingleLocationValue(loc)}`).join('\n');
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////
@@ -33,13 +47,13 @@ export function printLocationValue(location: LocationValue): string {
 
 export type ErrorIR = variant<"Error", {
   type: variant<"Never", null>,
-  location: LocationValue,
+  location: LocationValue[],
   message: any, // IR
 }>;
 
 export type TryCatchIR = variant<"TryCatch", {
   type: EastTypeValue,
-  location: LocationValue,
+  location: LocationValue[],
   try_body: any, // IR
   catch_body: any, // IR
   message: VariableIR,
@@ -49,28 +63,28 @@ export type TryCatchIR = variant<"TryCatch", {
 
 export type ValueIR = variant<"Value", {
   type: EastTypeValue,
-  location: LocationValue,
+  location: LocationValue[],
   value: LiteralValue,
 }>;
 
 export type VariableIR = variant<"Variable", {
   type: EastTypeValue,
   name: string,
-  location: LocationValue,
+  location: LocationValue[],
   mutable: boolean,
   captured: boolean,
 }>;
 
 export type LetIR = variant<"Let", {
   type: EastTypeValue,
-  location: LocationValue,
+  location: LocationValue[],
   variable: VariableIR,
   value: any, // IR
 }>;
 
 export type AssignIR = variant<"Assign", {
   type: EastTypeValue,
-  location: LocationValue,
+  location: LocationValue[],
   variable: VariableIR,
   value: any, // IR
 }>;
@@ -78,12 +92,12 @@ export type AssignIR = variant<"Assign", {
 export type AsIR = variant<"As", {
   type: EastTypeValue,
   value: any, // IR
-  location: LocationValue,
+  location: LocationValue[],
 }>
 
 export type FunctionIR = variant<"Function", {
   type: EastTypeValue,
-  location: LocationValue,
+  location: LocationValue[],
   captures: VariableIR[],
   parameters: VariableIR[],
   body: any, // IR
@@ -91,7 +105,7 @@ export type FunctionIR = variant<"Function", {
 
 export type AsyncFunctionIR = variant<"AsyncFunction", {
   type: EastTypeValue,
-  location: LocationValue,
+  location: LocationValue[],
   captures: VariableIR[],
   parameters: VariableIR[],
   body: any, // IR
@@ -99,14 +113,14 @@ export type AsyncFunctionIR = variant<"AsyncFunction", {
 
 export type CallIR = variant<"Call", {
   type: EastTypeValue,
-  location: LocationValue,
+  location: LocationValue[],
   function: any, // IR
   arguments: any[], // IR[]
 }>;
 
 export type CallAsyncIR = variant<"CallAsync", {
   type: EastTypeValue,
-  location: LocationValue,
+  location: LocationValue[],
   function: any, // IR
   arguments: any[], // IR[]
 }>;
@@ -114,57 +128,57 @@ export type CallAsyncIR = variant<"CallAsync", {
 
 export type NewRefIR = variant<"NewRef", {
   type: EastTypeValue,
-  location: LocationValue,
+  location: LocationValue[],
   value: any, // IR
 }>;
 
 export type NewArrayIR = variant<"NewArray", {
   type: EastTypeValue,
-  location: LocationValue,
+  location: LocationValue[],
   values: any[], // IR[]
 }>;
 
 export type NewSetIR = variant<"NewSet", {
   type: EastTypeValue,
-  location: LocationValue,
+  location: LocationValue[],
   values: any[], // IR[]
 }>;
 
 export type NewDictIR = variant<"NewDict", {
   type: EastTypeValue,
-  location: LocationValue,
+  location: LocationValue[],
   values: { key: any, value: any }[], // { key: IR , value: IR }[]
 }>;
 
 export type StructIR = variant<"Struct", {
   type: EastTypeValue,
-  location: LocationValue,
+  location: LocationValue[],
   fields: { name: string, value: any }[], // { name: string, value: IR }[]
 }>;
 
 export type GetFieldIR = variant<"GetField", {
   type: EastTypeValue,
-  location: LocationValue,
+  location: LocationValue[],
   field: string,
   struct: any, // IR
 }>;
 
 export type VariantIR = variant<"Variant", {
   type: EastTypeValue,
-  location: LocationValue,
+  location: LocationValue[],
   case: string,
   value: any, // IR
 }>;
 
 export type BlockIR = variant<"Block", {
   type: EastTypeValue,
-  location: LocationValue,
+  location: LocationValue[],
   statements: any[], // IR[]
 }>;
 
 export type IfElseIR = variant<"IfElse", {
   type: EastTypeValue,
-  location: LocationValue,
+  location: LocationValue[],
   ifs: {
     predicate: any, // IR
     body: any, // IR
@@ -175,31 +189,31 @@ export type IfElseIR = variant<"IfElse", {
 
 export type MatchIR = variant<"Match", {
   type: EastTypeValue,
-  location: LocationValue,
+  location: LocationValue[],
   variant: any, // IR
   cases: { case: string, variable: VariableIR, body: any }[], // { case: string, variable: VariableIR, body: IR }[]
 }>;
 
 export type UnwrapRecursiveIR = variant<"UnwrapRecursive", {
   type: EastTypeValue,
-  location: LocationValue,
+  location: LocationValue[],
   value: any, // IR
 }>;
 
 export type WrapRecursiveIR = variant<"WrapRecursive", {
   type: EastTypeValue,
-  location: LocationValue,
+  location: LocationValue[],
   value: any, // IR
 }>;
 
 export type IRLabel = {
   name: string,
-  location: LocationValue,
+  location: LocationValue[],
 };
 
 export type WhileIR = variant<"While", {
   type: variant<"Null", null>,
-  location: LocationValue,
+  location: LocationValue[],
   predicate: any, // IR
   label: IRLabel,
   body: any, // IR
@@ -207,7 +221,7 @@ export type WhileIR = variant<"While", {
 
 export type ForArrayIR = variant<"ForArray", {
   type: variant<"Null", null>,
-  location: LocationValue,
+  location: LocationValue[],
   array: any, // IR
   label: IRLabel,
   key: VariableIR,
@@ -217,7 +231,7 @@ export type ForArrayIR = variant<"ForArray", {
 
 export type ForSetIR = variant<"ForSet", {
   type: variant<"Null", null>,
-  location: LocationValue,
+  location: LocationValue[],
   set: any, // IR
   label: IRLabel,
   key: VariableIR,
@@ -226,7 +240,7 @@ export type ForSetIR = variant<"ForSet", {
 
 export type ForDictIR = variant<"ForDict", {
   type: variant<"Null", null>,
-  location: LocationValue,
+  location: LocationValue[],
   dict: any, // IR
   label: IRLabel,
   key: VariableIR,
@@ -236,26 +250,26 @@ export type ForDictIR = variant<"ForDict", {
 
 export type ReturnIR = variant<"Return", {
   type: variant<"Never", null>,
-  location: LocationValue,
+  location: LocationValue[],
   value: any, // IR
 }>;
 
 export type ContinueIR = variant<"Continue", {
   type: variant<"Never", null>,
-  location: LocationValue,
+  location: LocationValue[],
   label: IRLabel,
 }>;
 
 export type BreakIR = variant<"Break", {
   type: variant<"Never", null>,
-  location: LocationValue,
+  location: LocationValue[],
   label: IRLabel,
 }>;
 
 /**@internal */
 export type BuiltinIR = variant<"Builtin", {
   type: EastTypeValue,
-  location: LocationValue,
+  location: LocationValue[],
   builtin: BuiltinName,
   type_parameters: EastTypeValue[],
   arguments: any[], // IR[]
@@ -263,7 +277,7 @@ export type BuiltinIR = variant<"Builtin", {
 
 export type PlatformIR = variant<"Platform", {
   type: EastTypeValue,
-  location: LocationValue,
+  location: LocationValue[],
   name: string,
   type_parameters: EastTypeValue[],
   arguments: any[], // IR[]
@@ -289,48 +303,48 @@ export const LocationType = StructType({
 
 export const IRLabelType = StructType({
   name: StringType,
-  location: LocationType,
+  location: ArrayType(LocationType),
 });
 
 export const VariableType = StructType({
   type: EastTypeType,
-  location: LocationType,
+  location: ArrayType(LocationType),
   name: StringType,
   mutable: BooleanType,
   captured: BooleanType,
 });
 
 export const IRType = RecursiveType(ir => VariantType({
-  Error: StructType({ type: EastTypeType, location: LocationType, message: ir }),
-  TryCatch: StructType({ type: EastTypeType, location: LocationType, try_body: ir, catch_body: ir, message: ir, stack: ir, finally_body: ir }),
-  Value: StructType({ type: EastTypeType, location: LocationType, value: LiteralValueType }),
+  Error: StructType({ type: EastTypeType, location: ArrayType(LocationType), message: ir }),
+  TryCatch: StructType({ type: EastTypeType, location: ArrayType(LocationType), try_body: ir, catch_body: ir, message: ir, stack: ir, finally_body: ir }),
+  Value: StructType({ type: EastTypeType, location: ArrayType(LocationType), value: LiteralValueType }),
   Variable: VariableType,
-  Let: StructType({ type: EastTypeType, location: LocationType, variable: ir, value: ir }),
-  Assign: StructType({ type: EastTypeType, location: LocationType, variable: ir, value: ir }),
-  As: StructType({ type: EastTypeType, location: LocationType, value: ir }),
-  Function: StructType({ type: EastTypeType, location: LocationType, captures: ArrayType(ir), parameters: ArrayType(ir), body: ir }),
-  AsyncFunction: StructType({ type: EastTypeType, location: LocationType, captures: ArrayType(ir), parameters: ArrayType(ir), body: ir }),
-  Call: StructType({ type: EastTypeType, location: LocationType, function: ir, arguments: ArrayType(ir) }),
-  CallAsync: StructType({ type: EastTypeType, location: LocationType, function: ir, arguments: ArrayType(ir) }),
-  NewRef: StructType({ type: EastTypeType, location: LocationType, value: ir }),
-  NewArray: StructType({ type: EastTypeType, location: LocationType, values: ArrayType(ir) }),
-  NewSet: StructType({ type: EastTypeType, location: LocationType, values: ArrayType(ir) }),
-  NewDict: StructType({ type: EastTypeType, location: LocationType, values: ArrayType(StructType({ key: ir, value: ir })) }),
-  Struct: StructType({ type: EastTypeType, location: LocationType, fields: ArrayType(StructType({ name: StringType, value: ir })) }),
-  GetField: StructType({ type: EastTypeType, location: LocationType, field: StringType, struct: ir }),
-  Variant: StructType({ type: EastTypeType, location: LocationType, case: StringType, value: ir }),
-  Block: StructType({ type: EastTypeType, location: LocationType, statements: ArrayType(ir) }),
-  IfElse: StructType({ type: EastTypeType, location: LocationType, ifs: ArrayType(StructType({ predicate: ir, body: ir })), else_body: ir }),
-  Match: StructType({ type: EastTypeType, location: LocationType, variant: ir, cases: ArrayType(StructType({ case: StringType, variable: ir, body: ir })) }),
-  UnwrapRecursive: StructType({ type: EastTypeType, location: LocationType, value: ir }),
-  WrapRecursive: StructType({ type: EastTypeType, location: LocationType, value: ir }),
-  While: StructType({ type: EastTypeType, location: LocationType, predicate: ir, label: IRLabelType, body: ir }),
-  ForArray: StructType({ type: EastTypeType, location: LocationType, array: ir, label: IRLabelType, key: ir, value: ir, body: ir }),
-  ForSet: StructType({ type: EastTypeType, location: LocationType, set: ir, label: IRLabelType, key: ir, body: ir }),
-  ForDict: StructType({ type: EastTypeType, location: LocationType, dict: ir, label: IRLabelType, key: ir, value: ir, body: ir }),
-  Return: StructType({ type: EastTypeType, location: LocationType, value: ir }),
-  Continue: StructType({ type: EastTypeType, location: LocationType, label: IRLabelType }),
-  Break: StructType({ type: EastTypeType, location: LocationType, label: IRLabelType }),
-  Builtin: StructType({ type: EastTypeType, location: LocationType, builtin: StringType, type_parameters: ArrayType(EastTypeType), arguments: ArrayType(ir) }),
-  Platform: StructType({ type: EastTypeType, location: LocationType, name: StringType, type_parameters: ArrayType(EastTypeType), arguments: ArrayType(ir), async: BooleanType }),
+  Let: StructType({ type: EastTypeType, location: ArrayType(LocationType), variable: ir, value: ir }),
+  Assign: StructType({ type: EastTypeType, location: ArrayType(LocationType), variable: ir, value: ir }),
+  As: StructType({ type: EastTypeType, location: ArrayType(LocationType), value: ir }),
+  Function: StructType({ type: EastTypeType, location: ArrayType(LocationType), captures: ArrayType(ir), parameters: ArrayType(ir), body: ir }),
+  AsyncFunction: StructType({ type: EastTypeType, location: ArrayType(LocationType), captures: ArrayType(ir), parameters: ArrayType(ir), body: ir }),
+  Call: StructType({ type: EastTypeType, location: ArrayType(LocationType), function: ir, arguments: ArrayType(ir) }),
+  CallAsync: StructType({ type: EastTypeType, location: ArrayType(LocationType), function: ir, arguments: ArrayType(ir) }),
+  NewRef: StructType({ type: EastTypeType, location: ArrayType(LocationType), value: ir }),
+  NewArray: StructType({ type: EastTypeType, location: ArrayType(LocationType), values: ArrayType(ir) }),
+  NewSet: StructType({ type: EastTypeType, location: ArrayType(LocationType), values: ArrayType(ir) }),
+  NewDict: StructType({ type: EastTypeType, location: ArrayType(LocationType), values: ArrayType(StructType({ key: ir, value: ir })) }),
+  Struct: StructType({ type: EastTypeType, location: ArrayType(LocationType), fields: ArrayType(StructType({ name: StringType, value: ir })) }),
+  GetField: StructType({ type: EastTypeType, location: ArrayType(LocationType), field: StringType, struct: ir }),
+  Variant: StructType({ type: EastTypeType, location: ArrayType(LocationType), case: StringType, value: ir }),
+  Block: StructType({ type: EastTypeType, location: ArrayType(LocationType), statements: ArrayType(ir) }),
+  IfElse: StructType({ type: EastTypeType, location: ArrayType(LocationType), ifs: ArrayType(StructType({ predicate: ir, body: ir })), else_body: ir }),
+  Match: StructType({ type: EastTypeType, location: ArrayType(LocationType), variant: ir, cases: ArrayType(StructType({ case: StringType, variable: ir, body: ir })) }),
+  UnwrapRecursive: StructType({ type: EastTypeType, location: ArrayType(LocationType), value: ir }),
+  WrapRecursive: StructType({ type: EastTypeType, location: ArrayType(LocationType), value: ir }),
+  While: StructType({ type: EastTypeType, location: ArrayType(LocationType), predicate: ir, label: IRLabelType, body: ir }),
+  ForArray: StructType({ type: EastTypeType, location: ArrayType(LocationType), array: ir, label: IRLabelType, key: ir, value: ir, body: ir }),
+  ForSet: StructType({ type: EastTypeType, location: ArrayType(LocationType), set: ir, label: IRLabelType, key: ir, body: ir }),
+  ForDict: StructType({ type: EastTypeType, location: ArrayType(LocationType), dict: ir, label: IRLabelType, key: ir, value: ir, body: ir }),
+  Return: StructType({ type: EastTypeType, location: ArrayType(LocationType), value: ir }),
+  Continue: StructType({ type: EastTypeType, location: ArrayType(LocationType), label: IRLabelType }),
+  Break: StructType({ type: EastTypeType, location: ArrayType(LocationType), label: IRLabelType }),
+  Builtin: StructType({ type: EastTypeType, location: ArrayType(LocationType), builtin: StringType, type_parameters: ArrayType(EastTypeType), arguments: ArrayType(ir) }),
+  Platform: StructType({ type: EastTypeType, location: ArrayType(LocationType), name: StringType, type_parameters: ArrayType(EastTypeType), arguments: ArrayType(ir), async: BooleanType }),
 }));

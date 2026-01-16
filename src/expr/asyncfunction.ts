@@ -36,7 +36,7 @@ export class AsyncFunctionExpr<I extends any[], O extends any> extends Expr<Asyn
     return this[FactorySymbol]({
       ast_type: "CallAsync",
       type: this.output_type as EastType,
-      location: get_location(2),
+      location: get_location(),
       function: this[AstSymbol],
       arguments: inputs,
     }) as ExprType<O>;

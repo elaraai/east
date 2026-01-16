@@ -19,10 +19,10 @@ export class EastError extends Error {
   public location: LocationValue[];
   public eastMessage: string;
 
-  constructor(message: string, options: { cause?: any, location: LocationValue }) {
+  constructor(message: string, options: { cause?: any, location: LocationValue[] }) {
     super(message, options.cause === undefined ? undefined : { cause: options.cause });
     this.eastMessage = message;
-    this.location = [options.location];
+    this.location = [...options.location];
   }
 
   override toString(): string {

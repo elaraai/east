@@ -70,7 +70,7 @@ export default {
       ast_type: "Builtin",
       type: StringType,
       builtin: "StringPrintJSON",
-      location: { filename: "stdlib", line: 1, column: 1 },
+      location: [{ filename: "stdlib", line: 1, column: 1 }],
       type_parameters: [Expr.type(value)],
       arguments: [Expr.ast(value)],
     })

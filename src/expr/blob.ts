@@ -64,7 +64,7 @@ export class BlobExpr extends Expr<BlobType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: IntegerType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "BlobSize",
       type_parameters: [],
       arguments: [this[AstSymbol]],
@@ -97,7 +97,7 @@ export class BlobExpr extends Expr<BlobType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: IntegerType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "BlobGetUint8",
       type_parameters: [],
       arguments: [this[AstSymbol], offsetAst],
@@ -130,7 +130,7 @@ export class BlobExpr extends Expr<BlobType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: StringType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "BlobDecodeUtf8",
       type_parameters: [],
       arguments: [this[AstSymbol]],
@@ -161,7 +161,7 @@ export class BlobExpr extends Expr<BlobType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: StringType,
-      location: get_location(2),
+      location: get_location(),
       builtin: "BlobDecodeUtf16",
       type_parameters: [],
       arguments: [this[AstSymbol]],
@@ -193,7 +193,7 @@ export class BlobExpr extends Expr<BlobType> {
       return this[FactorySymbol]({
         ast_type: "Builtin",
         type,
-        location: get_location(2),
+        location: get_location(),
         builtin: "BlobDecodeBeast",
         type_parameters: [type],
         arguments: [this[AstSymbol]],
@@ -202,7 +202,7 @@ export class BlobExpr extends Expr<BlobType> {
       return this[FactorySymbol]({
         ast_type: "Builtin",
         type,
-        location: get_location(2),
+        location: get_location(),
         builtin: "BlobDecodeBeast2",
         type_parameters: [type],
         arguments: [this[AstSymbol]],
@@ -241,7 +241,7 @@ export class BlobExpr extends Expr<BlobType> {
     return this[FactorySymbol]({
       ast_type: "Builtin",
       type: ArrayType(structType),
-      location: get_location(2),
+      location: get_location(),
       builtin: "BlobDecodeCsv",
       type_parameters: [structType, CsvParseConfigType],
       arguments: [this[AstSymbol], configAst],
