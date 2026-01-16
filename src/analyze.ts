@@ -538,15 +538,18 @@ export function analyzeIR<T extends IR>(
         }
 
         // Mark the outer variable as captured (it's being closed over by this function)
+        const wasAlreadyCaptured = outerVar.captured;
         outerVar.captured = true;
         const defVarAnalysis = analysis.get(outerVar.definedBy);
-        if (!defVarAnalysis) {
+        if (defVarAnalysis) {
+          defVarAnalysis.captured = true;
+        } else if (!wasAlreadyCaptured) {
+          // Only error if this wasn't already marked as captured (from a synthetic/external context)
           throw new Error(
             `Internal error: VariableIR node for captured variable ${captureVar.value.name} not analyzed. ` +
             `This should never happen - all VariableIR nodes should be analyzed when encountered.`
           );
         }
-        defVarAnalysis.captured = true;
 
         fnCtx[captureVar.value.name] = {
           type: captureVar.value.type,
@@ -635,15 +638,18 @@ export function analyzeIR<T extends IR>(
         }
 
         // Mark the outer variable as captured (it's being closed over by this function)
+        const wasAlreadyCaptured = outerVar.captured;
         outerVar.captured = true;
         const defVarAnalysis = analysis.get(outerVar.definedBy);
-        if (!defVarAnalysis) {
+        if (defVarAnalysis) {
+          defVarAnalysis.captured = true;
+        } else if (!wasAlreadyCaptured) {
+          // Only error if this wasn't already marked as captured (from a synthetic/external context)
           throw new Error(
             `Internal error: VariableIR node for captured variable ${captureVar.value.name} not analyzed. ` +
             `This should never happen - all VariableIR nodes should be analyzed when encountered.`
           );
         }
-        defVarAnalysis.captured = true;
 
         fnCtx[captureVar.value.name] = {
           type: captureVar.value.type,

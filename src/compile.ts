@@ -12,7 +12,7 @@ import { invertFor } from "./patch/invert.js";
 import { ConflictError } from "./patch/index.js";
 import { printFor, parseFor } from "./serialization/east.js";
 import { variant, type option } from "./containers/variant.js";
-import { EastError } from "./error.js";
+import { EastError, InternalError } from "./error.js";
 import { SortedSet } from "./containers/sortedset.js";
 import { SortedMap } from "./containers/sortedmap.js";
 import { BufferWriter } from "./serialization/binary-utils.js";
@@ -33,6 +33,44 @@ export const printTypeValue = printFor(EastTypeValueType) as (type: EastTypeValu
  * This enables serialization of free functions (functions with no captures).
  */
 export const EAST_IR_SYMBOL = Symbol.for("east.ir");
+
+/**
+ * Symbol used to attach capture values to compiled functions.
+ * This enables serialization of closures (functions with captures).
+ */
+export const EAST_CAPTURES_SYMBOL = Symbol.for("east.captures");
+
+// =============================================================================
+// Context Value Types - for variables in execution context
+// =============================================================================
+
+/**
+ * Context values are stored as variants to distinguish regular values from boxed mutable captures.
+ * - variant("value", x): regular immutable or non-captured mutable variable
+ * - variant("boxed", x): mutable captured variable (box enables shared mutation across closures)
+ */
+export type ContextValue<T = unknown> =
+  | variant<"value", T>
+  | variant<"boxed", T>;
+
+/** Runtime context mapping variable names to their wrapped values */
+export type RuntimeContext = Record<string, ContextValue>;
+
+/** Determines if a variable requires boxing (mutable + captured) */
+export function requiresBoxing(variable: { mutable: boolean; captured: boolean }): boolean {
+  return variable.mutable && variable.captured;
+}
+
+/** Get a context value, throwing InternalError if missing */
+function getContextValue(ctx: RuntimeContext, name: string): ContextValue {
+  const value = ctx[name];
+  if (value === undefined) {
+    throw new InternalError(`Variable '${name}' not found in runtime context`);
+  }
+  return value;
+}
+
+// =============================================================================
 
 /** @internal Track iteration locks to prevent concurrent modification */
 const iterationLocks = new WeakMap<any, number>();
@@ -75,7 +113,7 @@ class BreakException {
 *
 * @internal
 */
-export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeValue>, platform: Record<string, (...args: any[]) => any>, asyncPlatformFns: Set<string>, platformDef: PlatformFunction[], fresh_ctx: boolean = true, compilingNodes: Set<IR> = new Set()): (ctx: Record<string, any>) => any {
+export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeValue>, platform: Record<string, (...args: any[]) => any>, asyncPlatformFns: Set<string>, platformDef: PlatformFunction[], fresh_ctx: boolean = true, compilingNodes: Set<IR> = new Set()): (ctx: RuntimeContext) => any {
   // The IR is checked prior to compilation, so we can assume it's valid here.
   // The compiler needs to take care that Promises are properly awaited, so most IR nodes need both sync and async implementations.
   // We assume unnecessary `async` functions degrade performance but unnecessary `await`s are not too bad, so while we could be more "specific" in our awaits we do not bother
@@ -84,14 +122,14 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
 
   if (ir.type === "Value") {
     const v = ir.value.value.value;
-    return (_ctx: Record<string, any>) => v;
+    return (_ctx: RuntimeContext) => v;
   } else if (ir.type === "Error") {
     const message_compiled = compile_internal(ir.value.message, ctx, platform, asyncPlatformFns, platformDef, false, compilingNodes);
     const location = ir.value.location;
     if (ir.value.isAsync) {
-      return async (ctx: Record<string, any>) => { throw new EastError(await message_compiled(ctx), { location: location }); };
+      return async (ctx: RuntimeContext) => { throw new EastError(await message_compiled(ctx), { location: location }); };
     } else {
-      return (ctx: Record<string, any>) => { throw new EastError(message_compiled(ctx), { location: location }); };
+      return (ctx: RuntimeContext) => { throw new EastError(message_compiled(ctx), { location: location }); };
     }
   } else if (ir.type === "TryCatch") {
     const try_body = compile_internal(ir.value.try_body, Object.create(ctx), platform, asyncPlatformFns, platformDef, true, compilingNodes);
@@ -108,14 +146,14 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
 
     if (ir.value.isAsync) {
       if (finally_body === undefined) {
-        return async (ctx: Record<string, any>) => {
+        return async (ctx: RuntimeContext) => {
           try {
             return await try_body(Object.create(ctx))
           } catch (e) {
             if (e instanceof EastError) {
-              const new_ctx = Object.create(ctx);
-              new_ctx[message_name] = e.message;
-              new_ctx[stack_name] = e.location;
+              const new_ctx: RuntimeContext = Object.create(ctx);
+              new_ctx[message_name] = variant("value", e.message);
+              new_ctx[stack_name] = variant("value", e.location);
               return await catch_body(new_ctx);
             } else {
               throw(e);
@@ -123,14 +161,14 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
           }
         }
       } else {
-        return async (ctx: Record<string, any>) => {
+        return async (ctx: RuntimeContext) => {
           try {
             return await try_body(Object.create(ctx))
           } catch (e) {
             if (e instanceof EastError) {
-              const new_ctx = Object.create(ctx);
-              new_ctx[message_name] = e.message;
-              new_ctx[stack_name] = e.location;
+              const new_ctx: RuntimeContext = Object.create(ctx);
+              new_ctx[message_name] = variant("value", e.message);
+              new_ctx[stack_name] = variant("value", e.location);
               return await catch_body(new_ctx);
             } else {
               throw(e);
@@ -142,14 +180,14 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
       }
     } else {
       if (finally_body === undefined) {
-        return (ctx: Record<string, any>) => {
+        return (ctx: RuntimeContext) => {
           try {
             return try_body(Object.create(ctx))
           } catch (e) {
             if (e instanceof EastError) {
-              const new_ctx = Object.create(ctx);
-              new_ctx[message_name] = e.message;
-              new_ctx[stack_name] = e.location;
+              const new_ctx: RuntimeContext = Object.create(ctx);
+              new_ctx[message_name] = variant("value", e.message);
+              new_ctx[stack_name] = variant("value", e.location);
               return catch_body(new_ctx);
             } else {
               throw(e);
@@ -157,14 +195,14 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
           }
         }
       } else {
-        return (ctx: Record<string, any>) => {
+        return (ctx: RuntimeContext) => {
           try {
             return try_body(Object.create(ctx))
           } catch (e) {
             if (e instanceof EastError) {
-              const new_ctx = Object.create(ctx);
-              new_ctx[message_name] = e.message;
-              new_ctx[stack_name] = e.location;
+              const new_ctx: RuntimeContext = Object.create(ctx);
+              new_ctx[message_name] = variant("value", e.message);
+              new_ctx[stack_name] = variant("value", e.location);
               return catch_body(new_ctx);
             } else {
               throw(e);
@@ -177,73 +215,60 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
     }
   } else if (ir.type === "Variable") {
     const name = ir.value.name;
-
-    if (ir.value.mutable && ir.value.captured) {
-      return (ctx: Record<string, any>) => ctx[name].x;
-    } else {
-      return (ctx: Record<string, any>) => ctx[name];
-    }
+    // All context values are variants - read via .value
+    return (ctx: RuntimeContext) => getContextValue(ctx, name).value;
   } else if (ir.type === "Let") {
     const compiled_statement = compile_internal(ir.value.value, ctx, platform, asyncPlatformFns, platformDef, false, compilingNodes);
     const name = ir.value.variable.value.name;
     ctx[name] = ir.value.variable.value.type;
-    if (ir.value.variable.value.mutable && ir.value.variable.value.captured) {
-      if (ir.value.isAsync) {
-        return async (ctx: Record<string, any>) => {
-          ctx[name] = { x: await compiled_statement(ctx) };
-          return null;
-        };
-      } else {
-        return (ctx: Record<string, any>) => {
-          ctx[name] = { x: compiled_statement(ctx) };
-          return null;
-        };
-      }
+    const boxed = requiresBoxing(ir.value.variable.value);
+    if (ir.value.isAsync) {
+      return async (ctx: RuntimeContext) => {
+        ctx[name] = boxed
+          ? variant("boxed", await compiled_statement(ctx))
+          : variant("value", await compiled_statement(ctx));
+        return null;
+      };
     } else {
-      if (ir.value.isAsync) {
-        return async (ctx: Record<string, any>) => {
-          ctx[name] = await compiled_statement(ctx);
-          return null;
-        };
-      } else {
-        return (ctx: Record<string, any>) => {
-          ctx[name] = compiled_statement(ctx);
-          return null;
-        };
-      }
+      return (ctx: RuntimeContext) => {
+        ctx[name] = boxed
+          ? variant("boxed", compiled_statement(ctx))
+          : variant("value", compiled_statement(ctx));
+        return null;
+      };
     }
   } else if (ir.type === "Assign") {
     const name = ir.value.variable.value.name;
     const compiled_statement = compile_internal(ir.value.value, ctx, platform, asyncPlatformFns, platformDef, false, compilingNodes);
-    if (ir.value.variable.value.mutable && ir.value.variable.value.captured) {
+    if (requiresBoxing(ir.value.variable.value)) {
+      // Boxed variables: mutate in place via .value
       if (ir.value.isAsync) {
-        return async (ctx: Record<string, any>) => {
-          const value = await compiled_statement(ctx);
-          ctx[name].x = value;
+        return async (ctx: RuntimeContext) => {
+          getContextValue(ctx, name).value = await compiled_statement(ctx);
           return null;
         };
       } else {
-        return (ctx: Record<string, any>) => {
-          const value = compiled_statement(ctx);
-          ctx[name].x = value;
+        return (ctx: RuntimeContext) => {
+          getContextValue(ctx, name).value = compiled_statement(ctx);
           return null;
         };
       }
     } else {
+      // Non-boxed variables: replace the variant
       if (ir.value.isAsync) {
-        return async (ctx: Record<string, any>) => {
+        return async (ctx: RuntimeContext) => {
           const value = await compiled_statement(ctx);
           // We need to check in which prototype the variable lives
           while (!Object.hasOwn(ctx, name)) ctx = Object.getPrototypeOf(ctx);
-          ctx[name] = value;
+          ctx[name] = variant("value", value);
           return null;
         };
       } else {
-        return (ctx: Record<string, any>) => {
+        return (ctx: RuntimeContext) => {
           const value = compiled_statement(ctx);
           // We need to check in which prototype the variable lives
           while (!Object.hasOwn(ctx, name)) ctx = Object.getPrototypeOf(ctx);
-          ctx[name] = value;
+          ctx[name] = variant("value", value);
           return null;
         };
       }
@@ -261,16 +286,16 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
     // (for statically typed runtimes this assists in e.g. typing a heap allocation)
     return compile_internal(ir.value.value, ctx, platform, asyncPlatformFns, platformDef, false, compilingNodes);
   } else if (ir.type === "Function") {
-    const ctx2: Record<string, any> = {};
+    // Compile-time type context for body compilation
+    const typeCtx: Record<string, EastTypeValue> = {};
     for (const variable of ir.value.captures) {
-      ctx2[variable.value.name] = variable.value.type;
+      typeCtx[variable.value.name] = variable.value.type;
     }
     for (const parameter of ir.value.parameters) {
-      const parameter_name = parameter.value.name;
-      ctx2[parameter_name] = parameter.value.type;
+      typeCtx[parameter.value.name] = parameter.value.type;
     }
 
-    const compiled_body = compile_internal(ir.value.body, ctx2, platform, asyncPlatformFns, platformDef, true, compilingNodes);
+    const compiled_body = compile_internal(ir.value.body, typeCtx, platform, asyncPlatformFns, platformDef, true, compilingNodes);
 
     const capture_names = ir.value.captures.map(v => v.value.name);
     const parameter_names = ir.value.parameters.map(v => v.value.name);
@@ -278,16 +303,17 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
     // Store original IR for potential serialization
     const originalIR = ir;
 
-    return (ctx: Record<string, any>) => {
-      const ctx2: Record<string, any> = {};
+    return (ctx: RuntimeContext) => {
+      // Runtime context for captured values
+      const captureCtx: RuntimeContext = {};
       for (const name of capture_names) {
-        ctx2[name] = ctx[name];
+        captureCtx[name] = getContextValue(ctx, name);
       }
 
       const fn = (...args: any) => {
-        const ctx3 = { ...ctx2 };
-        parameter_names.forEach((name, i) => ctx3[name] = args[i]);
-        return compiled_body(ctx3);
+        const fnCtx: RuntimeContext = { ...captureCtx };
+        parameter_names.forEach((name, i) => fnCtx[name] = variant("value", args[i]));
+        return compiled_body(fnCtx);
       };
 
       // Attach IR to function for serialization support
@@ -298,19 +324,27 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
         configurable: false
       });
 
+      // Attach capture values for serialization support
+      Object.defineProperty(fn, EAST_CAPTURES_SYMBOL, {
+        value: captureCtx,
+        writable: false,
+        enumerable: false,
+        configurable: false
+      });
+
       return fn;
     }
   } else if (ir.type === "AsyncFunction") {
-    const ctx2: Record<string, any> = {};
+    // Compile-time type context for body compilation
+    const typeCtx: Record<string, EastTypeValue> = {};
     for (const variable of ir.value.captures) {
-      ctx2[variable.value.name] = variable.value.type;
+      typeCtx[variable.value.name] = variable.value.type;
     }
     for (const parameter of ir.value.parameters) {
-      const parameter_name = parameter.value.name;
-      ctx2[parameter_name] = parameter.value.type;
+      typeCtx[parameter.value.name] = parameter.value.type;
     }
 
-    const compiled_body = compile_internal(ir.value.body, ctx2, platform, asyncPlatformFns, platformDef, true, compilingNodes);
+    const compiled_body = compile_internal(ir.value.body, typeCtx, platform, asyncPlatformFns, platformDef, true, compilingNodes);
 
     const capture_names = ir.value.captures.map(v => v.value.name);
     const parameter_names = ir.value.parameters.map(v => v.value.name);
@@ -318,21 +352,30 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
     // Store original IR for potential serialization
     const originalIR = ir;
 
-    return (ctx: Record<string, any>) => {
-      const ctx2: Record<string, any> = {};
+    return (ctx: RuntimeContext) => {
+      // Runtime context for captured values
+      const captureCtx: RuntimeContext = {};
       for (const name of capture_names) {
-        ctx2[name] = ctx[name];
+        captureCtx[name] = getContextValue(ctx, name);
       }
 
       const fn = (...args: any) => {
-        const ctx3 = { ...ctx2 };
-        parameter_names.forEach((name, i) => ctx3[name] = args[i]);
-        return compiled_body(ctx3); // Promise can pass through in tail position
+        const fnCtx: RuntimeContext = { ...captureCtx };
+        parameter_names.forEach((name, i) => fnCtx[name] = variant("value", args[i]));
+        return compiled_body(fnCtx); // Promise can pass through in tail position
       };
 
       // Attach IR to function for serialization support
       Object.defineProperty(fn, EAST_IR_SYMBOL, {
         value: originalIR,
+        writable: false,
+        enumerable: false,
+        configurable: false
+      });
+
+      // Attach capture values for serialization support
+      Object.defineProperty(fn, EAST_CAPTURES_SYMBOL, {
+        value: captureCtx,
         writable: false,
         enumerable: false,
         configurable: false
@@ -347,7 +390,7 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
 
     if (ir.value.isAsync) {
       // need to await the arguments
-      return async (ctx: Record<string, any>) => {
+      return async (ctx: RuntimeContext) => {
         try {
           const args: any[] = [];
           for (const compiled_arg of compiled_args) {
@@ -370,7 +413,7 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
         }
       };
     } else {
-      return (ctx: Record<string, any>) => {
+      return (ctx: RuntimeContext) => {
         try {
           return compiled_f(ctx)(...compiled_args.map(arg => arg(ctx)));
         } catch (e: unknown) {
@@ -394,7 +437,7 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
     const compiled_args = ir.value.arguments.map(argument => compile_internal(argument, ctx, platform, asyncPlatformFns, platformDef, false, compilingNodes));
     const location = ir.value.location;
 
-    return async (ctx: Record<string, any>) => {
+    return async (ctx: RuntimeContext) => {
       try {
         const args: any[] = [];
         for (const compiled_arg of compiled_args) {
@@ -435,7 +478,7 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
 
     if (ir.value.isAsync) {
       if (asyncPredicate) {
-        return async (ctx: Record<string, any>) => {
+        return async (ctx: RuntimeContext) => {
           for (const { predicate, body } of ifs) {
             if (await predicate(ctx)) {
               return await body(Object.create(ctx));
@@ -444,7 +487,7 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
           return await else_body(Object.create(ctx));
         };
       } else {
-        return async (ctx: Record<string, any>) => {
+        return async (ctx: RuntimeContext) => {
           for (const { predicate, body } of ifs) {
             if (predicate(ctx) as boolean) {
               return await body(Object.create(ctx));
@@ -454,7 +497,7 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
         };
       }
     } else {
-      return (ctx: Record<string, any>) => {
+      return (ctx: RuntimeContext) => {
         for (const { predicate, body } of ifs) {
           if (predicate(ctx) as boolean) {
             return body(Object.create(ctx));
@@ -465,7 +508,7 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
     }
   } else if (ir.type === "Match") {
     const compiled_variant = compile_internal(ir.value.variant, ctx, platform, asyncPlatformFns, platformDef, false, compilingNodes);
-    const compiled_cases: Record<string, (ctx: Record<string, any>) => any> = {};
+    const compiled_cases: Record<string, (ctx: RuntimeContext) => any> = {};
     const data_names: Record<string, string> = {};
 
     for (const { case: k, variable, body } of ir.value.cases) {
@@ -478,25 +521,25 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
 
     if (ir.value.isAsync) {
       if (ir.value.variant.value.isAsync) {
-        return async (ctx: Record<string, any>) => {
+        return async (ctx: RuntimeContext) => {
           const v: variant = await compiled_variant(ctx);
-          const ctx2 = Object.create(ctx);
-          ctx2[data_names[v.type]!] = v.value;
+          const ctx2: RuntimeContext = Object.create(ctx);
+          ctx2[data_names[v.type]!] = variant("value", v.value);
           return await compiled_cases[v.type]!(ctx2);
         };
       } else {
-        return async (ctx: Record<string, any>) => {
+        return async (ctx: RuntimeContext) => {
           const v: variant = compiled_variant(ctx);
-          const ctx2 = Object.create(ctx);
-          ctx2[data_names[v.type]!] = v.value;
+          const ctx2: RuntimeContext = Object.create(ctx);
+          ctx2[data_names[v.type]!] = variant("value", v.value);
           return await compiled_cases[v.type]!(ctx2);
         };
       }
     } else {
-      return (ctx: Record<string, any>) => {
+      return (ctx: RuntimeContext) => {
         const v: variant = compiled_variant(ctx);
-        const ctx2 = Object.create(ctx);
-        ctx2[data_names[v.type]!] = v.value;
+        const ctx2: RuntimeContext = Object.create(ctx);
+        ctx2[data_names[v.type]!] = variant("value", v.value);
         return compiled_cases[v.type]!(ctx2);
       };
     }
@@ -507,7 +550,7 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
     const label = ir.value.label.name;
 
     if (ir.value.isAsync) {
-      return async (ctx: Record<string, any>) => {
+      return async (ctx: RuntimeContext) => {
         while (await compiled_predicate(ctx)) {
           try {
             const ctx2 = Object.create(ctx);
@@ -525,7 +568,7 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
         return null;
       };
     } else {
-      return (ctx: Record<string, any>) => {
+      return (ctx: RuntimeContext) => {
         while (compiled_predicate(ctx)) {
           try {
             const ctx2 = Object.create(ctx);
@@ -555,14 +598,14 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
     const label = ir.value.label.name;
 
     if (ir.value.isAsync) {
-      return async (ctx: Record<string, any>) => {
+      return async (ctx: RuntimeContext) => {
         const array = await compiled_array(ctx);
         lockForIteration(array);
         try {
           for (const [key, value] of array.entries()) {
-            const ctx2 = Object.create(ctx);
-            ctx2[key_name] = BigInt(key);
-            ctx2[value_name] = value;
+            const ctx2: RuntimeContext = Object.create(ctx);
+            ctx2[key_name] = variant("value", BigInt(key));
+            ctx2[value_name] = variant("value", value);
             try {
               await compiled_body(ctx2);
             } catch (e: unknown) {
@@ -581,14 +624,14 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
         }
       };
     } else {
-        return (ctx: Record<string, any>) => {
+        return (ctx: RuntimeContext) => {
         const array = compiled_array(ctx);
         lockForIteration(array);
         try {
           for (const [key, value] of array.entries()) {
-            const ctx2 = Object.create(ctx);
-            ctx2[key_name] = BigInt(key);
-            ctx2[value_name] = value;
+            const ctx2: RuntimeContext = Object.create(ctx);
+            ctx2[key_name] = variant("value", BigInt(key));
+            ctx2[value_name] = variant("value", value);
             try {
               compiled_body(ctx2);
             } catch (e: unknown) {
@@ -617,13 +660,13 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
     const label = ir.value.label.name;
 
     if (ir.value.isAsync) {
-      return async (ctx: Record<string, any>) => {
+      return async (ctx: RuntimeContext) => {
         const set = await compiled_set(ctx);
         lockForIteration(set);
         try {
           for (const key of set) {
-            const ctx2 = Object.create(ctx);
-            ctx2[key_name] = key;
+            const ctx2: RuntimeContext = Object.create(ctx);
+            ctx2[key_name] = variant("value", key);
             try {
               await compiled_body(ctx2);
             } catch (e: unknown) {
@@ -642,13 +685,13 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
         }
       };
     } else {
-        return (ctx: Record<string, any>) => {
+        return (ctx: RuntimeContext) => {
         const set = compiled_set(ctx);
         lockForIteration(set);
         try {
           for (const key of set) {
-            const ctx2 = Object.create(ctx);
-            ctx2[key_name] = key;
+            const ctx2: RuntimeContext = Object.create(ctx);
+            ctx2[key_name] = variant("value", key);
             try {
               compiled_body(ctx2);
             } catch (e: unknown) {
@@ -680,14 +723,14 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
     const label = ir.value.label.name;
 
     if (ir.value.isAsync) {
-      return async (ctx: Record<string, any>) => {
+      return async (ctx: RuntimeContext) => {
         const dict = await compiled_dict(ctx);
         lockForIteration(dict);
         try {
           for (const [key, value] of dict) {
-            const ctx2 = Object.create(ctx);
-            ctx2[key_name] = key;
-            ctx2[value_name] = value;
+            const ctx2: RuntimeContext = Object.create(ctx);
+            ctx2[key_name] = variant("value", key);
+            ctx2[value_name] = variant("value", value);
             try {
               await compiled_body(ctx2);
             } catch (e: unknown) {
@@ -706,14 +749,14 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
         }
       };
     } else {
-        return (ctx: Record<string, any>) => {
+        return (ctx: RuntimeContext) => {
         const dict = compiled_dict(ctx);
         lockForIteration(dict);
         try {
           for (const [key, value] of dict) {
-            const ctx2 = Object.create(ctx);
-            ctx2[key_name] = key;
-            ctx2[value_name] = value;
+            const ctx2: RuntimeContext = Object.create(ctx);
+            ctx2[key_name] = variant("value", key);
+            ctx2[value_name] = variant("value", value);
             try {
               compiled_body(ctx2);
             } catch (e: unknown) {
@@ -736,13 +779,13 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
     // The pattern of creating a new context (e.g. a function) and then immediately invoking a block (e.g. as the function body) is very common.
     // Here we avoid creating a second context when possible, as an optimization.
     if (fresh_ctx) {
-      const compiled_statements: ((ctx: Record<string, any>) => any)[] = [];
+      const compiled_statements: ((ctx: RuntimeContext) => any)[] = [];
       for (const statement of ir.value.statements) {
         const compiled_statement = compile_internal(statement, ctx, platform, asyncPlatformFns, platformDef, true, compilingNodes);
         compiled_statements.push(compiled_statement);
       }
       if (ir.value.isAsync) {
-        return async (ctx: Record<string, any>) => {
+        return async (ctx: RuntimeContext) => {
           let ret = null;
           for (const statement of compiled_statements) {
             ret = await statement(ctx);
@@ -750,7 +793,7 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
           return ret;
         };
       } else {
-        return (ctx: Record<string, any>) => {
+        return (ctx: RuntimeContext) => {
           let ret = null;
           for (const statement of compiled_statements) {
             ret = statement(ctx);
@@ -760,13 +803,13 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
       }
     } else {
       const ctx2 = Object.create(ctx);
-      const compiled_statements: ((ctx: Record<string, any>) => any)[] = [];
+      const compiled_statements: ((ctx: RuntimeContext) => any)[] = [];
       for (const statement of ir.value.statements) {
         const compiled_statement = compile_internal(statement, ctx2, platform, asyncPlatformFns, platformDef, true, compilingNodes);
         compiled_statements.push(compiled_statement);
       }
       if (ir.value.isAsync) {
-        return async (ctx: Record<string, any>) => {
+        return async (ctx: RuntimeContext) => {
           const ctx2 = Object.create(ctx);
           let ret = null;
           for (const statement of compiled_statements) {
@@ -775,7 +818,7 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
           return ret;
         };
       } else {
-          return (ctx: Record<string, any>) => {
+          return (ctx: RuntimeContext) => {
           const ctx2 = Object.create(ctx);
           let ret = null;
           for (const statement of compiled_statements) {
@@ -789,9 +832,9 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
     const struct = compile_internal(ir.value.struct, ctx, platform, asyncPlatformFns, platformDef, false, compilingNodes);
     const field = ir.value.field;
     if (ir.value.isAsync) {
-      return async (ctx: Record<string, any>) => (await struct(ctx))[field];
+      return async (ctx: RuntimeContext) => (await struct(ctx))[field];
     } else {
-      return (ctx: Record<string, any>) => struct(ctx)[field];
+      return (ctx: RuntimeContext) => struct(ctx)[field];
     }
   } else if (ir.type === "Struct") {
     const fields = ir.value.fields.map(f => {
@@ -799,7 +842,7 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
     });
     const keys = ir.value.fields.map(f => f.name);
     if (ir.value.isAsync) {
-      return async (ctx: Record<string, any>) => {
+      return async (ctx: RuntimeContext) => {
         const fs: [string, any][] = [];
         for (const [i, a] of fields.entries()) {
           fs.push([keys[i]!, await a(ctx)]);
@@ -807,29 +850,29 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
         return Object.fromEntries(fs);
       };
     } else {
-      return (ctx: Record<string, any>) => Object.fromEntries(fields.map((a, i) => [keys[i]!, a(ctx)]));
+      return (ctx: RuntimeContext) => Object.fromEntries(fields.map((a, i) => [keys[i]!, a(ctx)]));
     }
   } else if (ir.type === "Variant") {
     const k = ir.value.case;
     const v = compile_internal(ir.value.value, ctx, platform, asyncPlatformFns, platformDef, false, compilingNodes);
     if (ir.value.isAsync) {
-      return async (ctx: Record<string, any>) => variant(k, await v(ctx));
+      return async (ctx: RuntimeContext) => variant(k, await v(ctx));
     } else {
-      return (ctx: Record<string, any>) => variant(k, v(ctx));
+      return (ctx: RuntimeContext) => variant(k, v(ctx));
     }
   } else if (ir.type === "NewRef") {
     const value = compile_internal(ir.value.value, ctx, platform, asyncPlatformFns, platformDef, false, compilingNodes);
     if (ir.value.isAsync) {
-      return async (ctx: Record<string, any>) => ref(await value(ctx));
+      return async (ctx: RuntimeContext) => ref(await value(ctx));
     } else {
-      return (ctx: Record<string, any>) => ref(value(ctx));
+      return (ctx: RuntimeContext) => ref(value(ctx));
     }
   } else if (ir.type === "NewArray") {
     const values = ir.value.values.map(a => {
       return compile_internal(a, ctx, platform, asyncPlatformFns, platformDef, false, compilingNodes)
     });
     if (ir.value.isAsync) {
-      return async (ctx: Record<string, any>) => {
+      return async (ctx: RuntimeContext) => {
         let vals: any[] = [];
         for (const a of values) {
           vals.push(await a(ctx));
@@ -837,7 +880,7 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
         return vals;
       }
     } else {
-      return (ctx: Record<string, any>) => values.map(a => a(ctx));
+      return (ctx: RuntimeContext) => values.map(a => a(ctx));
     }
   } else if (ir.type === "NewSet") {
     const values = ir.value.values.map(a => {
@@ -845,7 +888,7 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
     });
     const keyComparer = compareFor(ir.value.type.value);
     if (ir.value.isAsync) {
-      return (ctx: Record<string, any>) => {
+      return (ctx: RuntimeContext) => {
         const keys: any[] = [];
         for (const a of values) {
           keys.push(a(ctx));
@@ -853,7 +896,7 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
         return new SortedSet(keys, keyComparer);
       }
     } else {
-      return (ctx: Record<string, any>) => new SortedSet(values.map(a => a(ctx)), keyComparer);
+      return (ctx: RuntimeContext) => new SortedSet(values.map(a => a(ctx)), keyComparer);
     }
   } else if (ir.type === "NewDict") {
     const values = ir.value.values.map(({key, value}) => {
@@ -861,7 +904,7 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
     });
     const keyComparer = compareFor(ir.value.type.value.key);
     if (ir.value.isAsync) {
-      return async (ctx: Record<string, any>) => {
+      return async (ctx: RuntimeContext) => {
         const entries: [any, any][] = [];
         for (const [k, v] of values) {
           entries.push([await k(ctx), await v(ctx)]);
@@ -869,27 +912,27 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
         return new SortedMap(entries, keyComparer);
       }
     } else {
-      return (ctx: Record<string, any>) => new SortedMap(values.map(([k, v]) => [k(ctx), v(ctx)]), keyComparer);
+      return (ctx: RuntimeContext) => new SortedMap(values.map(([k, v]) => [k(ctx), v(ctx)]), keyComparer);
     }
   } else if (ir.type === "Return") {
     const compiled_value = compile_internal(ir.value.value, ctx, platform, asyncPlatformFns, platformDef, false, compilingNodes);
     if (ir.value.isAsync) {
-      return async (ctx: Record<string, any>) => {
+      return async (ctx: RuntimeContext) => {
         throw new ReturnException(await compiled_value(ctx));
       };
     } else {
-      return (ctx: Record<string, any>): any => {
+      return (ctx: RuntimeContext): any => {
         throw new ReturnException(compiled_value(ctx));
       };
     }
   } else if (ir.type === "Continue") {
     const label = ir.value.label;
-    return (_ctx: Record<string, any>): any => {
+    return (_ctx: RuntimeContext): any => {
       throw new ContinueException(label.name);
     };
   } else if (ir.type === "Break") {
     const label = ir.value.label;
-    return (_ctx: Record<string, any>): any => {
+    return (_ctx: RuntimeContext): any => {
       throw new BreakException(label.name);
     };
   } else if (ir.type === "Builtin") {
@@ -920,10 +963,10 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
 
       if (ir.value.builtin === "RegexContains") {
         const compiledRegex = new RegExp(pattern, flags);
-        return (ctx: Record<string, any>) => compiledRegex.test(textArg(ctx));
+        return (ctx: RuntimeContext) => compiledRegex.test(textArg(ctx));
       } else if (ir.value.builtin === "RegexIndexOf") {
         const compiledRegex = new RegExp(pattern, flags);
-        return (ctx: Record<string, any>) => {
+        return (ctx: RuntimeContext) => {
           const text = textArg(ctx);
           const codeUnitIndex = text.search(compiledRegex);
           if (codeUnitIndex === -1) return -1n;
@@ -964,7 +1007,7 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
               i += char.length;
               let char2 = replacement[i];
               if (char2 === undefined) {
-                return (_ctx: Record<string, any>) => { throw new EastError(`invalid regex replacement string: unescaped $ at end of string`, { location: ir.value.arguments[3].value.location }) };
+                return (_ctx: RuntimeContext) => { throw new EastError(`invalid regex replacement string: unescaped $ at end of string`, { location: ir.value.arguments[3].value.location }) };
               } else if (char2 === '$') {
                 i += 1;
               } else if (char2 >= '1' && char2 <= '9') {
@@ -981,37 +1024,37 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
                 char2 = replacement[i];
                 while (true) {
                   if (char2 === undefined) {
-                    return (_ctx: Record<string, any>) => { throw new EastError(`invalid regex replacement string: unterminated group name in $<...>`, { location: ir.value.arguments[3].value.location }) };
+                    return (_ctx: RuntimeContext) => { throw new EastError(`invalid regex replacement string: unterminated group name in $<...>`, { location: ir.value.arguments[3].value.location }) };
                   }
                   if (char2 === '>') {
                     break;
                   }
                   if (!((char2 >= '0' && char2 <= '9') || (char2 >= 'a' && char2 <= 'z') || (char2 >= 'A' && char2 <= 'Z') || char2 === '_')) {
-                    return (_ctx: Record<string, any>) => { throw new EastError(`invalid regex replacement string: invalid character ${JSON.stringify(char2)} in group name in $<...>`, { location: ir.value.arguments[3].value.location }) };
+                    return (_ctx: RuntimeContext) => { throw new EastError(`invalid regex replacement string: invalid character ${JSON.stringify(char2)} in group name in $<...>`, { location: ir.value.arguments[3].value.location }) };
                   }
                   i += 1;
                   char2 = replacement[i];
                 }
                 if (i === init_i) {
-                  return (_ctx: Record<string, any>) => { throw new EastError(`invalid regex replacement string: empty group name in $<>`, { location: ir.value.arguments[3].value.location }) };
+                  return (_ctx: RuntimeContext) => { throw new EastError(`invalid regex replacement string: empty group name in $<>`, { location: ir.value.arguments[3].value.location }) };
                 }
                 i += 1; // for closing >
               } else {
-                return (_ctx: Record<string, any>) => { throw new EastError(`invalid regex replacement string: unescaped $ at $${char2}`, { location: ir.value.arguments[3].value.location }) };
+                return (_ctx: RuntimeContext) => { throw new EastError(`invalid regex replacement string: unescaped $ at $${char2}`, { location: ir.value.arguments[3].value.location }) };
               }
             } else {
               i += char.length;
             }
           }
 
-          return (ctx: Record<string, any>) => {
+          return (ctx: RuntimeContext) => {
             const text = textArg(ctx);
             return text.replaceAll(compiledRegex, replacement);
           };
         } else {
           // PARTIAL OPTIMIZATION: Pattern and flags constant, replacement dynamic
           const replacementArg = args[3]!;
-          return (ctx: Record<string, any>) => {
+          return (ctx: RuntimeContext) => {
             const text = textArg(ctx);
             const replacement = replacementArg(ctx);
 
@@ -1072,7 +1115,7 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
 
     const evaluator = builtin_evaluators[ir.value.builtin](ir.value.location, platformDef, ...ir.value.type_parameters);
     if (argsAsync) {
-      return async (ctx: Record<string, any>) => {
+      return async (ctx: RuntimeContext) => {
         const args_resolved: any[] = [];
         for (const a of args) {
           args_resolved.push(await a(ctx));
@@ -1080,7 +1123,7 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
         return evaluator(...args_resolved);
       }
     } else {
-      return (ctx: Record<string, any>) => evaluator(...args.map(a => a(ctx)));
+      return (ctx: RuntimeContext) => evaluator(...args.map(a => a(ctx)));
     }
   } else if (ir.type === "Platform") {
     let argsAsync = false;
@@ -1115,7 +1158,7 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
     }
 
     if (argsAsync) {
-      return async (ctx: Record<string, any>) => {
+      return async (ctx: RuntimeContext) => {
         const args_resolved: any[] = [];
         for (const a of args) {
           args_resolved.push(await a(ctx));
@@ -1123,7 +1166,7 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
         return evaluator(...args_resolved); // evaluator can return Promise unconditionally in tail position if the platform function is async
       }
     } else {
-      return (ctx: Record<string, any>) => evaluator(...args.map(a => a(ctx))); // evaluator can return Promise unconditionally in tail position if the platform function is async
+      return (ctx: RuntimeContext) => evaluator(...args.map(a => a(ctx))); // evaluator can return Promise unconditionally in tail position if the platform function is async
     }
   } else {
     throw new Error(`Unhandled IR type ${(ir satisfies never as IR).type} at ${printLocationValue((ir as IR).value.location)}`); // The `satisfies never` here ensures that this branch is unreachable if all IR types are handled
