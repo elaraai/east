@@ -127,6 +127,17 @@ export function analyzeIR<T extends IR>(
   // Working data for tracking during analysis
   const analysis = new Map<IR, { captured?: boolean }>();
 
+  // Pre-populate analysis Map with definedBy nodes from external context.
+  // This is needed when analyzing deserialized functions with captures - the external
+  // context contains variable metadata with definedBy references that need to be in
+  // the analysis Map so nested functions can properly mark them as captured.
+  for (const varName of Object.keys(ctx)) {
+    const varMeta = ctx[varName];
+    if (varMeta?.definedBy && !analysis.has(varMeta.definedBy)) {
+      analysis.set(varMeta.definedBy, { captured: varMeta.captured });
+    }
+  }
+
   // Build a lookup map for platform functions
   const platformMap = new Map<string, PlatformDefinition>();
   for (const p of platformDef) {
