@@ -31,6 +31,7 @@ import { isVariant } from "../containers/variant.js";
 import { RefExpr } from "./ref.js";
 import { AsyncFunctionExpr, createAsyncFunctionExpr, type CallableAsyncFunctionExpr } from "./asyncfunction.js";
 import { PatchType, type PatchTypeOf } from "../patch/index.js";
+import { type CompileOptions } from "../eastir.js";
 
 /** A factory function to help build `Expr` from AST.
  * We inject this into each concrete `Expr` type so they can create new expressions recursively, without having circular dependencies between JavaScript modules.
@@ -83,10 +84,11 @@ export function fromAst<T extends AST>(ast: T): Expr<T["type"]> {
  *
  * @param f the function expression to compile
  * @param platform the platform functions available during compilation
+ * @param options compilation options
  * @returns the compiled function
  */
-export function compile<I extends any[], O>(f: FunctionExpr<I, O>, platform: PlatformFunction[]): (...inputs: { [K in keyof I]: ValueTypeOf<I[K]> }) => ValueTypeOf<O>  {
-  return f.toIR().compile(platform);
+export function compile<I extends any[], O>(f: FunctionExpr<I, O>, platform: PlatformFunction[], options: CompileOptions = {}): (...inputs: { [K in keyof I]: ValueTypeOf<I[K]> }) => ValueTypeOf<O>  {
+  return f.toIR().compile(platform, options);
 }
 
 /**
@@ -94,10 +96,11 @@ export function compile<I extends any[], O>(f: FunctionExpr<I, O>, platform: Pla
  *
  * @param f the async function expression to compile
  * @param platform the platform functions available during compilation
+ * @param options compilation options
  * @returns the compiled async function
  */
-export function compileAsync<I extends any[], O>(f: AsyncFunctionExpr<I, O>, platform: PlatformFunction[]): (...inputs: { [K in keyof I]: ValueTypeOf<I[K]> }) => Promise<ValueTypeOf<O>>  {
-  return f.toIR().compile(platform);
+export function compileAsync<I extends any[], O>(f: AsyncFunctionExpr<I, O>, platform: PlatformFunction[], options: CompileOptions = {}): (...inputs: { [K in keyof I]: ValueTypeOf<I[K]> }) => Promise<ValueTypeOf<O>>  {
+  return f.toIR().compile(platform, options);
 }
 
 /**

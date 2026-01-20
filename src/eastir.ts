@@ -6,7 +6,22 @@ import { type ValueTypeOf } from "./types.js";
 import type { AsyncFunctionIR, FunctionIR } from "./ir.js";
 import { compile_internal, ReturnException, EAST_IR_SYMBOL } from "./compile.js";
 import type { PlatformFunction } from "./platform.js";
-import { analyzeIR } from "./analyze.js";
+import { analyzeIR, type AnalyzeOptions } from "./analyze.js";
+
+/**
+ * Options for compiling East IR to JavaScript.
+ */
+export interface CompileOptions {
+  /**
+   * When true, allows compilation to proceed even if platform functions are missing.
+   * Missing platform functions will be replaced with stubs that throw runtime errors
+   * when called. This is useful for validating IR structure or partial compilation
+   * without requiring all platform implementations.
+   *
+   * @default false
+   */
+  allowMissingPlatform?: boolean;
+}
 
 /** A helper class wrapping East's "intermediate representation" (IR) for a free function.
  * The IR can be serialized and saved, or compiled so that the function can be executed.
@@ -23,10 +38,21 @@ export class EastIR<Inputs extends any[], Output extends any> {
 
   /** Compile the function for execution in JavaScript using a closure-compiler technique.
    * Platform functions must be provided for the function to evaluate.
+   *
+   * @param platform - Array of platform function implementations
+   * @param options - Compilation options
+   * @param options.allowMissingPlatform - When true, allows compilation even if platform functions
+   *   are missing. Missing functions will throw runtime errors when called.
    */
-  compile(platform: PlatformFunction[]): (...inputs: { [K in keyof Inputs]: ValueTypeOf<Inputs[K]> }) => ValueTypeOf<Output> {
+  compile(platform: PlatformFunction[], options: CompileOptions = {}): (...inputs: { [K in keyof Inputs]: ValueTypeOf<Inputs[K]> }) => ValueTypeOf<Output> {
+    // Build analyze options from compile options
+    const analyzeOptions: AnalyzeOptions = {};
+    if (options.allowMissingPlatform !== undefined) {
+      analyzeOptions.allowMissingPlatform = options.allowMissingPlatform;
+    }
+
     // Analyse the IR
-    const analyzed_ir = analyzeIR(this.ir, platform, {});
+    const analyzed_ir = analyzeIR(this.ir, platform, {}, analyzeOptions);
 
     // compile the function (with no variables in environment)
     const platformFns = Object.fromEntries(platform.map(fn => [fn.name, fn.fn]));
@@ -78,10 +104,21 @@ export class AsyncEastIR<Inputs extends any[], Output extends any> {
   /** Compile the async function for execution in JavaScript using a closure-compiler technique.
    * Platform functions must be provided for the function to evaluate, which may return `Promise`s.
    * The compiled function itself returns a `Promise`.
+   *
+   * @param platform - Array of platform function implementations
+   * @param options - Compilation options
+   * @param options.allowMissingPlatform - When true, allows compilation even if platform functions
+   *   are missing. Missing functions will throw runtime errors when called.
    */
-  compile(platform: PlatformFunction[]): (...inputs: { [K in keyof Inputs]: ValueTypeOf<Inputs[K]> }) => Promise<ValueTypeOf<Output>> {
+  compile(platform: PlatformFunction[], options: CompileOptions = {}): (...inputs: { [K in keyof Inputs]: ValueTypeOf<Inputs[K]> }) => Promise<ValueTypeOf<Output>> {
+    // Build analyze options from compile options
+    const analyzeOptions: AnalyzeOptions = {};
+    if (options.allowMissingPlatform !== undefined) {
+      analyzeOptions.allowMissingPlatform = options.allowMissingPlatform;
+    }
+
     // Analyse the IR
-    const analyzed_ir = analyzeIR(this.ir, platform, {});
+    const analyzed_ir = analyzeIR(this.ir, platform, {}, analyzeOptions);
 
     // compile the function (with no variables in environment)
     const platformFns = Object.fromEntries(platform.map(fn => [fn.name, fn.fn]));

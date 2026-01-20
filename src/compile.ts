@@ -1145,16 +1145,28 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
     if (typeParams.length > 0 && platformFn?.type_parameters && platformFn.type_parameters.length > 0) {
       // Generic platform function - fn is a factory that takes type params
       if (!platformFn.fn) {
-        throw new Error(`Generic platform function '${ir.value.name}' has no implementation at ${printLocationValue(ir.value.location)}`);
+        // Missing generic platform function - create stub that throws at runtime
+        const name = ir.value.name;
+        const location = ir.value.location;
+        evaluator = () => {
+          throw new EastError(`Platform function '${name}' is not available`, { location });
+        };
+      } else {
+        evaluator = platformFn.fn(...typeParams);
       }
-      evaluator = platformFn.fn(...typeParams);
     } else {
       // Non-generic - use platform map for backwards compatibility
       const platformEvaluator = platform[ir.value.name];
       if (platformEvaluator === undefined) {
-        throw new Error(`Evaluator for platform function ${JSON.stringify(ir.value.name)} not found at ${printLocationValue(ir.value.location)}`);
+        // Missing platform function - create stub that throws at runtime
+        const name = ir.value.name;
+        const location = ir.value.location;
+        evaluator = () => {
+          throw new EastError(`Platform function '${name}' is not available`, { location });
+        };
+      } else {
+        evaluator = platformEvaluator;
       }
-      evaluator = platformEvaluator;
     }
 
     if (argsAsync) {

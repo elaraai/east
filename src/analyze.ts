@@ -94,6 +94,20 @@ export interface VariableMetadata {
 export type VariableContext = Record<string, VariableMetadata>;
 
 /**
+ * Options for IR analysis.
+ */
+export interface AnalyzeOptions {
+  /**
+   * When true, allows compilation to proceed even if platform functions are missing.
+   * Missing platform functions will be replaced with stubs that throw runtime errors.
+   * This is useful for validating IR structure without requiring all platform implementations.
+   *
+   * @default false
+   */
+  allowMissingPlatform?: boolean;
+}
+
+/**
  * Analyze IR tree and produce enriched IR for JavaScript backend.
  *
  * This function:
@@ -104,6 +118,7 @@ export type VariableContext = Record<string, VariableMetadata>;
  * @param ir - The IR tree to analyze
  * @param platformDef - Platform function definitions with async metadata
  * @param ctx - Variable context mapping variable names to their metadata
+ * @param options - Analysis options
  * @returns Enriched IR with metadata fields populated
  * @throws {Error} If IR is invalid (type errors, undefined variables, etc.)
  *
@@ -123,6 +138,7 @@ export function analyzeIR<T extends IR>(
   ir: T,
   platformDef: PlatformDefinition[],
   ctx: VariableContext = {},
+  options: AnalyzeOptions = {},
 ): AnalyzedIR<T> {
   // Working data for tracking during analysis
   const analysis = new Map<IR, { captured?: boolean }>();
@@ -418,10 +434,33 @@ export function analyzeIR<T extends IR>(
       // Look up platform function
       const platformFn = platformMap.get(node.value.name);
       if (!platformFn) {
-        throw new Error(
-          `Platform function '${node.value.name}' not found ` +
-          `at ${printLocationValue(node.value.location)}`
-        );
+        if (!options.allowMissingPlatform) {
+          throw new Error(
+            `Platform function '${node.value.name}' not found ` +
+            `at ${printLocationValue(node.value.location)}`
+          );
+        }
+
+        // allowMissingPlatform is true - analyze arguments without type validation
+        // and let compile inject a runtime error stub
+        const analyzedArgs: AnalyzedIR[] = [];
+        for (const arg of node.value.arguments) {
+          const argAnalyzed = visit(arg, ctx, expectedReturnType);
+          analyzedArgs.push(argAnalyzed);
+          if (argAnalyzed.value.isAsync) {
+            isAsync = true;
+          }
+        }
+
+        // Return analyzed Platform node with analyzed arguments (no type validation)
+        return {
+          ...node,
+          value: {
+            ...node.value,
+            arguments: analyzedArgs as IR[],
+            isAsync,
+          }
+        } as AnalyzedIR;
       }
 
       // Handle generic platform functions
