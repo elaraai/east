@@ -1036,6 +1036,18 @@ export type PlatformDefinition<Inputs extends EastType[], Output extends EastTyp
   implement: (fn: (...args: { [K in keyof Inputs]: ValueTypeOf<Inputs[K]> }) => Output extends NullType ? null | undefined | void : ValueTypeOf<Output>) => PlatformFunction,
 }
 
+/** Options for defining platform functions. */
+export interface PlatformOptions {
+  /**
+   * When true, compilation succeeds even if the platform function is not provided.
+   * A runtime error will be thrown if the function is called without an implementation.
+   * This is useful for platform functions that may not be available in all environments.
+   *
+   * @default false
+   */
+  optional?: boolean;
+}
+
 /** Create a callable helper to invoke a synchronous platform function.
  *
  * Platform functions provide access to external capabilities (logging, I/O, database access, etc.)
@@ -1044,8 +1056,9 @@ export type PlatformDefinition<Inputs extends EastType[], Output extends EastTyp
  * @param name - The name of the platform function
  * @param input_types - Array of input parameter types for the platform function
  * @param output_type - The return type of the platform function
+ * @param options - Optional configuration for the platform function
  * @returns A callable function that creates Platform AST nodes when invoked
- * 
+ *
  * @see {@link asyncPlatform} for defining asynchronous platform functions (that return `Promise`s)
  *
  * @example
@@ -1061,17 +1074,29 @@ const myFunction = East.function([], NullType, ($) => {
 
 // Provide the implementation when compiling
 const platform = [
-  log.implement(false, (message: string) => console.log(message)),
+  log.implement((message: string) => console.log(message)),
 ];
 const compiled = myFunction.toIR().compile(platform);
 compiled(); // Logs "Hello, world!" to the console
+ * ```
+ *
+ * @example
+ * ```ts
+// Define an optional platform function that may not be available
+const analytics = East.platform("analytics", [StringType], NullType, { optional: true });
+
+// This compiles even without providing an analytics implementation
+// If called at runtime without implementation, it throws an error
  * ```
  */
 export function platform<const Inputs extends EastType[], Output extends EastType>(
   name: string,
   input_types: Inputs,
   output_type: Output,
+  options: PlatformOptions = {},
 ): PlatformDefinition<Inputs, Output> {
+  const isOptional = options.optional ?? false;
+
   const fn = (...args: any[]): any => {
     if (args.length !== input_types.length) {
       throw new Error(`Platform function ${name} expected ${input_types.length} arguments, got ${args.length}`);
@@ -1108,6 +1133,7 @@ export function platform<const Inputs extends EastType[], Output extends EastTyp
       type_parameters: [],
       arguments: argAsts,
       async: false,
+      optional: isOptional,
     }) as ExprType<Output>;
   };
 
@@ -1152,8 +1178,9 @@ export type AsyncPlatformDefinition<Inputs extends EastType[], Output extends Ea
  * @param name - The name of the asynchronous platform function
  * @param input_types - Array of input parameter types for the platform function
  * @param output_type - The return type of the platform function
+ * @param options - Optional configuration for the platform function
  * @returns A callable function that creates Platform AST nodes when invoked
- * 
+ *
  * @see {@link platform} for defining synchronous platform functions
  *
  * @example
@@ -1171,14 +1198,17 @@ const platform = [
   readFile.implement((filename: string) => fs.promises.readFile(filename, 'utf-8')),
 ];
 const compiled = myFunction.toIR().compile(platform);
-compiled(); // Logs "Hello, world!" to the console
+compiled(); // Returns file contents
  * ```
  */
 export function asyncPlatform<const Inputs extends EastType[], Output extends EastType>(
   name: string,
   input_types: Inputs,
   output_type: Output,
+  options: PlatformOptions = {},
 ): AsyncPlatformDefinition<Inputs, Output> {
+  const isOptional = options.optional ?? false;
+
   const fn = (...args: any[]): any => {
     if (args.length !== input_types.length) {
       throw new Error(`Platform function ${name} expected ${input_types.length} arguments, got ${args.length}`);
@@ -1215,6 +1245,7 @@ export function asyncPlatform<const Inputs extends EastType[], Output extends Ea
       type_parameters: [],
       arguments: argAsts,
       async: true,
+      optional: isOptional,
     }) as ExprType<Output>;
   };
 
@@ -1415,9 +1446,11 @@ export function genericPlatform<
   name: string,
   typeParams: TParams,
   inputs: Inputs,
-  output: Output
+  output: Output,
+  options: PlatformOptions = {},
 ): GenericPlatformDefinition<TParams, Inputs, Output> {
   const numTypeParams = typeParams.length;
+  const isOptional = options.optional ?? false;
 
   const fn = (type_args: EastType[], ...valueArgs: any[]): any => {
     // Validate type args array
@@ -1498,6 +1531,7 @@ export function genericPlatform<
       type_parameters: type_args,
       arguments: argAsts,
       async: false,
+      optional: isOptional,
     });
   };
 
@@ -1608,9 +1642,11 @@ export function asyncGenericPlatform<
   name: string,
   typeParams: TParams,
   inputs: Inputs,
-  output: Output
+  output: Output,
+  options: PlatformOptions = {},
 ): AsyncGenericPlatformDefinition<TParams, Inputs, Output> {
   const numTypeParams = typeParams.length;
+  const isOptional = options.optional ?? false;
 
   const fn = (type_args: EastType[], ...valueArgs: any[]): any => {
     // Validate type args array
@@ -1691,6 +1727,7 @@ export function asyncGenericPlatform<
       type_parameters: type_args,
       arguments: argAsts,
       async: true,
+      optional: isOptional,
     });
   };
 

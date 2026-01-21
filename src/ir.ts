@@ -282,6 +282,9 @@ export type PlatformIR = variant<"Platform", {
   type_parameters: EastTypeValue[],
   arguments: any[], // IR[]
   async: boolean,
+  /** When true, compilation succeeds even if the platform function is not provided.
+   * A runtime error will be thrown if the function is called without an implementation. */
+  optional: boolean,
 }>;
 
 /** The common intermediate representation (IR) for East code.
@@ -346,5 +349,5 @@ export const IRType = RecursiveType(ir => VariantType({
   Continue: StructType({ type: EastTypeType, location: ArrayType(LocationType), label: IRLabelType }),
   Break: StructType({ type: EastTypeType, location: ArrayType(LocationType), label: IRLabelType }),
   Builtin: StructType({ type: EastTypeType, location: ArrayType(LocationType), builtin: StringType, type_parameters: ArrayType(EastTypeType), arguments: ArrayType(ir) }),
-  Platform: StructType({ type: EastTypeType, location: ArrayType(LocationType), name: StringType, type_parameters: ArrayType(EastTypeType), arguments: ArrayType(ir), async: BooleanType }),
+  Platform: StructType({ type: EastTypeType, location: ArrayType(LocationType), name: StringType, type_parameters: ArrayType(EastTypeType), arguments: ArrayType(ir), async: BooleanType, optional: BooleanType }),
 }));

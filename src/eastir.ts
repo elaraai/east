@@ -23,10 +23,12 @@ export class EastIR<Inputs extends any[], Output extends any> {
 
   /** Compile the function for execution in JavaScript using a closure-compiler technique.
    * Platform functions must be provided for the function to evaluate.
+   *
+   * @param platform - Array of platform function implementations
    */
   compile(platform: PlatformFunction[]): (...inputs: { [K in keyof Inputs]: ValueTypeOf<Inputs[K]> }) => ValueTypeOf<Output> {
     // Analyse the IR
-    const analyzed_ir = analyzeIR(this.ir, platform, {});
+    const analyzed_ir = analyzeIR(this.ir, platform);
 
     // compile the function (with no variables in environment)
     const platformFns = Object.fromEntries(platform.map(fn => [fn.name, fn.fn]));
@@ -78,10 +80,12 @@ export class AsyncEastIR<Inputs extends any[], Output extends any> {
   /** Compile the async function for execution in JavaScript using a closure-compiler technique.
    * Platform functions must be provided for the function to evaluate, which may return `Promise`s.
    * The compiled function itself returns a `Promise`.
+   *
+   * @param platform - Array of platform function implementations
    */
   compile(platform: PlatformFunction[]): (...inputs: { [K in keyof Inputs]: ValueTypeOf<Inputs[K]> }) => Promise<ValueTypeOf<Output>> {
     // Analyse the IR
-    const analyzed_ir = analyzeIR(this.ir, platform, {});
+    const analyzed_ir = analyzeIR(this.ir, platform);
 
     // compile the function (with no variables in environment)
     const platformFns = Object.fromEntries(platform.map(fn => [fn.name, fn.fn]));

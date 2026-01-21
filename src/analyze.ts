@@ -418,10 +418,34 @@ export function analyzeIR<T extends IR>(
       // Look up platform function
       const platformFn = platformMap.get(node.value.name);
       if (!platformFn) {
-        throw new Error(
-          `Platform function '${node.value.name}' not found ` +
-          `at ${printLocationValue(node.value.location)}`
-        );
+        // Allow missing platforms only if this specific platform function is marked as optional in the IR
+        if (!node.value.optional) {
+          throw new Error(
+            `Platform function '${node.value.name}' not found ` +
+            `at ${printLocationValue(node.value.location)}`
+          );
+        }
+
+        // allowMissingPlatform is true - analyze arguments without type validation
+        // and let compile inject a runtime error stub
+        const analyzedArgs: AnalyzedIR[] = [];
+        for (const arg of node.value.arguments) {
+          const argAnalyzed = visit(arg, ctx, expectedReturnType);
+          analyzedArgs.push(argAnalyzed);
+          if (argAnalyzed.value.isAsync) {
+            isAsync = true;
+          }
+        }
+
+        // Return analyzed Platform node with analyzed arguments (no type validation)
+        return {
+          ...node,
+          value: {
+            ...node.value,
+            arguments: analyzedArgs as IR[],
+            isAsync,
+          }
+        } as AnalyzedIR;
       }
 
       // Handle generic platform functions
