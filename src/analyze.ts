@@ -94,20 +94,6 @@ export interface VariableMetadata {
 export type VariableContext = Record<string, VariableMetadata>;
 
 /**
- * Options for IR analysis.
- */
-export interface AnalyzeOptions {
-  /**
-   * When true, allows compilation to proceed even if platform functions are missing.
-   * Missing platform functions will be replaced with stubs that throw runtime errors.
-   * This is useful for validating IR structure without requiring all platform implementations.
-   *
-   * @default false
-   */
-  allowMissingPlatform?: boolean;
-}
-
-/**
  * Analyze IR tree and produce enriched IR for JavaScript backend.
  *
  * This function:
@@ -118,7 +104,6 @@ export interface AnalyzeOptions {
  * @param ir - The IR tree to analyze
  * @param platformDef - Platform function definitions with async metadata
  * @param ctx - Variable context mapping variable names to their metadata
- * @param options - Analysis options
  * @returns Enriched IR with metadata fields populated
  * @throws {Error} If IR is invalid (type errors, undefined variables, etc.)
  *
@@ -138,7 +123,6 @@ export function analyzeIR<T extends IR>(
   ir: T,
   platformDef: PlatformDefinition[],
   ctx: VariableContext = {},
-  options: AnalyzeOptions = {},
 ): AnalyzedIR<T> {
   // Working data for tracking during analysis
   const analysis = new Map<IR, { captured?: boolean }>();
@@ -434,7 +418,8 @@ export function analyzeIR<T extends IR>(
       // Look up platform function
       const platformFn = platformMap.get(node.value.name);
       if (!platformFn) {
-        if (!options.allowMissingPlatform) {
+        // Allow missing platforms only if this specific platform function is marked as optional in the IR
+        if (!node.value.optional) {
           throw new Error(
             `Platform function '${node.value.name}' not found ` +
             `at ${printLocationValue(node.value.location)}`

@@ -325,8 +325,8 @@ describe("platform functions", () => {
         });
     });
 
-    describe("allowMissingPlatform option", () => {
-        test("throws at compile time by default when platform function is missing", () => {
+    describe("optional platform functions", () => {
+        test("throws at compile time by default when required platform function is missing", () => {
             const log = East.platform("log", [StringType], NullType);
 
             const f = East.function([StringType], NullType, ($, input) => {
@@ -340,28 +340,28 @@ describe("platform functions", () => {
             }, /Platform function 'log' not found/);
         });
 
-        test("compiles successfully with allowMissingPlatform: true", () => {
-            const log = East.platform("log", [StringType], NullType);
+        test("compiles successfully when platform function is marked as optional", () => {
+            const log = East.platform("log", [StringType], NullType, { optional: true });
 
             const f = East.function([StringType], NullType, ($, input) => {
                 $(log(input));
                 $.return(null);
             });
 
-            // Should not throw with allowMissingPlatform: true
-            const f_compiled = East.compile(f, [], { allowMissingPlatform: true });
+            // Should not throw when platform is marked as optional
+            const f_compiled = East.compile(f, []);
             assert.ok(f_compiled !== undefined);
         });
 
-        test("throws at runtime when calling missing platform function", () => {
-            const log = East.platform("log", [StringType], NullType);
+        test("throws at runtime when calling missing optional platform function", () => {
+            const log = East.platform("log", [StringType], NullType, { optional: true });
 
             const f = East.function([StringType], NullType, ($, input) => {
                 $(log(input));
                 $.return(null);
             });
 
-            const f_compiled = East.compile(f, [], { allowMissingPlatform: true });
+            const f_compiled = East.compile(f, []);
 
             // Calling the function should throw at runtime
             assert.throws(() => {
@@ -369,8 +369,8 @@ describe("platform functions", () => {
             }, /Platform function 'log' is not available/);
         });
 
-        test("works when code path does not call missing platform function", () => {
-            const log = East.platform("log", [StringType], NullType);
+        test("works when code path does not call missing optional platform function", () => {
+            const log = East.platform("log", [StringType], NullType, { optional: true });
 
             const f = East.function([IntegerType], IntegerType, ($, input) => {
                 // Only call log if input is negative (which we won't do in our test)
@@ -381,43 +381,41 @@ describe("platform functions", () => {
                 $.return(input);
             });
 
-            const f_compiled = East.compile(f, [], { allowMissingPlatform: true });
+            const f_compiled = East.compile(f, []);
 
             // Should work fine when the code path doesn't call the missing function
             const result = f_compiled(42n);
             assert.strictEqual(result, 42n);
         });
 
-        test("allows partial platform implementation", () => {
-            // Define log but don't implement it - test that partial platforms work
-            const _log = East.platform("log", [StringType], NullType);
-            const double = East.platform("double", [IntegerType], IntegerType);
+        test("optional platform works when implementation is provided", () => {
+            const log = East.platform("log", [StringType], NullType, { optional: true });
 
-            // Only provide implementation for double, not log
+            let logged: string | null = null;
             const platform = [
-                double.implement((x: bigint) => x * 2n),
+                log.implement((s: string) => { logged = s; }),
             ];
 
-            const f = East.function([IntegerType], IntegerType, ($, input) => {
-                // Use double (which is implemented) but not _log
-                $.return(double(input));
+            const f = East.function([StringType], NullType, ($, input) => {
+                $(log(input));
+                $.return(null);
             });
 
-            const f_compiled = East.compile(f, platform, { allowMissingPlatform: true });
+            const f_compiled = East.compile(f, platform);
+            f_compiled("hello");
 
-            const result = f_compiled(21n);
-            assert.strictEqual(result, 42n);
+            assert.strictEqual(logged, "hello");
         });
 
-        test("works with async functions", async () => {
-            const asyncLog = East.asyncPlatform("asyncLog", [StringType], NullType);
+        test("works with async platform functions", async () => {
+            const asyncLog = East.asyncPlatform("asyncLog", [StringType], NullType, { optional: true });
 
             const f = East.asyncFunction([StringType], StringType, ($, input) => {
                 $(asyncLog(input));
                 $.return(input);
             });
 
-            const f_compiled = East.compileAsync(f, [], { allowMissingPlatform: true });
+            const f_compiled = East.compileAsync(f, []);
 
             // Calling should throw at runtime
             await assert.rejects(async () => {
@@ -430,7 +428,8 @@ describe("platform functions", () => {
                 "genericLog",
                 ["T"],
                 ["T"],
-                NullType
+                NullType,
+                { optional: true }
             );
 
             const f = East.function([IntegerType], NullType, ($, input) => {
@@ -438,12 +437,57 @@ describe("platform functions", () => {
                 $.return(null);
             });
 
-            const f_compiled = East.compile(f, [], { allowMissingPlatform: true });
+            const f_compiled = East.compile(f, []);
 
             // Calling should throw at runtime
             assert.throws(() => {
                 f_compiled(42n);
             }, /Platform function 'genericLog' is not available/);
+        });
+
+        test("works with async generic platform functions", async () => {
+            const asyncGenericLog = East.asyncGenericPlatform(
+                "asyncGenericLog",
+                ["T"],
+                ["T"],
+                NullType,
+                { optional: true }
+            );
+
+            const f = East.asyncFunction([IntegerType], NullType, ($, input) => {
+                $(asyncGenericLog([IntegerType], input));
+                $.return(null);
+            });
+
+            const f_compiled = East.compileAsync(f, []);
+
+            // Calling should throw at runtime
+            await assert.rejects(async () => {
+                await f_compiled(42n);
+            }, /Platform function 'asyncGenericLog' is not available/);
+        });
+
+        test("required platform fails compile, optional platform succeeds", () => {
+            // One required, one optional
+            const requiredPlatform = East.platform("required", [StringType], NullType);
+            const optionalPlatform = East.platform("optional", [StringType], NullType, { optional: true });
+
+            // Using only optional should compile
+            const f1 = East.function([StringType], NullType, ($, input) => {
+                $(optionalPlatform(input));
+                $.return(null);
+            });
+            const f1_compiled = East.compile(f1, []);
+            assert.ok(f1_compiled !== undefined);
+
+            // Using required without implementation should fail
+            const f2 = East.function([StringType], NullType, ($, input) => {
+                $(requiredPlatform(input));
+                $.return(null);
+            });
+            assert.throws(() => {
+                East.compile(f2, []);
+            }, /Platform function 'required' not found/);
         });
     });
 });

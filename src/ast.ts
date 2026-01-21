@@ -306,6 +306,9 @@ export type PlatformAST = {
   type_parameters: EastType[],
   arguments: AST[],
   async: boolean,
+  /** When true, compilation succeeds even if the platform function is not provided.
+   * A runtime error will be thrown if the function is called without an implementation. */
+  optional: boolean,
 };
 
 /** @internal */
