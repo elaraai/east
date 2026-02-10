@@ -20,6 +20,8 @@ export { StringExpr } from './string.js';
 export { BlobExpr } from './blob.js';
 export { RefExpr } from './ref.js';
 export { ArrayExpr } from './array.js';
+export { VectorExpr } from './vector.js';
+export { MatrixExpr } from './matrix.js';
 export { SetExpr } from './set.js';
 export { DictExpr } from './dict.js';
 export { StructExpr } from './struct.js';
@@ -39,6 +41,8 @@ import DateTimeLib from './libs/datetime.js';
 import StringLib from './libs/string.js';
 import BlobLib from './libs/blob.js';
 import ArrayLib from './libs/array.js';
+import VectorLib from './libs/vector.js';
+import MatrixLib from './libs/matrix.js';
 import SetLib from './libs/set.js';
 import DictLib from './libs/dict.js';
 
@@ -714,6 +718,18 @@ export const East = {
    * ```
    */
   Array: ArrayLib,
+
+  /**
+   * Standard library functions for Vector operations.
+   * Provides creation utilities for creating vectors.
+   */
+  Vector: VectorLib,
+
+  /**
+   * Standard library functions for Matrix operations.
+   * Provides creation utilities for creating matrices.
+   */
+  Matrix: MatrixLib,
 
   /**
    * Standard library functions for Set operations.

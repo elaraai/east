@@ -3,6 +3,7 @@
  * Dual-licensed under AGPL-3.0 and commercial license. See LICENSE for details.
  */
 import { type EastType, printIdentifier, type ValueTypeOf, TypeWiden, isTypeEqual, NeverType, NullType, BooleanType, IntegerType, FloatType, StringType, DateTimeType, BlobType, ArrayType, SetType, DictType, StructType, VariantType } from "../types.js";
+import { matrix } from "../containers/matrix.js";
 import { compareFor } from "../comparison.js";
 import { SortedMap } from "../containers/sortedmap.js";
 import { SortedSet } from "../containers/sortedset.js";
@@ -379,6 +380,31 @@ export function printFor(
   } else if (type.type === "AsyncFunction") {
     // This is just a convenience printer - async functions cannot be serialized/deserialized
     return (_: (x: any) => any, _ctx?: EastPrintValueContext) => `async (${type.value.inputs.map((x: EastTypeValue) => printTypeValue(x)).join(", ")}) => ${printTypeValue(type.value.output)}`;
+  } else if (type.type === "Vector") {
+    const elementPrinter = printFor(type.value, typeCtx);
+    const isBoolean = type.value.type === "Boolean";
+    return (v: Float64Array | BigInt64Array | Uint8Array, _ctx?: EastPrintValueContext) => {
+      const parts: string[] = [];
+      for (let i = 0; i < v.length; i++) {
+        parts.push(elementPrinter(isBoolean ? v[i] !== 0 : v[i]));
+      }
+      return `vec[${parts.join(", ")}]`;
+    };
+  } else if (type.type === "Matrix") {
+    const elementPrinter = printFor(type.value, typeCtx);
+    const isBoolean = type.value.type === "Boolean";
+    return (v: any, _ctx?: EastPrintValueContext) => {
+      const { data, rows, cols } = v;
+      const rowParts: string[] = [];
+      for (let r = 0; r < rows; r++) {
+        const elemParts: string[] = [];
+        for (let c = 0; c < cols; c++) {
+          elemParts.push(elementPrinter(isBoolean ? data[r * cols + c] !== 0 : data[r * cols + c]));
+        }
+        rowParts.push(`[${elemParts.join(", ")}]`);
+      }
+      return `mat[${rowParts.join(", ")}]`;
+    };
   } else if (type.type === "Recursive") {
     const ret = typeCtx[typeCtx.length - Number(type.value)];
     if (ret === undefined) {
@@ -508,6 +534,10 @@ const createParser = (type: EastTypeValue, frozen: boolean, typeCtx: EastParseTy
       throw new Error(`Cannot parse .Function`);
     case "AsyncFunction":
       throw new Error(`Cannot parse .AsyncFunction`);
+    case "Vector":
+      return createVectorParser(type.value, frozen);
+    case "Matrix":
+      return createMatrixParser(type.value, frozen);
     case "Never":
       return (_input: string, pos: number, _ctx?: EastParseValueContext) => { throw new ParseError(`Attempted to parse value of type .Never`, pos) };
     case "Recursive":
@@ -1446,6 +1476,149 @@ const createVariantParser = (cases: { name: string, type: EastTypeValue }[], fro
   }
   typeCtx.pop();
   return ret;
+}
+
+const createVectorParser = (element_type: EastTypeValue, frozen: boolean): Parser<Float64Array | BigInt64Array | Uint8Array> => {
+  const elementParser = createParser(element_type, frozen);
+  return (input: string, pos: number, _ctx?: EastParseValueContext) => {
+    pos = consumeWhitespace(input, pos);
+
+    if (!input.startsWith('vec[', pos)) {
+      throw new ParseError("expected 'vec[' to start vector", pos);
+    }
+
+    pos = consumeWhitespace(input, pos + 4);
+    const values: any[] = [];
+
+    // Handle empty vector
+    if (input[pos] === ']') {
+      return { value: _createTypedArray(element_type, values, frozen), position: pos + 1 };
+    }
+
+    let elementIndex = 0;
+    while (true) {
+      try {
+        const { value: elementValue, position: elementPos } = elementParser(input, pos);
+        values.push(elementValue);
+        pos = consumeWhitespace(input, elementPos);
+      } catch (e) {
+        if (e instanceof ParseError) {
+          const newPath = `[${elementIndex}]` + (e.path ? e.path : '');
+          throw new ParseError(e.message, e.position, newPath);
+        }
+        throw e;
+      }
+
+      if (input[pos] === ']') {
+        return { value: _createTypedArray(element_type, values, frozen), position: pos + 1 };
+      }
+
+      if (input[pos] !== ',') {
+        throw new ParseError("expected ',' or ']' after vector element", pos);
+      }
+
+      pos = consumeWhitespace(input, pos + 1);
+      elementIndex++;
+    }
+  };
+};
+
+const createMatrixParser = (element_type: EastTypeValue, frozen: boolean): Parser<any> => {
+  const elementParser = createParser(element_type, frozen);
+  return (input: string, pos: number, _ctx?: EastParseValueContext) => {
+    pos = consumeWhitespace(input, pos);
+
+    if (!input.startsWith('mat[', pos)) {
+      throw new ParseError("expected 'mat[' to start matrix", pos);
+    }
+
+    pos = consumeWhitespace(input, pos + 4);
+    const rows: any[][] = [];
+
+    // Handle empty matrix
+    if (input[pos] === ']') {
+      return { value: matrix(_createTypedArray(element_type, [], frozen), 0, 0), position: pos + 1 };
+    }
+
+    while (true) {
+      // Parse a row: [elem, elem, ...]
+      pos = consumeWhitespace(input, pos);
+      if (input[pos] !== '[') {
+        throw new ParseError("expected '[' to start matrix row", pos);
+      }
+      pos = consumeWhitespace(input, pos + 1);
+
+      const row: any[] = [];
+
+      // Handle empty row
+      if (input[pos] !== ']') {
+        let colIndex = 0;
+        while (true) {
+          try {
+            const { value: elementValue, position: elementPos } = elementParser(input, pos);
+            row.push(elementValue);
+            pos = consumeWhitespace(input, elementPos);
+          } catch (e) {
+            if (e instanceof ParseError) {
+              const newPath = `[${rows.length}][${colIndex}]` + (e.path ? e.path : '');
+              throw new ParseError(e.message, e.position, newPath);
+            }
+            throw e;
+          }
+
+          if (input[pos] === ']') {
+            break;
+          }
+
+          if (input[pos] !== ',') {
+            throw new ParseError("expected ',' or ']' after matrix element", pos);
+          }
+
+          pos = consumeWhitespace(input, pos + 1);
+          colIndex++;
+        }
+      }
+
+      pos = consumeWhitespace(input, pos + 1); // consume ']'
+      rows.push(row);
+
+      if (input[pos] === ']') {
+        // Validate all rows have the same number of columns
+        const numCols = rows.length > 0 ? rows[0]!.length : 0;
+        for (let i = 1; i < rows.length; i++) {
+          if (rows[i]!.length !== numCols) {
+            throw new ParseError(`matrix row ${i} has ${rows[i]!.length} columns, expected ${numCols}`, pos);
+          }
+        }
+        const flat = rows.flat();
+        const numRows = rows.length;
+        return { value: matrix(_createTypedArray(element_type, flat, frozen), numRows, numCols), position: pos + 1 };
+      }
+
+      if (input[pos] !== ',') {
+        throw new ParseError("expected ',' or ']' after matrix row", pos);
+      }
+
+      pos = consumeWhitespace(input, pos + 1);
+    }
+  };
+};
+
+function _createTypedArray(element_type: EastTypeValue, values: any[], frozen: boolean): Float64Array | BigInt64Array | Uint8Array {
+  let result: Float64Array | BigInt64Array | Uint8Array;
+  if (element_type.type === "Float") {
+    result = new Float64Array(values);
+  } else if (element_type.type === "Integer") {
+    result = new BigInt64Array(values);
+  } else if (element_type.type === "Boolean") {
+    result = new Uint8Array(values.map(v => v ? 1 : 0));
+  } else {
+    throw new Error(`Unsupported vector/matrix element type: ${element_type.type}`);
+  }
+  if (frozen) {
+    Object.freeze(result);
+  }
+  return result;
 }
 
 /**

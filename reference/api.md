@@ -18,6 +18,8 @@ Complete function signatures, types, and arguments for the East language.
 - [DateTime Expressions](#datetime-expressions)
 - [Blob Expressions](#blob-expressions)
 - [Array Expressions](#array-expressions)
+- [Vector Expressions](#vector-expressions)
+- [Matrix Expressions](#matrix-expressions)
 - [Set Expressions](#set-expressions)
 - [Dict Expressions](#dict-expressions)
 - [Struct Expressions](#struct-expressions)
@@ -140,12 +142,17 @@ import { NullType, BooleanType, IntegerType, FloatType, StringType, DateTimeType
 ### Collection Types
 
 ```typescript
-import { ArrayType, SetType, DictType, RefType } from "@elaraai/east";
+import { ArrayType, SetType, DictType, RefType, VectorType, MatrixType } from "@elaraai/east";
 
 ArrayType(IntegerType)                    // Array of integers
 SetType(StringType)                       // Set of strings
 DictType(StringType, IntegerType)         // Dict with string keys, integer values
 RefType(IntegerType)                      // Mutable reference to integer
+VectorType(FloatType)                     // Vector of floats (Float64Array)
+VectorType(IntegerType)                   // Vector of integers (BigInt64Array)
+VectorType(BooleanType)                   // Vector of booleans (Uint8Array)
+MatrixType(FloatType)                     // Matrix of floats
+MatrixType(IntegerType)                   // Matrix of integers
 ```
 
 ### Compound Types
@@ -513,6 +520,80 @@ For `ArrayExpr<T>` where `T` is the element type:
 
 ---
 
+## Vector Expressions
+
+For `VectorExpr<T>` where `T` is `FloatType`, `IntegerType`, or `BooleanType`:
+
+Vectors are **mutable**, contiguous typed arrays optimized for numeric computation and zero-copy interop with ML libraries. In JavaScript, vectors are backed by `Float64Array`, `BigInt64Array`, or `Uint8Array`.
+
+### Read Operations
+
+| Signature | Description |
+|-----------|-------------|
+| `vec.length(): IntegerExpr` | Number of elements |
+| `vec.get(index: IntegerExpr \| bigint): ExprType<T>` **❗** | Get element at index (throws if out of bounds) |
+
+### Mutation Operations
+
+| Signature | Description |
+|-----------|-------------|
+| `vec.set(index: IntegerExpr \| bigint, value: ExprType<T> \| ValueTypeOf<T>): NullExpr` **❗** | Set element at index (throws if out of bounds) |
+
+### Functional Operations (Immutable)
+
+| Signature | Description |
+|-----------|-------------|
+| `vec.slice(start: IntegerExpr \| bigint, end: IntegerExpr \| bigint): VectorExpr<T>` **❗** | Extract subvector [start, end) |
+| `vec.concat(other: VectorExpr<T>): VectorExpr<T>` | Concatenate two vectors |
+| `vec.map<U>(fn: ($: BlockBuilder, elem: ExprType<T>, idx: IntegerExpr) => ExprType<U>): VectorExpr<U>` | Transform each element |
+| `vec.reduce<U>(combineFn: FunctionExpr<[U, T, IntegerType], U>, init: ExprType<U>): ExprType<U>` | Fold with initial value |
+
+### Conversion Operations
+
+| Signature | Description |
+|-----------|-------------|
+| `vec.toArray(): ArrayExpr<T>` | Convert to Array (copies) |
+| `vec.toMatrix(rows: IntegerExpr \| bigint, cols: IntegerExpr \| bigint): MatrixExpr<T>` **❗** | Reshape to matrix (throws if rows*cols != length) |
+
+---
+
+## Matrix Expressions
+
+For `MatrixExpr<T>` where `T` is `FloatType`, `IntegerType`, or `BooleanType`:
+
+Matrices are **mutable**, contiguous typed arrays in row-major order. In JavaScript, the `matrix()` container wraps a typed array with row/col shape metadata.
+
+### Read Operations
+
+| Signature | Description |
+|-----------|-------------|
+| `mat.rows(): IntegerExpr` | Number of rows |
+| `mat.cols(): IntegerExpr` | Number of columns |
+| `mat.get(row: IntegerExpr \| bigint, col: IntegerExpr \| bigint): ExprType<T>` **❗** | Get element (throws if out of bounds) |
+| `mat.getRow(row: IntegerExpr \| bigint): VectorExpr<T>` **❗** | Get row as vector copy (throws if out of bounds) |
+| `mat.getCol(col: IntegerExpr \| bigint): VectorExpr<T>` **❗** | Get column as vector copy (throws if out of bounds) |
+
+### Mutation Operations
+
+| Signature | Description |
+|-----------|-------------|
+| `mat.set(row: IntegerExpr \| bigint, col: IntegerExpr \| bigint, value: ExprType<T> \| ValueTypeOf<T>): NullExpr` **❗** | Set element (throws if out of bounds) |
+
+### Functional Operations (Immutable)
+
+| Signature | Description |
+|-----------|-------------|
+| `mat.transpose(): MatrixExpr<T>` | Transpose (returns new matrix with rows/cols swapped) |
+
+### Conversion Operations
+
+| Signature | Description |
+|-----------|-------------|
+| `mat.toVector(): VectorExpr<T>` | Flatten to vector (row-major order) |
+| `mat.toArray(): ArrayExpr<ArrayType<T>>` | Convert to nested Array of Arrays |
+
+---
+
 ## Set Expressions
 
 For `SetExpr<K>` where `K` is the key/element type:
@@ -800,6 +881,24 @@ For `RefExpr<T>` where `T` is the value type:
 | `East.Array.range(start: IntegerExpr \| bigint, end: IntegerExpr \| bigint, step?: IntegerExpr \| bigint): ArrayExpr<IntegerType>` | Generate integer range [start, end) |
 | `East.Array.linspace(start: FloatExpr \| number, stop: FloatExpr \| number, size: IntegerExpr \| bigint): ArrayExpr<FloatType>` | Generate equally-spaced floats [start, stop] |
 | `East.Array.generate<T>(size: IntegerExpr \| bigint, valueType: T, valueFn: ($: BlockBuilder, i: IntegerExpr) => ExprType<T>): ArrayExpr<T>` | Generate using function |
+
+### East.Vector
+
+| Signature | Description |
+|-----------|-------------|
+| `East.Vector.zeros(length: IntegerExpr \| bigint): VectorExpr<FloatType>` | Create zero-filled float vector |
+| `East.Vector.ones(length: IntegerExpr \| bigint): VectorExpr<FloatType>` | Create one-filled float vector |
+| `East.Vector.fill<T>(length: IntegerExpr \| bigint, value: ExprType<T> \| ValueTypeOf<T>): VectorExpr<T>` | Create vector filled with value (element type inferred) |
+| `East.Vector.fromArray<T>(arr: ArrayExpr<T>): VectorExpr<T>` | Convert Array to Vector |
+
+### East.Matrix
+
+| Signature | Description |
+|-----------|-------------|
+| `East.Matrix.zeros(rows: IntegerExpr \| bigint, cols: IntegerExpr \| bigint): MatrixExpr<FloatType>` | Create zero-filled float matrix |
+| `East.Matrix.ones(rows: IntegerExpr \| bigint, cols: IntegerExpr \| bigint): MatrixExpr<FloatType>` | Create one-filled float matrix |
+| `East.Matrix.fill<T>(rows: IntegerExpr \| bigint, cols: IntegerExpr \| bigint, value: ExprType<T> \| ValueTypeOf<T>): MatrixExpr<T>` | Create matrix filled with value (element type inferred) |
+| `East.Matrix.fromArray<T>(arr: ArrayExpr<ArrayType<T>>): MatrixExpr<T>` | Convert nested Array to Matrix |
 
 ### East.Set
 

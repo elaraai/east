@@ -17,6 +17,7 @@ import {
   FloatType,
   IntegerType,
   isSubtype,
+  MatrixType,
   NeverType,
   NullType,
   printType,
@@ -25,11 +26,13 @@ import {
   StringType,
   StructType,
   TypeUnion,
-  VariantType
+  VariantType,
+  VectorType
 } from "../types.js";
 import { isVariant, variant } from "../containers/variant.js";
 import { Expr, AstSymbol, TypeSymbol } from "./expr.js";
 import { isRef } from "../containers/ref.js";
+import { isMatrix } from "../containers/matrix.js";
 
 /**
  * Convert a value or expression directly to AST without creating intermediate expressions
@@ -49,8 +52,30 @@ export function valueOrExprToAst(value: any): AST {
     return { ast_type: "Value", type: StringType, value, location: get_location() };
   } else if (value instanceof Date) {
     return { ast_type: "Value", type: DateTimeType, value, location: get_location() };
+  } else if (value instanceof Float64Array) {
+    const values = Array.from(value).map(v => ({ ast_type: "Value" as const, type: FloatType, value: v, location: get_location() }));
+    return { ast_type: "NewVector", type: VectorType(FloatType), values, location: get_location() };
+  } else if (value instanceof BigInt64Array) {
+    const values: AST[] = [];
+    for (let i = 0; i < value.length; i++) values.push({ ast_type: "Value", type: IntegerType, value: value[i]!, location: get_location() });
+    return { ast_type: "NewVector", type: VectorType(IntegerType), values, location: get_location() };
   } else if (value instanceof Uint8Array) {
     return { ast_type: "Value", type: BlobType, value, location: get_location() };
+  } else if (isMatrix(value)) {
+    const m = value as any;
+    let elementType: EastType;
+    if (m.data instanceof Float64Array) elementType = FloatType;
+    else if (m.data instanceof BigInt64Array) elementType = IntegerType;
+    else elementType = BooleanType;
+    const values: AST[] = [];
+    for (let i = 0; i < m.data.length; i++) {
+      if (elementType.type === "Boolean") {
+        values.push({ ast_type: "Value", type: BooleanType, value: m.data[i] !== 0, location: get_location() });
+      } else {
+        values.push({ ast_type: "Value", type: elementType, value: m.data[i], location: get_location() });
+      }
+    }
+    return { ast_type: "NewMatrix", type: MatrixType(elementType), values, rows: m.rows, cols: m.cols, location: get_location() };
   } else if (typeof value === "function") {
     throw new Error(`Unable to convert function to AST without knowing it's type`);
   } else if (isRef(value)) {
@@ -294,6 +319,35 @@ export function valueOrExprToAstTyped<T extends EastType>(value: any, type: T, v
     }
 
     return Expr.asyncFunction(type.inputs, type.output, value)[AstSymbol] as any; // location?
+  } else if (type.type === "Vector") {
+    const elemType = type.element;
+    if (value instanceof Float64Array || value instanceof BigInt64Array || value instanceof Uint8Array) {
+      const values: AST[] = [];
+      for (let i = 0; i < value.length; i++) {
+        if (elemType.type === "Boolean") {
+          values.push({ ast_type: "Value", type: elemType, value: (value as Uint8Array)[i]! !== 0, location });
+        } else {
+          values.push({ ast_type: "Value", type: elemType, value: value[i]!, location });
+        }
+      }
+      return { ast_type: "NewVector", type, values, location } as any;
+    }
+    throw new Error(`Expected TypedArray for Vector type but got ${typeof value}`);
+  } else if (type.type === "Matrix") {
+    if (isMatrix(value)) {
+      const m = value as any;
+      const elemType = type.element;
+      const values: AST[] = [];
+      for (let i = 0; i < m.data.length; i++) {
+        if (elemType.type === "Boolean") {
+          values.push({ ast_type: "Value", type: elemType, value: m.data[i] !== 0, location });
+        } else {
+          values.push({ ast_type: "Value", type: elemType, value: m.data[i], location });
+        }
+      }
+      return { ast_type: "NewMatrix", type, values, rows: m.rows, cols: m.cols, location } as any;
+    }
+    throw new Error(`Expected matrix for Matrix type but got ${typeof value}`);
   } else {
     throw new Error(`Type conversion not implemented for ${printType(type)}`);
   }

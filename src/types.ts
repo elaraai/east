@@ -6,6 +6,7 @@ import { isRef, type ref } from "./containers/ref.js";
 import { SortedMap } from "./containers/sortedmap.js";
 import { SortedSet } from "./containers/sortedset.js";
 import { type variant, variant_symbol } from "./containers/variant.js";
+import { isMatrix, type matrix } from "./containers/matrix.js";
 
 /**
  * Error thrown when type operations encounter incompatible types.
@@ -271,6 +272,8 @@ function validateNotMutuallyRecursive(type: EastType | string, allowedMarker: Re
     } else if (t.type === "AsyncFunction") {
       t.inputs.forEach(input => check(input, allowed));
       check(t.output, allowed);
+    } else if (t.type === "Vector" || t.type === "Matrix") {
+      check(t.element, allowed);
     }
     // Primitive types don't need recursion
   }
@@ -391,6 +394,22 @@ export function AsyncFunctionType<const I extends any[], const O extends any>(in
   return { type: "AsyncFunction", inputs, output };
 };
 
+export type VectorType<T = any> = { type: "Vector", element: T };
+export function VectorType<const T>(element: T): VectorType<T> {
+  if (typeof element !== "string" && (element as any).type !== "Float" && (element as any).type !== "Integer" && (element as any).type !== "Boolean") {
+    throw new Error(`Vector element type must be Float, Integer, or Boolean, got ${printType(element as EastType)}`);
+  }
+  return { type: "Vector", element };
+};
+
+export type MatrixType<T = any> = { type: "Matrix", element: T };
+export function MatrixType<const T>(element: T): MatrixType<T> {
+  if (typeof element !== "string" && (element as any).type !== "Float" && (element as any).type !== "Integer" && (element as any).type !== "Boolean") {
+    throw new Error(`Matrix element type must be Float, Integer, or Boolean, got ${printType(element as EastType)}`);
+  }
+  return { type: "Matrix", element };
+};
+
 
 /**
  * Union of all East types.
@@ -415,7 +434,9 @@ export type EastType =
   | VariantType
   | RecursiveType
   | FunctionType
-  | AsyncFunctionType;
+  | AsyncFunctionType
+  | VectorType
+  | MatrixType;
 
 /**
  * Union of all East data types (excludes {@link FunctionType} and {@link AsyncFunctionType}).
@@ -439,7 +460,9 @@ export type DataType =
   | DictType
   | StructType
   | VariantType
-  | RecursiveType;
+  | RecursiveType
+  | VectorType
+  | MatrixType;
 
 /**
  * Union of all immutable East types.
@@ -503,6 +526,8 @@ export function isDataType(type: EastType, recursive_type?: EastType): type is D
     return true;
   } else if (type.type === "Recursive") {
     return type.node === recursive_type ? true : isDataType(type.node, type);
+  } else if (type.type === "Vector" || type.type === "Matrix") {
+    return true;
   } else if (type.type === "Function") {
     return false;
   } else if (type.type === "AsyncFunction") {
@@ -540,6 +565,8 @@ export function isImmutableType(type: EastType, recursive_type?: EastType): type
     return false;
   } else if (type.type === "Dict") {
     // Dict are mutable
+    return false;
+  } else if (type.type === "Vector" || type.type === "Matrix") {
     return false;
   } else if (type.type === "Struct") {
     for (const field_type of Object.values(type.fields)) {
@@ -604,6 +631,14 @@ export type ValueTypeOf<T> =
   T extends VariantType<infer U> ? Exclude<{ [K in keyof U]: U[K] extends undefined ? never : { type: K, value: ValueTypeOf<Exclude<U[K], undefined>>, [variant_symbol]: null } }[keyof U], undefined> :
   T extends RecursiveType<infer U> ? ValueTypeOf<U> :
   T extends RecursiveTypeMarker ? any : // make TypeScript faster - don't expand further
+  T extends VectorType<FloatType> ? Float64Array :
+  T extends VectorType<IntegerType> ? BigInt64Array :
+  T extends VectorType<BooleanType> ? Uint8Array :
+  T extends VectorType ? Float64Array | BigInt64Array | Uint8Array :
+  T extends MatrixType<FloatType> ? matrix<Float64Array> :
+  T extends MatrixType<IntegerType> ? matrix<BigInt64Array> :
+  T extends MatrixType<BooleanType> ? matrix<Uint8Array> :
+  T extends MatrixType ? matrix :
   T extends FunctionType<infer I, infer O> ? (...inputs: { [K in keyof I]: ValueTypeOf<I[K]> }) => ValueTypeOf<O> :
   T extends AsyncFunctionType<infer I, infer O> ? (...inputs: { [K in keyof I]: ValueTypeOf<I[K]> }) => Promise<ValueTypeOf<O>> :
   any;
@@ -627,6 +662,8 @@ export type EastTypeOf<V> =
   V extends number ? FloatType :
   V extends string ? StringType :
   V extends Date ? DateTimeType :
+  V extends Float64Array ? VectorType<FloatType> :
+  V extends BigInt64Array ? VectorType<IntegerType> :
   V extends Uint8Array ? BlobType :
   V extends ref<infer U> ? RefType<EastTypeOf<U>> :
   V extends Array<infer U> ? ArrayType<EastTypeOf<U>> :
@@ -785,6 +822,18 @@ function isTypeEqualImpl(t1: EastType, t2: EastType, r1: EastType, r2: EastType)
   } else if (t1.type === "Dict") {
     if (t2.type === "Dict") {
       return isTypeEqual(t1.key, t2.key, r1, r2) && isTypeEqual(t1.value, t2.value, r1, r2);
+    } else {
+      return false;
+    }
+  } else if (t1.type === "Vector") {
+    if (t2.type === "Vector") {
+      return isTypeEqual(t1.element, t2.element, r1, r2);
+    } else {
+      return false;
+    }
+  } else if (t1.type === "Matrix") {
+    if (t2.type === "Matrix") {
+      return isTypeEqual(t1.element, t2.element, r1, r2);
     } else {
       return false;
     }
@@ -951,6 +1000,17 @@ export function isValueOf(value: any, type: EastType, node_type?: EastType, node
     const t = type.cases[(value as variant).type];
     if (t === undefined) { return false };
     return isValueOf((value as variant).value, t, node_type, nodes_visited);
+  } else if (type.type === "Vector") {
+    if (type.element.type === "Float") return value instanceof Float64Array;
+    if (type.element.type === "Integer") return value instanceof BigInt64Array;
+    if (type.element.type === "Boolean") return value instanceof Uint8Array;
+    return false;
+  } else if (type.type === "Matrix") {
+    if (!isMatrix(value)) return false;
+    if (type.element.type === "Float") return value.data instanceof Float64Array;
+    if (type.element.type === "Integer") return value.data instanceof BigInt64Array;
+    if (type.element.type === "Boolean") return value.data instanceof Uint8Array;
+    return false;
   } else if (type.type === "Recursive") {
     if (node_type === type.node) {
       if (nodes_visited!.has(value)) {
@@ -1036,6 +1096,10 @@ export function printType(type: EastType, stack: EastType[] = []): string {
     const ret = `.Variant [${Object.entries(type.cases).map(([k, t]) => `(name=${JSON.stringify(k)}, type=${printType(t, stack)})`).join(", ")}]`;
     stack.pop();
     return ret;
+  } else if (type.type === "Vector") {
+    return `.Vector ${printType(type.element, stack)}`;
+  } else if (type.type === "Matrix") {
+    return `.Matrix ${printType(type.element, stack)}`;
   } else if (type.type === "Recursive") {
     // TODO update for our new recursive type representation
     const idx = stack.indexOf(type.node);
@@ -1184,6 +1248,18 @@ function isSubtypeImpl(t1: EastType, t2: EastType): boolean {
   } else if (t1.type === "Array") {
     if (t2.type === "Array") {
       return isTypeEqual(t1.value, t2.value);
+    } else {
+      return false;
+    }
+  } else if (t1.type === "Vector") {
+    if (t2.type === "Vector") {
+      return isTypeEqual(t1.element, t2.element);
+    } else {
+      return false;
+    }
+  } else if (t1.type === "Matrix") {
+    if (t2.type === "Matrix") {
+      return isTypeEqual(t1.element, t2.element);
     } else {
       return false;
     }
@@ -1346,6 +1422,18 @@ export function TypeUnion<T1 extends EastType, T2 extends EastType>(t1: T1, t2: 
       } else {
         throw new TypeMismatchError(`Cannot union ${printType(t1)} with ${printType(t2)}: incompatible types`)
       }
+    } else if (t1.type === "Vector") {
+      if (t2.type === "Vector") {
+        return VectorType(TypeEqual(t1.element, t2.element)) as TypeUnion<T1, T2>;
+      } else {
+        throw new TypeMismatchError(`Cannot union ${printType(t1)} with ${printType(t2)}: incompatible types`)
+      }
+    } else if (t1.type === "Matrix") {
+      if (t2.type === "Matrix") {
+        return MatrixType(TypeEqual(t1.element, t2.element)) as TypeUnion<T1, T2>;
+      } else {
+        throw new TypeMismatchError(`Cannot union ${printType(t1)} with ${printType(t2)}: incompatible types`)
+      }
     } else if (t1.type === "Set") {
       if (t2.type === "Set") {
         return SetType(TypeEqual(t1.key, t2.key)) as TypeUnion<T1, T2>;
@@ -1489,6 +1577,18 @@ export function TypeIntersect<T1 extends EastType, T2 extends EastType>(t1: T1, 
       } else {
         throw new TypeMismatchError(`Cannot intersect ${printType(t1)} with ${printType(t2)}: incompatible types`)
       }
+    } else if (t1.type === "Vector") {
+      if (t2.type === "Vector") {
+        return VectorType(TypeEqual(t1.element, t2.element)) as TypeIntersect<T1, T2>;
+      } else {
+        throw new TypeMismatchError(`Cannot intersect ${printType(t1)} with ${printType(t2)}: incompatible types`)
+      }
+    } else if (t1.type === "Matrix") {
+      if (t2.type === "Matrix") {
+        return MatrixType(TypeEqual(t1.element, t2.element)) as TypeIntersect<T1, T2>;
+      } else {
+        throw new TypeMismatchError(`Cannot intersect ${printType(t1)} with ${printType(t2)}: incompatible types`)
+      }
     } else if (t1.type === "Set") {
       if (t2.type === "Set") {
         return SetType(TypeEqual(t1.key, t2.key)) as TypeIntersect<T1, T2>;
@@ -1608,6 +1708,18 @@ export function TypeEqual<T1 extends EastType, T2 extends EastType>(t1: T1, t2: 
     } else if (t1.type === "Array") {
       if (t2.type === "Array") {
         return ArrayType(TypeEqual(t1.value, t2.value, r1, r2)) as T1;
+      } else {
+        throw new TypeMismatchError(`${printType(t1)} is not equal to ${printType(t2)}: incompatible types`)
+      }
+    } else if (t1.type === "Vector") {
+      if (t2.type === "Vector") {
+        return VectorType(TypeEqual(t1.element, t2.element, r1, r2)) as T1;
+      } else {
+        throw new TypeMismatchError(`${printType(t1)} is not equal to ${printType(t2)}: incompatible types`)
+      }
+    } else if (t1.type === "Matrix") {
+      if (t2.type === "Matrix") {
+        return MatrixType(TypeEqual(t1.element, t2.element, r1, r2)) as T1;
       } else {
         throw new TypeMismatchError(`${printType(t1)} is not equal to ${printType(t2)}: incompatible types`)
       }
@@ -1745,6 +1857,18 @@ export function TypeWiden(t1: EastType, t2: EastType): EastType {
     } else if (t1.type === "Array") {
       if (t2.type === "Array") {
         return ArrayType(TypeWiden(t1.value, t2.value));
+      } else {
+        throw new TypeMismatchError(`Cannot widen ${printType(t1)} with ${printType(t2)}: incompatible types`)
+      }
+    } else if (t1.type === "Vector") {
+      if (t2.type === "Vector") {
+        return VectorType(TypeEqual(t1.element, t2.element));
+      } else {
+        throw new TypeMismatchError(`Cannot widen ${printType(t1)} with ${printType(t2)}: incompatible types`)
+      }
+    } else if (t1.type === "Matrix") {
+      if (t2.type === "Matrix") {
+        return MatrixType(TypeEqual(t1.element, t2.element));
       } else {
         throw new TypeMismatchError(`Cannot widen ${printType(t1)} with ${printType(t2)}: incompatible types`)
       }

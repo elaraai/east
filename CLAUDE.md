@@ -59,7 +59,7 @@ Our JavaScript compiler uses a simple and robust closure-compiler technique to p
 
 This file contains mandatory requirements for:
 - **TypeDoc documentation** for all public APIs (classes, methods, types, functions)
-- **USAGE.md documentation** patterns for end-user facing documentation
+- **SKILL.md documentation** patterns for end-user facing documentation
 - **Testing standards** for the compliance test suite in `/test`
 
 Key highlights:
@@ -71,7 +71,7 @@ Key highlights:
   - Examples show typical usage patterns (no compile flow required)
   - Use `@throws {ErrorType} <description>` format
   - No `mcp__east-mcp__east_compile` validation needed
-- USAGE.md MUST follow precise table formatting and example structure
+- SKILL.md MUST follow precise table formatting and example structure
 - All functionality MUST have comprehensive test coverage in `/test`
 
 **See [STANDARDS.md](./STANDARDS.md) for complete, detailed requirements.**

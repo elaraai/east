@@ -9,7 +9,7 @@ All contributors MUST follow these standards for documentation and testing. Thes
 ## Table of Contents
 
 - [TypeDoc Documentation Standards](#typedoc-documentation-standards)
-- [USAGE.md Documentation Standards](#usagemd-documentation-standards)
+- [SKILL.md Documentation Standards](#usagemd-documentation-standards)
 - [Testing Standards](#testing-standards)
 
 ---
@@ -359,9 +359,9 @@ export function compile(expr: IR, platform: Platform): Function { ... }
 
 ---
 
-## USAGE.md Documentation Standards
+## SKILL.md Documentation Standards
 
-`USAGE.md` is the **end-user facing documentation** for the East language. It MUST follow these precise formatting and organization standards.
+`SKILL.md` is the **end-user facing documentation** for the East language. It MUST follow these precise formatting and organization standards.
 
 ### Type Section Structure
 
@@ -594,12 +594,12 @@ $(assert.throws(expression))              // Expects error
 **Before committing:**
 1. ✅ All public APIs have TypeDoc comments following these standards
 2. ✅ All TypeDoc examples in **expression classes** (`/src/expr/` and `/src/expr/libs/`) compile successfully (validated with `mcp__east-mcp__east_compile`)
-3. ✅ USAGE.md documentation follows the formatting and organization standards
+3. ✅ SKILL.md documentation follows the formatting and organization standards
 4. ✅ All new functionality has comprehensive test coverage
 5. ✅ All tests pass: `npm run test`
 6. ✅ Linting passes: `npm run lint`
 
 **When in doubt, refer to:**
 - `/src/expr/blob.ts` for TypeDoc examples
-- `/USAGE.md` sections for Array, Dict, Set for USAGE.md examples
+- `/SKILL.md` sections for Array, Dict, Set for SKILL.md examples
 - `/test/blob.spec.ts` and `/test/array.spec.ts` for testing examples

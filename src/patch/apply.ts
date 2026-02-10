@@ -36,7 +36,9 @@ export function applyFor(type: EastTypeValue | EastType, ctx: ApplyContext = { a
     t.type === "Float" ||
     t.type === "String" ||
     t.type === "DateTime" ||
-    t.type === "Blob"
+    t.type === "Blob" ||
+    t.type === "Vector" ||
+    t.type === "Matrix"
   ) {
     const equal = equalFor(t);
     const print = printFor(t);

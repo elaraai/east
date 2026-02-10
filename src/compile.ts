@@ -23,6 +23,7 @@ import type { DateTimeFormatToken } from "./datetime_format/types.js";
 import { EastTypeValueType, isTypeValueEqual, type EastTypeValue, expandTypeValue, type DictTypeValue, type SetTypeValue, type ArrayTypeValue } from "./type_of_type.js";
 import type { AnalyzedIR } from "./analyze.js";
 import { ref } from "./containers/ref.js";
+import { matrix } from "./containers/matrix.js";
 import type { PlatformFunction } from "./platform.js";
 
 export { isTypeValueEqual };
@@ -914,6 +915,46 @@ export function compile_internal(ir: AnalyzedIR, ctx: Record<string, EastTypeVal
     } else {
       return (ctx: RuntimeContext) => new SortedMap(values.map(([k, v]) => [k(ctx), v(ctx)]), keyComparer);
     }
+  } else if (ir.type === "NewVector") {
+    const elementType = ir.value.type.value; // element EastTypeValue
+    const values = ir.value.values.map(a => {
+      return compile_internal(a, ctx, platform, asyncPlatformFns, platformDef, false, compilingNodes)
+    });
+    if (ir.value.isAsync) {
+      return async (ctx: RuntimeContext) => {
+        const vals: any[] = [];
+        for (const a of values) {
+          vals.push(await a(ctx));
+        }
+        return createTypedArray(elementType, vals);
+      }
+    } else {
+      return (ctx: RuntimeContext) => {
+        const vals = values.map(a => a(ctx));
+        return createTypedArray(elementType, vals);
+      }
+    }
+  } else if (ir.type === "NewMatrix") {
+    const elementType = ir.value.type.value;
+    const rows = Number(ir.value.rows);
+    const cols = Number(ir.value.cols);
+    const values = ir.value.values.map(a => {
+      return compile_internal(a, ctx, platform, asyncPlatformFns, platformDef, false, compilingNodes)
+    });
+    if (ir.value.isAsync) {
+      return async (ctx: RuntimeContext) => {
+        const vals: any[] = [];
+        for (const a of values) {
+          vals.push(await a(ctx));
+        }
+        return matrix(createTypedArray(elementType, vals), rows, cols);
+      }
+    } else {
+      return (ctx: RuntimeContext) => {
+        const vals = values.map(a => a(ctx));
+        return matrix(createTypedArray(elementType, vals), rows, cols);
+      }
+    }
   } else if (ir.type === "Return") {
     const compiled_value = compile_internal(ir.value.value, ctx, platform, asyncPlatformFns, platformDef, false, compilingNodes);
     if (ir.value.isAsync) {
@@ -1205,6 +1246,25 @@ function call_function(location: LocationValue[], compiled_f: (...args: any[]) =
   }
 }
 
+
+/** Creates the appropriate TypedArray for a given element type */
+function createTypedArray(elementType: EastTypeValue, values: any[]): Float64Array | BigInt64Array | Uint8Array {
+  if (elementType.type === "Float") {
+    const arr = new Float64Array(values.length);
+    for (let i = 0; i < values.length; i++) arr[i] = values[i];
+    return arr;
+  } else if (elementType.type === "Integer") {
+    const arr = new BigInt64Array(values.length);
+    for (let i = 0; i < values.length; i++) arr[i] = values[i];
+    return arr;
+  } else if (elementType.type === "Boolean") {
+    const arr = new Uint8Array(values.length);
+    for (let i = 0; i < values.length; i++) arr[i] = values[i] ? 1 : 0;
+    return arr;
+  } else {
+    throw new Error(`Unsupported vector element type: ${elementType.type}`);
+  }
+}
 
 /** @internal */
 const builtin_evaluators: Record<BuiltinName, (location: LocationValue[], platformDef: PlatformFunction[], ...arg_types: any[]) => (...args: any[]) => any> = {
@@ -3094,6 +3154,335 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue[], platfo
       }
     }
   },
+
+  // Vector builtins
+  VectorLength: (_location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue) => (vec: Float64Array | BigInt64Array | Uint8Array) => BigInt(vec.length),
+
+  VectorGet: (location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue) => (vec: Float64Array | BigInt64Array | Uint8Array, idx: bigint) => {
+    const i = Number(idx);
+    if (i < 0 || i >= vec.length) {
+      throw new EastError(`Vector index ${idx} out of bounds (length ${vec.length})`, { location });
+    }
+    if (vec instanceof Uint8Array) return vec[i]! !== 0;
+    return vec[i]!;
+  },
+
+  VectorSet: (location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue) => (vec: Float64Array | BigInt64Array | Uint8Array, idx: bigint, value: any) => {
+    if (Object.isFrozen(vec)) {
+      throw new EastError("Cannot modify frozen Vector", { location });
+    }
+    const i = Number(idx);
+    if (i < 0 || i >= vec.length) {
+      throw new EastError(`Vector index ${idx} out of bounds (length ${vec.length})`, { location });
+    }
+    if (vec instanceof Uint8Array) {
+      vec[i] = value ? 1 : 0;
+    } else {
+      (vec as any)[i] = value;
+    }
+    return null;
+  },
+
+  VectorSlice: (location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue) => (vec: Float64Array | BigInt64Array | Uint8Array, start: bigint, end: bigint) => {
+    const s = Number(start);
+    const e = Number(end);
+    if (s < 0 || e > vec.length || s > e) {
+      throw new EastError(`Vector slice [${start}, ${end}) out of bounds (length ${vec.length})`, { location });
+    }
+    return vec.slice(s, e);
+  },
+
+  VectorConcat: (_location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue) => (a: Float64Array | BigInt64Array | Uint8Array, b: Float64Array | BigInt64Array | Uint8Array) => {
+    if (a instanceof Float64Array) {
+      const result = new Float64Array(a.length + b.length);
+      result.set(a);
+      result.set(b as Float64Array, a.length);
+      return result;
+    } else if (a instanceof BigInt64Array) {
+      const result = new BigInt64Array(a.length + b.length);
+      result.set(a);
+      result.set(b as BigInt64Array, a.length);
+      return result;
+    } else {
+      const result = new Uint8Array(a.length + b.length);
+      result.set(a);
+      result.set(b as Uint8Array, a.length);
+      return result;
+    }
+  },
+
+  VectorFromArray: (_location: LocationValue[], _platformDef: PlatformFunction[], T: EastTypeValue) => (arr: any[]) => {
+    return createTypedArray(T, arr);
+  },
+
+  VectorToArray: (_location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue) => (vec: Float64Array | BigInt64Array | Uint8Array) => {
+    if (vec instanceof Uint8Array) {
+      return Array.from(vec, v => v !== 0);
+    }
+    if (vec instanceof BigInt64Array) {
+      const result: bigint[] = [];
+      for (let i = 0; i < vec.length; i++) result.push(vec[i]!);
+      return result;
+    }
+    return Array.from(vec);
+  },
+
+  VectorToMatrix: (location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue) => (vec: Float64Array | BigInt64Array | Uint8Array, rows: bigint, cols: bigint) => {
+    const r = Number(rows);
+    const c = Number(cols);
+    if (r * c !== vec.length) {
+      throw new EastError(`Cannot reshape vector of length ${vec.length} to matrix ${r}×${c}`, { location });
+    }
+    return matrix(vec.slice() as any, r, c);
+  },
+
+  VectorZeros: (_location: LocationValue[], _platformDef: PlatformFunction[]) => (len: bigint) => {
+    return new Float64Array(Number(len));
+  },
+
+  VectorOnes: (_location: LocationValue[], _platformDef: PlatformFunction[]) => (len: bigint) => {
+    const arr = new Float64Array(Number(len));
+    arr.fill(1.0);
+    return arr;
+  },
+
+  VectorFill: (_location: LocationValue[], _platformDef: PlatformFunction[], T: EastTypeValue) => (len: bigint, value: any) => {
+    const n = Number(len);
+    if (T.type === "Float") {
+      const arr = new Float64Array(n);
+      arr.fill(value);
+      return arr;
+    } else if (T.type === "Integer") {
+      const arr = new BigInt64Array(n);
+      arr.fill(value);
+      return arr;
+    } else {
+      const arr = new Uint8Array(n);
+      arr.fill(value ? 1 : 0);
+      return arr;
+    }
+  },
+
+  VectorMap: (location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue, U: EastTypeValue) => (vec: Float64Array | BigInt64Array | Uint8Array, f: (elem: any, idx: bigint) => any) => {
+    const len = vec.length;
+    const results: any[] = [];
+    for (let i = 0; i < len; i++) {
+      const elem = vec instanceof Uint8Array ? (vec[i]! !== 0) : vec[i]!;
+      results.push(call_function(location, f, elem, BigInt(i)));
+    }
+    return createTypedArray(U, results);
+  },
+
+  VectorFold: (location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue, _U: EastTypeValue) => (vec: Float64Array | BigInt64Array | Uint8Array, init: any, f: (acc: any, elem: any, idx: bigint) => any) => {
+    let acc = init;
+    for (let i = 0; i < vec.length; i++) {
+      const elem = vec instanceof Uint8Array ? (vec[i]! !== 0) : vec[i]!;
+      acc = call_function(location, f, acc, elem, BigInt(i));
+    }
+    return acc;
+  },
+
+  // Matrix builtins
+  MatrixRows: (_location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue) => (m: any) => BigInt(m.rows),
+
+  MatrixCols: (_location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue) => (m: any) => BigInt(m.cols),
+
+  MatrixGet: (location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue) => (m: any, row: bigint, col: bigint) => {
+    const r = Number(row);
+    const c = Number(col);
+    if (r < 0 || r >= m.rows || c < 0 || c >= m.cols) {
+      throw new EastError(`Matrix index (${row}, ${col}) out of bounds (${m.rows}×${m.cols})`, { location });
+    }
+    const val = m.data[r * m.cols + c];
+    if (m.data instanceof Uint8Array) return val !== 0;
+    return val;
+  },
+
+  MatrixSet: (location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue) => (m: any, row: bigint, col: bigint, value: any) => {
+    if (Object.isFrozen(m.data)) {
+      throw new EastError("Cannot modify frozen Matrix", { location });
+    }
+    const r = Number(row);
+    const c = Number(col);
+    if (r < 0 || r >= m.rows || c < 0 || c >= m.cols) {
+      throw new EastError(`Matrix index (${row}, ${col}) out of bounds (${m.rows}×${m.cols})`, { location });
+    }
+    if (m.data instanceof Uint8Array) {
+      m.data[r * m.cols + c] = value ? 1 : 0;
+    } else {
+      m.data[r * m.cols + c] = value;
+    }
+    return null;
+  },
+
+  MatrixGetRow: (location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue) => (m: any, row: bigint) => {
+    const r = Number(row);
+    if (r < 0 || r >= m.rows) {
+      throw new EastError(`Matrix row ${row} out of bounds (${m.rows} rows)`, { location });
+    }
+    const start = r * m.cols;
+    return m.data.slice(start, start + m.cols);
+  },
+
+  MatrixGetCol: (location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue) => (m: any, col: bigint) => {
+    const c = Number(col);
+    if (c < 0 || c >= m.cols) {
+      throw new EastError(`Matrix column ${col} out of bounds (${m.cols} cols)`, { location });
+    }
+    if (m.data instanceof Float64Array) {
+      const result = new Float64Array(m.rows);
+      for (let r = 0; r < m.rows; r++) result[r] = m.data[r * m.cols + c];
+      return result;
+    } else if (m.data instanceof BigInt64Array) {
+      const result = new BigInt64Array(m.rows);
+      for (let r = 0; r < m.rows; r++) result[r] = m.data[r * m.cols + c];
+      return result;
+    } else {
+      const result = new Uint8Array(m.rows);
+      for (let r = 0; r < m.rows; r++) result[r] = m.data[r * m.cols + c];
+      return result;
+    }
+  },
+
+  MatrixToVector: (_location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue) => (m: any) => {
+    return m.data.slice();
+  },
+
+  MatrixFromArray: (location: LocationValue[], _platformDef: PlatformFunction[], T: EastTypeValue) => (arr: any[][]) => {
+    if (arr.length === 0) {
+      return matrix(createTypedArray(T, []), 0, 0);
+    }
+    const rows = arr.length;
+    const cols = arr[0]!.length;
+    for (let i = 1; i < rows; i++) {
+      if (arr[i]!.length !== cols) {
+        throw new EastError(`Jagged array: row 0 has ${cols} columns but row ${i} has ${arr[i]!.length}`, { location });
+      }
+    }
+    const flat: any[] = [];
+    for (const row of arr) {
+      flat.push(...row);
+    }
+    return matrix(createTypedArray(T, flat), rows, cols);
+  },
+
+  MatrixToArray: (_location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue) => (m: any) => {
+    const result: any[][] = [];
+    for (let r = 0; r < m.rows; r++) {
+      const row: any[] = [];
+      for (let c = 0; c < m.cols; c++) {
+        const val = m.data[r * m.cols + c];
+        row.push(m.data instanceof Uint8Array ? val !== 0 : val);
+      }
+      result.push(row);
+    }
+    return result;
+  },
+
+  MatrixTranspose: (_location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue) => (m: any) => {
+    if (m.data instanceof Float64Array) {
+      const result = new Float64Array(m.rows * m.cols);
+      for (let r = 0; r < m.rows; r++) {
+        for (let c = 0; c < m.cols; c++) {
+          result[c * m.rows + r] = m.data[r * m.cols + c];
+        }
+      }
+      return matrix(result, m.cols, m.rows);
+    } else if (m.data instanceof BigInt64Array) {
+      const result = new BigInt64Array(m.rows * m.cols);
+      for (let r = 0; r < m.rows; r++) {
+        for (let c = 0; c < m.cols; c++) {
+          result[c * m.rows + r] = m.data[r * m.cols + c];
+        }
+      }
+      return matrix(result, m.cols, m.rows);
+    } else {
+      const result = new Uint8Array(m.rows * m.cols);
+      for (let r = 0; r < m.rows; r++) {
+        for (let c = 0; c < m.cols; c++) {
+          result[c * m.rows + r] = m.data[r * m.cols + c];
+        }
+      }
+      return matrix(result, m.cols, m.rows);
+    }
+  },
+
+  MatrixZeros: (_location: LocationValue[], _platformDef: PlatformFunction[]) => (rows: bigint, cols: bigint) => {
+    return matrix(new Float64Array(Number(rows) * Number(cols)), Number(rows), Number(cols));
+  },
+
+  MatrixOnes: (_location: LocationValue[], _platformDef: PlatformFunction[]) => (rows: bigint, cols: bigint) => {
+    const data = new Float64Array(Number(rows) * Number(cols));
+    data.fill(1.0);
+    return matrix(data, Number(rows), Number(cols));
+  },
+
+  MatrixFill: (_location: LocationValue[], _platformDef: PlatformFunction[], T: EastTypeValue) => (rows: bigint, cols: bigint, value: any) => {
+    const r = Number(rows);
+    const c = Number(cols);
+    const n = r * c;
+    if (T.type === "Float") {
+      const data = new Float64Array(n);
+      data.fill(value);
+      return matrix(data, r, c);
+    } else if (T.type === "Integer") {
+      const data = new BigInt64Array(n);
+      data.fill(value);
+      return matrix(data, r, c);
+    } else {
+      const data = new Uint8Array(n);
+      data.fill(value ? 1 : 0);
+      return matrix(data, r, c);
+    }
+  },
+
+  MatrixMapElements: (location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue, U: EastTypeValue) => (m: any, f: (elem: any, row: bigint, col: bigint) => any) => {
+    const results: any[] = [];
+    for (let r = 0; r < m.rows; r++) {
+      for (let c = 0; c < m.cols; c++) {
+        const val = m.data[r * m.cols + c];
+        const elem = m.data instanceof Uint8Array ? val !== 0 : val;
+        results.push(call_function(location, f, elem, BigInt(r), BigInt(c)));
+      }
+    }
+    return matrix(createTypedArray(U, results), m.rows, m.cols);
+  },
+
+  MatrixMapRows: (location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue, _U: EastTypeValue) => (m: any, f: (row: any, idx: bigint) => any) => {
+    const resultRows: any[] = [];
+    for (let r = 0; r < m.rows; r++) {
+      const start = r * m.cols;
+      const rowVec = m.data.slice(start, start + m.cols);
+      const resultRow = call_function(location, f, rowVec, BigInt(r));
+      resultRows.push(resultRow);
+    }
+    // Build result matrix from row vectors
+    if (resultRows.length === 0) {
+      return matrix(new Float64Array(0), 0, 0);
+    }
+    const newCols = resultRows[0].length;
+    const totalLen = m.rows * newCols;
+    // Determine result type from first row
+    if (resultRows[0] instanceof Float64Array) {
+      const data = new Float64Array(totalLen);
+      for (let r = 0; r < m.rows; r++) {
+        data.set(resultRows[r], r * newCols);
+      }
+      return matrix(data, m.rows, newCols);
+    } else if (resultRows[0] instanceof BigInt64Array) {
+      const data = new BigInt64Array(totalLen);
+      for (let r = 0; r < m.rows; r++) {
+        data.set(resultRows[r], r * newCols);
+      }
+      return matrix(data, m.rows, newCols);
+    } else {
+      const data = new Uint8Array(totalLen);
+      for (let r = 0; r < m.rows; r++) {
+        data.set(resultRows[r], r * newCols);
+      }
+      return matrix(data, m.rows, newCols);
+    }
+  },
 }
 
 /** @internal */
@@ -3124,6 +3513,10 @@ export function applyTypeParameters(t: EastTypeValue | string, params: Map<strin
     return variant("Function", { inputs: t.value.inputs.map(i => applyTypeParameters(i, params)), output: applyTypeParameters(t.value.output, params) } );
   } else if (t.type === "AsyncFunction") {
     return variant("AsyncFunction", { inputs: t.value.inputs.map(i => applyTypeParameters(i, params)), output: applyTypeParameters(t.value.output, params) } );
+  } else if (t.type === "Vector") {
+    return variant("Vector", applyTypeParameters(t.value, params));
+  } else if (t.type === "Matrix") {
+    return variant("Matrix", applyTypeParameters(t.value, params));
   } else {
     throw new Error(`Unhandled type ${((t satisfies never) as EastTypeValue).type}`)
   }

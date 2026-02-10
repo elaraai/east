@@ -35,7 +35,9 @@ export function diffFor(type: EastTypeValue | EastType, ctx: DiffContext = { dif
     t.type === "Float" ||
     t.type === "String" ||
     t.type === "DateTime" ||
-    t.type === "Blob"
+    t.type === "Blob" ||
+    t.type === "Vector" ||
+    t.type === "Matrix"
   ) {
     const equal = equalFor(t);
     return (before: any, after: any) => {

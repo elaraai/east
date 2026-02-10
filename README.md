@@ -196,7 +196,7 @@ const compiled = receivedIR.compile(platform);
 
 ## Examples
 
-See the [USAGE.md](./USAGE.md) for more.
+See the [SKILL.md](./SKILL.md) for more.
 
 ## Development
 

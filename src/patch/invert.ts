@@ -33,7 +33,9 @@ export function invertFor(type: EastTypeValue | EastType, ctx: InvertContext = {
     t.type === "Float" ||
     t.type === "String" ||
     t.type === "DateTime" ||
-    t.type === "Blob"
+    t.type === "Blob" ||
+    t.type === "Vector" ||
+    t.type === "Matrix"
   ) {
     return (patch: VariantValue) => {
       if (patch.type === "unchanged") {

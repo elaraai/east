@@ -1747,6 +1747,70 @@ export function analyzeIR<T extends IR>(
       isAsync = valueInfo.value.isAsync;
     }
 
+    else if (node.type === "NewVector") {
+      // Validate type is Vector
+      if (node.value.type.type !== "Vector") {
+        throw new Error(
+          `NewVector node must have Vector type, got ${printTypeValue(node.value.type)} ` +
+          `at ${printLocationValue(node.value.location)}`
+        );
+      }
+
+      const elementType = node.value.type.value;
+      isAsync = false;
+
+      // Visit all element values and validate types
+      for (let i = 0; i < node.value.values.length; i++) {
+        const valueExpr = node.value.values[i]!;
+        const valueInfo = visit(valueExpr, ctx, expectedReturnType);
+
+        if (valueInfo.value.isAsync) {
+          isAsync = true;
+        }
+
+        // Validate element type exactly matches
+        if (valueInfo.value.type.type !== "Never" && !isTypeValueEqual(valueInfo.value.type, elementType)) {
+          throw new Error(
+            `Vector element ${i} has type ${printTypeValue(valueInfo.value.type)} ` +
+            `but vector expects ${printTypeValue(elementType)} ` +
+            `at ${printLocationValue(node.value.location)}`
+          );
+        }
+      }
+    }
+
+    else if (node.type === "NewMatrix") {
+      // Validate type is Matrix
+      if (node.value.type.type !== "Matrix") {
+        throw new Error(
+          `NewMatrix node must have Matrix type, got ${printTypeValue(node.value.type)} ` +
+          `at ${printLocationValue(node.value.location)}`
+        );
+      }
+
+      const elementType = node.value.type.value;
+      isAsync = false;
+
+      // Visit all element values and validate types
+      for (let i = 0; i < node.value.values.length; i++) {
+        const valueExpr = node.value.values[i]!;
+        const valueInfo = visit(valueExpr, ctx, expectedReturnType);
+
+        if (valueInfo.value.isAsync) {
+          isAsync = true;
+        }
+
+        // Validate element type exactly matches
+        if (valueInfo.value.type.type !== "Never" && !isTypeValueEqual(valueInfo.value.type, elementType)) {
+          throw new Error(
+            `Matrix element ${i} has type ${printTypeValue(valueInfo.value.type)} ` +
+            `but matrix expects ${printTypeValue(elementType)} ` +
+            `at ${printLocationValue(node.value.location)}`
+          );
+        }
+      }
+    }
+
     else {
       throw new Error(`Unhandled IR type: ${(node satisfies never as IR).type} at ${printLocationValue((node as IR).value?.location || { file: "unknown", line: 0, column: 0 })}`);
     }

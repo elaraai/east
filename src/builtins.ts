@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Elara AI Pty Ltd
  * Dual-licensed under AGPL-3.0 and commercial license. See LICENSE for details.
  */
-import { ArrayType, BlobType, BooleanType, DateTimeType, DictType, type EastType, FloatType, FunctionType, IntegerType, NullType, RefType, SetType, StringType, StructType, VariantType } from "./types.js";
+import { ArrayType, BlobType, BooleanType, DateTimeType, DictType, type EastType, FloatType, FunctionType, IntegerType, NullType, RefType, SetType, StringType, StructType, VariantType, VectorType, MatrixType } from "./types.js";
 import { DateTimeFormatTokenType } from "./datetime_format/types.js";
 
 /** @internal */
@@ -25,6 +25,8 @@ export type BuiltinName = "Is" | "Equal" | "NotEqual" | "Less" | "LessEqual" | "
   | "ArrayGenerate" | "ArrayRange" | "ArrayLinspace" | "ArraySize" | "ArrayHas" | "ArrayGet" | "ArrayGetOrDefault" | "ArrayTryGet" | "ArrayUpdate" | "ArrayMerge" | "ArrayPushLast" | "ArrayPopLast" | "ArrayPushFirst" | "ArrayPopFirst" | "ArrayAppend" | "ArrayPrepend" | "ArrayMergeAll" | "ArrayClear" | "ArraySortInPlace" | "ArrayReverseInPlace" | "ArraySort" | "ArrayReverse" | "ArrayIsSorted" | "ArrayFindSortedFirst" | "ArrayFindSortedLast" | "ArrayFindSortedRange" | "ArrayFindFirst" | "ArrayConcat" | "ArraySlice" | "ArrayGetKeys" | "ArrayForEach" | "ArrayCopy" | "ArrayMap" | "ArrayFilter" | "ArrayFilterMap" | "ArrayFirstMap" | "ArrayMapReduce" | "ArrayFold" | "ArrayStringJoin" | "ArrayToSet" | "ArrayToDict" | "ArrayFlattenToArray" | "ArrayFlattenToSet" | "ArrayFlattenToDict" | "ArrayGroupFold"
   | "SetGenerate" | "SetSize" | "SetHas" | "SetInsert" | "SetTryInsert" | "SetDelete" | "SetTryDelete" | "SetClear" | "SetUnionInPlace" | "SetUnion" | "SetIntersect" | "SetDiff" | "SetSymDiff" | "SetIsSubset" | "SetIsDisjoint" | "SetCopy" | "SetForEach" | "SetMap" | "SetFilter" | "SetFilterMap" | "SetFirstMap" | "SetMapReduce" | "SetReduce" | "SetToArray" | "SetToSet" |"SetToDict" | "SetFlattenToArray" | "SetFlattenToSet" | "SetFlattenToDict" | "SetGroupFold"
   | "DictGenerate" | "DictSize" | "DictHas" | "DictGet" | "DictGetOrDefault" | "DictTryGet" | "DictInsert" | "DictGetOrInsert" | "DictInsertOrUpdate" | "DictUpdate" | "DictSwap" | "DictMerge" | "DictDelete" | "DictTryDelete" | "DictPop" | "DictClear" | "DictUnionInPlace" | "DictMergeAll" | "DictKeys" | "DictGetKeys" | "DictForEach" | "DictCopy" | "DictMap" | "DictFilter" | "DictFilterMap" | "DictFirstMap" | "DictMapReduce" | "DictReduce" | "DictToArray" | "DictToSet" | "DictToDict" | "DictFlattenToArray" | "DictFlattenToSet" | "DictFlattenToDict" | "DictGroupFold"
+  | "VectorLength" | "VectorGet" | "VectorSet" | "VectorSlice" | "VectorConcat" | "VectorFromArray" | "VectorToArray" | "VectorToMatrix" | "VectorZeros" | "VectorOnes" | "VectorFill" | "VectorMap" | "VectorFold"
+  | "MatrixRows" | "MatrixCols" | "MatrixGet" | "MatrixSet" | "MatrixGetRow" | "MatrixGetCol" | "MatrixToVector" | "MatrixFromArray" | "MatrixToArray" | "MatrixTranspose" | "MatrixZeros" | "MatrixOnes" | "MatrixFill" | "MatrixMapElements" | "MatrixMapRows"
   ;
 
 /** @internal */
@@ -1060,6 +1062,150 @@ export const Builtins: Record<BuiltinName, BuiltinType> = {
     inputs: [DictType("K", "V"), FunctionType(["V", "K"], "K2"), FunctionType(["K2"], "T2"), FunctionType(["T2", "V", "K"], "T2")] as const,
     output: DictType("K2", "T2"),
   },
+
+  // Vector builtins
+  VectorLength: {
+    type_parameters: ["T"],
+    inputs: [VectorType("T" as any)] as const,
+    output: IntegerType,
+  },
+  VectorGet: {
+    type_parameters: ["T"],
+    inputs: [VectorType("T" as any), IntegerType] as const,
+    output: "T",
+  },
+  VectorSet: {
+    type_parameters: ["T"],
+    inputs: [VectorType("T" as any), IntegerType, "T"] as const,
+    output: NullType,
+  },
+  VectorSlice: {
+    type_parameters: ["T"],
+    inputs: [VectorType("T" as any), IntegerType, IntegerType] as const,
+    output: VectorType("T" as any),
+  },
+  VectorConcat: {
+    type_parameters: ["T"],
+    inputs: [VectorType("T" as any), VectorType("T" as any)] as const,
+    output: VectorType("T" as any),
+  },
+  VectorFromArray: {
+    type_parameters: ["T"],
+    inputs: [ArrayType("T")] as const,
+    output: VectorType("T" as any),
+  },
+  VectorToArray: {
+    type_parameters: ["T"],
+    inputs: [VectorType("T" as any)] as const,
+    output: ArrayType("T"),
+  },
+  VectorToMatrix: {
+    type_parameters: ["T"],
+    inputs: [VectorType("T" as any), IntegerType, IntegerType] as const,
+    output: MatrixType("T" as any),
+  },
+  VectorZeros: {
+    type_parameters: ["T"],
+    inputs: [IntegerType] as const,
+    output: VectorType("T" as any),
+  },
+  VectorOnes: {
+    type_parameters: ["T"],
+    inputs: [IntegerType] as const,
+    output: VectorType("T" as any),
+  },
+  VectorFill: {
+    type_parameters: ["T"],
+    inputs: [IntegerType, "T"] as const,
+    output: VectorType("T" as any),
+  },
+  VectorMap: {
+    type_parameters: ["T", "T2"],
+    inputs: [VectorType("T" as any), FunctionType(["T", IntegerType], "T2")] as const,
+    output: VectorType("T2" as any),
+  },
+  VectorFold: {
+    type_parameters: ["T", "T2"],
+    inputs: [VectorType("T" as any), "T2", FunctionType(["T2", "T", IntegerType], "T2")] as const,
+    output: "T2",
+  },
+
+  // Matrix builtins
+  MatrixRows: {
+    type_parameters: ["T"],
+    inputs: [MatrixType("T" as any)] as const,
+    output: IntegerType,
+  },
+  MatrixCols: {
+    type_parameters: ["T"],
+    inputs: [MatrixType("T" as any)] as const,
+    output: IntegerType,
+  },
+  MatrixGet: {
+    type_parameters: ["T"],
+    inputs: [MatrixType("T" as any), IntegerType, IntegerType] as const,
+    output: "T",
+  },
+  MatrixSet: {
+    type_parameters: ["T"],
+    inputs: [MatrixType("T" as any), IntegerType, IntegerType, "T"] as const,
+    output: NullType,
+  },
+  MatrixGetRow: {
+    type_parameters: ["T"],
+    inputs: [MatrixType("T" as any), IntegerType] as const,
+    output: VectorType("T" as any),
+  },
+  MatrixGetCol: {
+    type_parameters: ["T"],
+    inputs: [MatrixType("T" as any), IntegerType] as const,
+    output: VectorType("T" as any),
+  },
+  MatrixToVector: {
+    type_parameters: ["T"],
+    inputs: [MatrixType("T" as any)] as const,
+    output: VectorType("T" as any),
+  },
+  MatrixFromArray: {
+    type_parameters: ["T"],
+    inputs: [ArrayType(ArrayType("T"))] as const,
+    output: MatrixType("T" as any),
+  },
+  MatrixToArray: {
+    type_parameters: ["T"],
+    inputs: [MatrixType("T" as any)] as const,
+    output: ArrayType(ArrayType("T")),
+  },
+  MatrixTranspose: {
+    type_parameters: ["T"],
+    inputs: [MatrixType("T" as any)] as const,
+    output: MatrixType("T" as any),
+  },
+  MatrixZeros: {
+    type_parameters: ["T"],
+    inputs: [IntegerType, IntegerType] as const,
+    output: MatrixType("T" as any),
+  },
+  MatrixOnes: {
+    type_parameters: ["T"],
+    inputs: [IntegerType, IntegerType] as const,
+    output: MatrixType("T" as any),
+  },
+  MatrixFill: {
+    type_parameters: ["T"],
+    inputs: [IntegerType, IntegerType, "T"] as const,
+    output: MatrixType("T" as any),
+  },
+  MatrixMapElements: {
+    type_parameters: ["T", "T2"],
+    inputs: [MatrixType("T" as any), FunctionType(["T", IntegerType, IntegerType], "T2")] as const,
+    output: MatrixType("T2" as any),
+  },
+  MatrixMapRows: {
+    type_parameters: ["T", "T2"],
+    inputs: [MatrixType("T" as any), FunctionType([VectorType("T" as any), IntegerType], VectorType("T2" as any))] as const,
+    output: MatrixType("T2" as any),
+  },
 }
 
 /** @internal */
@@ -1127,6 +1273,22 @@ export function applyTypeParameters(type: EastType | string, params: Map<string,
     for (const [name, caseType] of Object.entries(type.cases)) {
       self.cases[name] = applyTypeParameters(caseType, params, inStack, outStack);
     }
+    inStack.pop();
+    outStack.pop();
+    return self;
+  } else if (type.type === "Vector") {
+    const self = { type: "Vector" as const, element: undefined as unknown as EastType };
+    inStack.push(type);
+    outStack.push(self);
+    self.element = applyTypeParameters(type.element, params, inStack, outStack);
+    inStack.pop();
+    outStack.pop();
+    return self;
+  } else if (type.type === "Matrix") {
+    const self = { type: "Matrix" as const, element: undefined as unknown as EastType };
+    inStack.push(type);
+    outStack.push(self);
+    self.element = applyTypeParameters(type.element, params, inStack, outStack);
     inStack.pop();
     outStack.pop();
     return self;

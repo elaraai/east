@@ -312,4 +312,22 @@ export type PlatformAST = {
 };
 
 /** @internal */
-export type AST = ErrorAST | TryCatchAST | ValueAST | AsAST | VariableAST | LetAST | AssignAST | FunctionAST | AsyncFunctionAST | CallAST | CallAsyncAST | NewRefAST | NewArrayAST | NewSetAST | NewDictAST | StructAST | GetFieldAST | VariantAST | BlockAST | IfElseAST | MatchAST | UnwrapRecursiveAST | WrapRecursiveAST | WhileAST | ForArrayAST | ForSetAST | ForDictAST | ReturnAST | ContinueAST | BreakAST | BuiltinAST | PlatformAST;
+export type NewVectorAST = {
+  ast_type: "NewVector",
+  type: EastType,
+  location: Location[],
+  values: AST[],
+};
+
+/** @internal */
+export type NewMatrixAST = {
+  ast_type: "NewMatrix",
+  type: EastType,
+  location: Location[],
+  values: AST[],
+  rows: number,
+  cols: number,
+};
+
+/** @internal */
+export type AST = ErrorAST | TryCatchAST | ValueAST | AsAST | VariableAST | LetAST | AssignAST | FunctionAST | AsyncFunctionAST | CallAST | CallAsyncAST | NewRefAST | NewArrayAST | NewSetAST | NewDictAST | NewVectorAST | NewMatrixAST | StructAST | GetFieldAST | VariantAST | BlockAST | IfElseAST | MatchAST | UnwrapRecursiveAST | WrapRecursiveAST | WhileAST | ForArrayAST | ForSetAST | ForDictAST | ReturnAST | ContinueAST | BreakAST | BuiltinAST | PlatformAST;

@@ -13,7 +13,6 @@ import {
   ArrayType,
   StructType,
   VariantType,
-  NullType,
   RecursiveType,
 } from "../types.js";
 import { East, variant } from "../index.js";
@@ -264,7 +263,7 @@ describe("Beast2 Function Serialization - Variant with Function Captures", () =>
 
     const makeReactive = East.function([ArrayType(IntegerType)], UIType, ($, data) => {
       return variant("Reactive", {
-        render: East.function([], ArrayType(IntegerType), ($) => {
+        render: East.function([], ArrayType(IntegerType), (_$) => {
           // Use captured 'data' in a map operation
           return data.map(($, x) => x.multiply(2n));
         }),
@@ -326,7 +325,7 @@ describe("Beast2 Function Serialization - Untyped Decode", () => {
 
     const makeReactive = East.function([ArrayType(IntegerType)], UIType, ($, data) => {
       return variant("Reactive", {
-        render: East.function([], ArrayType(IntegerType), ($) => {
+        render: East.function([], ArrayType(IntegerType), (_$) => {
           return data.map(($, x) => x.multiply(2n));
         }),
       });

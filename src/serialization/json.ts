@@ -10,6 +10,7 @@ import type { EastType, ValueTypeOf } from "../types.js";
 import { isVariant, variant } from "../containers/variant.js";
 import { printFor } from "./east.js";
 import { ref } from "../containers/ref.js";
+import { matrix } from "../containers/matrix.js";
 
 const printTypeValue = printFor(EastTypeValueType) as (type: EastTypeValue) => string;
 
@@ -423,6 +424,31 @@ export function toJSONFor(type: EastType | EastTypeValue, typeCtx: JSONEncodeTyp
         throw new Error(`Cannot encode Function type to JSON`);
     } else if (type.type === "AsyncFunction") {
         throw new Error(`Cannot encode AsyncFunction type to JSON`);
+    } else if (type.type === "Vector") {
+        const elementToJson = toJSONFor(type.value, typeCtx);
+        const isBoolean = type.value.type === "Boolean";
+        return (value: Float64Array | BigInt64Array | Uint8Array, _ctx?: JSONEncodeValueContext) => {
+            const result = [];
+            for (let i = 0; i < value.length; i++) {
+                result.push(elementToJson(isBoolean ? value[i] !== 0 : value[i]));
+            }
+            return result;
+        };
+    } else if (type.type === "Matrix") {
+        const elementToJson = toJSONFor(type.value, typeCtx);
+        const isBoolean = type.value.type === "Boolean";
+        return (value: any, _ctx?: JSONEncodeValueContext) => {
+            const { data, rows, cols } = value;
+            const result = [];
+            for (let r = 0; r < rows; r++) {
+                const row = [];
+                for (let c = 0; c < cols; c++) {
+                    row.push(elementToJson(isBoolean ? data[r * cols + c] !== 0 : data[r * cols + c]));
+                }
+                result.push(row);
+            }
+            return result;
+        };
     } else {
         throw new Error(`Unhandled type ${(type satisfies never as any).type} for toJson`);
     }
@@ -900,7 +926,78 @@ function createJSONDecoder(
         throw new Error(`Cannot decode Function type from JSON`);
     } else if (type.type === "AsyncFunction") {
         throw new Error(`Cannot decode AsyncFunction type from JSON`);
+    } else if (type.type === "Vector") {
+        const elementFromJson = createJSONDecoder(type.value, frozen, typeCtx);
+        return (json: unknown, _ctx?: JSONDecodeValueContext) => {
+            if (!Array.isArray(json)) {
+                throw new JSONDecodeError(`expected array for Vector, got ${JSON.stringify(json)}`);
+            }
+            const values = [];
+            for (let i = 0; i < json.length; i++) {
+                try {
+                    values.push(elementFromJson(json[i]));
+                } catch (e) {
+                    if (e instanceof JSONDecodeError) {
+                        const newPath = `[${i}]` + (e.path ? e.path : '');
+                        throw new JSONDecodeError(e.message, newPath);
+                    }
+                    throw e;
+                }
+            }
+            return _createTypedArray(type.value, values, frozen);
+        };
+    } else if (type.type === "Matrix") {
+        const elementFromJson = createJSONDecoder(type.value, frozen, typeCtx);
+        return (json: unknown, _ctx?: JSONDecodeValueContext) => {
+            if (!Array.isArray(json)) {
+                throw new JSONDecodeError(`expected array for Matrix, got ${JSON.stringify(json)}`);
+            }
+            const rows = json.length;
+            if (rows === 0) {
+                return matrix(_createTypedArray(type.value, [], frozen), 0, 0);
+            }
+            const cols = Array.isArray(json[0]) ? json[0].length : 0;
+            const flatValues = [];
+            for (let r = 0; r < rows; r++) {
+                const row = json[r];
+                if (!Array.isArray(row)) {
+                    throw new JSONDecodeError(`expected array for Matrix row, got ${JSON.stringify(row)}`, `[${r}]`);
+                }
+                if (row.length !== cols) {
+                    throw new JSONDecodeError(`matrix row ${r} has ${row.length} columns, expected ${cols}`, `[${r}]`);
+                }
+                for (let c = 0; c < cols; c++) {
+                    try {
+                        flatValues.push(elementFromJson(row[c]));
+                    } catch (e) {
+                        if (e instanceof JSONDecodeError) {
+                            const newPath = `[${r}][${c}]` + (e.path ? e.path : '');
+                            throw new JSONDecodeError(e.message, newPath);
+                        }
+                        throw e;
+                    }
+                }
+            }
+            return matrix(_createTypedArray(type.value, flatValues, frozen), rows, cols);
+        };
     } else {
         throw new Error(`Unhandled type ${(type satisfies never as any).type} for fromJson`);
     }
+}
+
+function _createTypedArray(element_type: EastTypeValue, values: any[], frozen: boolean): Float64Array | BigInt64Array | Uint8Array {
+    let result: Float64Array | BigInt64Array | Uint8Array;
+    if (element_type.type === "Float") {
+        result = new Float64Array(values);
+    } else if (element_type.type === "Integer") {
+        result = new BigInt64Array(values);
+    } else if (element_type.type === "Boolean") {
+        result = new Uint8Array(values.map(v => v ? 1 : 0));
+    } else {
+        throw new Error(`Unsupported vector/matrix element type: ${element_type.type}`);
+    }
+    if (frozen) {
+        Object.freeze(result);
+    }
+    return result;
 }

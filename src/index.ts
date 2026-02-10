@@ -7,6 +7,7 @@ export * from './containers/ref.js';
 export * from './containers/variant.js';
 export * from './containers/sortedset.js';
 export * from './containers/sortedmap.js';
+export * from './containers/matrix.js';
 export * from './types.js';
 export * from './type_of_type.js';
 export * from './serialization/index.js';

@@ -28,7 +28,10 @@ import {
     StructType,
     type ValueTypeOf,
     VariantType,
+    VectorType,
+    MatrixType,
 } from '../types.js';
+import { matrix } from '../containers/matrix.js';
 import { decodeJSONFor, encodeJSONFor, fromJSONFor, toJSONFor } from "./json.js";
 import { compareFor, equalFor } from "../comparison.js";
 import { SortedSet } from "../containers/sortedset.js";
@@ -689,6 +692,80 @@ describe('Json encoding/decoding of EAST values', () => {
         ];
 
         run(type, decoded, encoded, erroneous);
+    });
+
+    test('should encode/decode float vector', () => {
+        const type = VectorType(FloatType);
+        const decoded = [
+            new Float64Array([]),
+            new Float64Array([1.0, 2.5, -3.14]),
+            new Float64Array([NaN, Infinity, -Infinity]),
+        ];
+        const encoded = [
+            [],
+            [1.0, 2.5, -3.14],
+            ["NaN", "Infinity", "-Infinity"],
+        ];
+
+        run(type, decoded, encoded);
+    });
+
+    test('should encode/decode integer vector', () => {
+        const type = VectorType(IntegerType);
+        const decoded = [
+            new BigInt64Array([]),
+            new BigInt64Array([1n, -2n, 300n]),
+            new BigInt64Array([9223372036854775807n]),
+        ];
+        const encoded = [
+            [],
+            ["1", "-2", "300"],
+            ["9223372036854775807"],
+        ];
+
+        run(type, decoded, encoded);
+    });
+
+    test('should encode/decode boolean vector', () => {
+        const type = VectorType(BooleanType);
+        const decoded = [
+            new Uint8Array([]),
+            new Uint8Array([1, 0, 1]),
+        ];
+        const encoded = [
+            [],
+            [true, false, true],
+        ];
+
+        run(type, decoded, encoded);
+    });
+
+    test('should encode/decode float matrix', () => {
+        const type = MatrixType(FloatType);
+        const decoded = [
+            matrix(new Float64Array([]), 0, 0),
+            matrix(new Float64Array([1.0, 2.0, 3.0, 4.0]), 2, 2),
+        ];
+        const encoded = [
+            [],
+            [[1.0, 2.0], [3.0, 4.0]],
+        ];
+
+        run(type, decoded, encoded);
+    });
+
+    test('should encode/decode integer matrix', () => {
+        const type = MatrixType(IntegerType);
+        const decoded = [
+            matrix(new BigInt64Array([]), 0, 0),
+            matrix(new BigInt64Array([1n, 2n, 3n, 4n, 5n, 6n]), 2, 3),
+        ];
+        const encoded = [
+            [],
+            [["1", "2", "3"], ["4", "5", "6"]],
+        ];
+
+        run(type, decoded, encoded);
     });
 
     test('should format error messages correctly', () => {
