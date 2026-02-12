@@ -81,7 +81,7 @@ Supported element types:
 |--------------|------------|----------------|
 | `FloatType` | `Float64Array` | `np.ndarray` (float64) |
 | `IntegerType` | `BigInt64Array` | `np.ndarray` (int64) |
-| `BooleanType` | `Uint8Array` | `np.ndarray` (bool) |
+| `BooleanType` | `Uint8ClampedArray` | `np.ndarray` (bool) |
 
 Rationale:
 - Float: features, predictions, probabilities

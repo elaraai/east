@@ -64,10 +64,10 @@ Task → What do you need?
     │   │   └─ Other variants → variant("caseName", value)
     │   ├─ VectorType(FloatType) → new Float64Array([1.0, 2.0, 3.0])
     │   ├─ VectorType(IntegerType) → new BigInt64Array([1n, 2n, 3n])
-    │   ├─ VectorType(BooleanType) → new Uint8Array([1, 0, 1])
+    │   ├─ VectorType(BooleanType) → new Uint8ClampedArray([1, 0, 1])
     │   ├─ MatrixType(FloatType) → matrix(Float64Array.from([1.0, 2.0, 3.0, 4.0]), 2, 2)
     │   ├─ MatrixType(IntegerType) → matrix(BigInt64Array.from([1n, 2n, 3n, 4n]), 2, 2)
-    │   ├─ MatrixType(BooleanType) → matrix(Uint8Array.from([1, 0, 0, 1]), 2, 2)
+    │   ├─ MatrixType(BooleanType) → matrix(Uint8ClampedArray.from([1, 0, 0, 1]), 2, 2)
     │   └─ RefType(T) (use helper from package) → ref(value)
     │
     ├─ Write a Function (East.*)
@@ -214,7 +214,7 @@ Task → What do you need?
 | `RefType<T>` | `ref<ValueTypeOf<T>>` | **Mutable** |
 | `VectorType<FloatType>` | `Float64Array` | **Mutable** |
 | `VectorType<IntegerType>` | `BigInt64Array` | **Mutable** |
-| `VectorType<BooleanType>` | `Uint8Array` | **Mutable** |
+| `VectorType<BooleanType>` | `Uint8ClampedArray` | **Mutable** |
 | `MatrixType<T>` | `matrix<TypedArray>` | **Mutable** |
 | `StructType<Fields>` | `{...}` | Immutable |
 | `VariantType<Cases>` | `variant` | Immutable |

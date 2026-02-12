@@ -485,7 +485,7 @@ const intVectorOps = East.function([], VectorType(IntegerType), $ => {
 });
 
 const boolMatrixOps = East.function([], MatrixType(BooleanType), $ => {
-    // Boolean matrices (Uint8Array) - useful for masks
+    // Boolean matrices (Uint8ClampedArray) - useful for masks
     const mask = $.let(East.Matrix.fill(2n, 3n, false));
     $(mask.set(0n, 0n, true));
     $(mask.set(1n, 2n, true));

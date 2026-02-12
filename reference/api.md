@@ -150,7 +150,7 @@ DictType(StringType, IntegerType)         // Dict with string keys, integer valu
 RefType(IntegerType)                      // Mutable reference to integer
 VectorType(FloatType)                     // Vector of floats (Float64Array)
 VectorType(IntegerType)                   // Vector of integers (BigInt64Array)
-VectorType(BooleanType)                   // Vector of booleans (Uint8Array)
+VectorType(BooleanType)                   // Vector of booleans (Uint8ClampedArray)
 MatrixType(FloatType)                     // Matrix of floats
 MatrixType(IntegerType)                   // Matrix of integers
 ```
@@ -524,7 +524,7 @@ For `ArrayExpr<T>` where `T` is the element type:
 
 For `VectorExpr<T>` where `T` is `FloatType`, `IntegerType`, or `BooleanType`:
 
-Vectors are **mutable**, contiguous typed arrays optimized for numeric computation and zero-copy interop with ML libraries. In JavaScript, vectors are backed by `Float64Array`, `BigInt64Array`, or `Uint8Array`.
+Vectors are **mutable**, contiguous typed arrays optimized for numeric computation and zero-copy interop with ML libraries. In JavaScript, vectors are backed by `Float64Array`, `BigInt64Array`, or `Uint8ClampedArray`.
 
 ### Read Operations
 
