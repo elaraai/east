@@ -293,7 +293,21 @@ export type PlatformIR = variant<"Platform", {
  * It has been processed from AST and checked for type safety and variable resolution.
  * The code is ready to be serialized, evaluated or compiled.
  */
-export type IR = ErrorIR | TryCatchIR |ValueIR | VariableIR | LetIR | AssignIR | AsIR | FunctionIR | AsyncFunctionIR | CallIR | CallAsyncIR | NewRefIR | NewArrayIR | NewSetIR | NewDictIR | StructIR | GetFieldIR | VariantIR | BlockIR | IfElseIR | MatchIR | UnwrapRecursiveIR | WrapRecursiveIR | WhileIR | ForArrayIR | ForSetIR | ForDictIR | ReturnIR | ContinueIR | BreakIR | BuiltinIR | PlatformIR;
+export type NewVectorIR = variant<"NewVector", {
+  type: EastTypeValue,
+  location: LocationValue[],
+  values: any[], // IR[]
+}>;
+
+export type NewMatrixIR = variant<"NewMatrix", {
+  type: EastTypeValue,
+  location: LocationValue[],
+  values: any[], // IR[]
+  rows: bigint,
+  cols: bigint,
+}>;
+
+export type IR = ErrorIR | TryCatchIR |ValueIR | VariableIR | LetIR | AssignIR | AsIR | FunctionIR | AsyncFunctionIR | CallIR | CallAsyncIR | NewRefIR | NewArrayIR | NewSetIR | NewDictIR | NewVectorIR | NewMatrixIR | StructIR | GetFieldIR | VariantIR | BlockIR | IfElseIR | MatchIR | UnwrapRecursiveIR | WrapRecursiveIR | WhileIR | ForArrayIR | ForSetIR | ForDictIR | ReturnIR | ContinueIR | BreakIR | BuiltinIR | PlatformIR;
 
 ////////////////////////////////////////////////////////////////////////////////////////////
 // Homoiconic IR EastTypes
@@ -333,6 +347,8 @@ export const IRType = RecursiveType(ir => VariantType({
   NewArray: StructType({ type: EastTypeType, location: ArrayType(LocationType), values: ArrayType(ir) }),
   NewSet: StructType({ type: EastTypeType, location: ArrayType(LocationType), values: ArrayType(ir) }),
   NewDict: StructType({ type: EastTypeType, location: ArrayType(LocationType), values: ArrayType(StructType({ key: ir, value: ir })) }),
+  NewVector: StructType({ type: EastTypeType, location: ArrayType(LocationType), values: ArrayType(ir) }),
+  NewMatrix: StructType({ type: EastTypeType, location: ArrayType(LocationType), values: ArrayType(ir), rows: IntegerType, cols: IntegerType }),
   Struct: StructType({ type: EastTypeType, location: ArrayType(LocationType), fields: ArrayType(StructType({ name: StringType, value: ir })) }),
   GetField: StructType({ type: EastTypeType, location: ArrayType(LocationType), field: StringType, struct: ir }),
   Variant: StructType({ type: EastTypeType, location: ArrayType(LocationType), case: StringType, value: ir }),

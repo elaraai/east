@@ -318,6 +318,10 @@ export function encodeBeastValueToBufferFor(type: EastTypeValue): (value: any, w
     throw new Error(`Functions cannot be serialized`);
   } else if (type.type === "AsyncFunction") {
     throw new Error(`AsyncFunctions cannot be serialized`);
+  } else if (type.type === "Vector") {
+    throw new Error(`Beast v1 format does not support Vector types`);
+  } else if (type.type === "Matrix") {
+    throw new Error(`Beast v1 format does not support Matrix types`);
   } else {
     throw new Error(`Unhandled type ${(type satisfies never as EastType).type}`);
   }
@@ -474,6 +478,10 @@ export function decodeBeastValueFor(type: EastTypeValue | EastType): (buffer: Ui
     throw new Error(`Functions cannot be deserialized`);
   } else if (type.type === "AsyncFunction") {
     throw new Error(`AsyncFunctions cannot be deserialized`);
+  } else if (type.type === "Vector") {
+    throw new Error(`Beast v1 format does not support Vector types`);
+  } else if (type.type === "Matrix") {
+    throw new Error(`Beast v1 format does not support Matrix types`);
   } else {
     throw new Error(`Unhandled type ${(type satisfies never as EastType).type}`);
   }

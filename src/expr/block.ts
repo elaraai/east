@@ -31,6 +31,8 @@ import { isVariant } from "../containers/variant.js";
 import { RefExpr } from "./ref.js";
 import { AsyncFunctionExpr, createAsyncFunctionExpr, type CallableAsyncFunctionExpr } from "./asyncfunction.js";
 import { PatchType, type PatchTypeOf } from "../patch/index.js";
+import { VectorExpr } from "./vector.js";
+import { MatrixExpr } from "./matrix.js";
 
 /** A factory function to help build `Expr` from AST.
  * We inject this into each concrete `Expr` type so they can create new expressions recursively, without having circular dependencies between JavaScript modules.
@@ -72,6 +74,10 @@ export function fromAst<T extends AST>(ast: T): Expr<T["type"]> {
     return createFunctionExpr(ast.type.inputs, ast.type.output, ast, fromAst);
   } else if (type === "AsyncFunction") {
     return createAsyncFunctionExpr(ast.type.inputs, ast.type.output, ast, fromAst);
+  } else if (type === "Vector") {
+    return new VectorExpr((ast.type as any).element, ast, fromAst);
+  } else if (type === "Matrix") {
+    return new MatrixExpr((ast.type as any).element, ast, fromAst);
   } else {
     throw new Error(`fromAst not implemented for type ${printType(ast.type satisfies never)} at ${printLocations(ast.location)}`);
   }

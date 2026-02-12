@@ -6,6 +6,7 @@ import { toEastTypeValue, type EastTypeValue } from "./type_of_type.js";
 import type { EastType, ValueTypeOf } from "./types.js";
 import { isVariant, match, variant } from "./containers/variant.js";
 import { ref } from "./containers/ref.js";
+import { matrix } from "./containers/matrix.js";
 
 /** Provide a default value for a given {@link EastType}, such as `0.0` for floats and `""` for strings.
  * 
@@ -50,6 +51,18 @@ export function defaultValue(type: EastType | EastTypeValue): any {
     Recursive: _ => { throw new Error("Cannot create a default value of type .Recursive"); },
     Function: _ => { throw new Error(`Cannot create a default value of type .Function`) },
     AsyncFunction: _ => { throw new Error(`Cannot create a default value of type .AsyncFunction`) },
+    Vector: elementType => {
+      const et = elementType as EastTypeValue;
+      if (et.type === "Float") return new Float64Array(0);
+      if (et.type === "Integer") return new BigInt64Array(0);
+      return new Uint8ClampedArray(0);
+    },
+    Matrix: elementType => {
+      const et = elementType as EastTypeValue;
+      if (et.type === "Float") return matrix(new Float64Array(0), 0, 0);
+      if (et.type === "Integer") return matrix(new BigInt64Array(0), 0, 0);
+      return matrix(new Uint8ClampedArray(0), 0, 0);
+    },
   });
 }
 
@@ -98,5 +111,17 @@ export function minimalValue(type: EastType | EastTypeValue): any {
     Recursive: _ => { throw new Error("Cannot create a default value of type .Recursive"); },
     Function: _ => { throw new Error(`Cannot create a default value of type .Function`) },
     AsyncFunction: _ => { throw new Error(`Cannot create a default value of type .AsyncFunction`) },
+    Vector: elementType => {
+      const et = elementType as EastTypeValue;
+      if (et.type === "Float") return new Float64Array(0);
+      if (et.type === "Integer") return new BigInt64Array(0);
+      return new Uint8ClampedArray(0);
+    },
+    Matrix: elementType => {
+      const et = elementType as EastTypeValue;
+      if (et.type === "Float") return matrix(new Float64Array(0), 0, 0);
+      if (et.type === "Integer") return matrix(new BigInt64Array(0), 0, 0);
+      return matrix(new Uint8ClampedArray(0), 0, 0);
+    },
   });
 }

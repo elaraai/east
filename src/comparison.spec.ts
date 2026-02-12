@@ -6,7 +6,8 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { variant } from './containers/variant.js';
 import { compareFor, equalFor, greaterEqualFor, greaterFor, isFor, lessEqualFor, lessFor, notEqualFor } from './comparison.js';
-import { ArrayType, AsyncFunctionType, BlobType, BooleanType, DateTimeType, DictType, type EastType, FloatType, FunctionType, IntegerType, NeverType, NullType, RecursiveType, SetType, StringType, StructType, type ValueTypeOf, VariantType } from './types.js';
+import { ArrayType, AsyncFunctionType, BlobType, BooleanType, DateTimeType, DictType, type EastType, FloatType, FunctionType, IntegerType, MatrixType, NeverType, NullType, RecursiveType, SetType, StringType, StructType, type ValueTypeOf, VariantType, VectorType } from './types.js';
+import { matrix } from './containers/matrix.js';
 
 describe('Comparison of EAST values', () => {
     function run<T extends EastType>(type: T, values: ValueTypeOf<T>[]) {
@@ -1318,6 +1319,151 @@ describe('Comparison of EAST values', () => {
 
         // Different list content
         assert.equal(is(tree1, tree3), false);
+    });
+
+    test('should compare float vectors', () => {
+        const type = VectorType(FloatType);
+        const values: Float64Array[] = [
+            new Float64Array([]),
+            new Float64Array([-0]),
+            new Float64Array([0]),
+            new Float64Array([0, 1]),
+            new Float64Array([0, 2, 3]),
+            new Float64Array([0, 2, 4]),
+            new Float64Array([1]),
+            new Float64Array([NaN]),
+        ];
+
+        run(type, values);
+    });
+
+    test('should compare integer vectors', () => {
+        const type = VectorType(IntegerType);
+        const values: BigInt64Array[] = [
+            new BigInt64Array([]),
+            new BigInt64Array([-1n]),
+            new BigInt64Array([0n]),
+            new BigInt64Array([0n, 1n]),
+            new BigInt64Array([0n, 2n]),
+            new BigInt64Array([1n]),
+        ];
+
+        run(type, values);
+    });
+
+    test('should compare boolean vectors', () => {
+        const type = VectorType(BooleanType);
+        const values: Uint8ClampedArray[] = [
+            new Uint8ClampedArray([]),
+            new Uint8ClampedArray([0]),
+            new Uint8ClampedArray([0, 0]),
+            new Uint8ClampedArray([0, 1]),
+            new Uint8ClampedArray([1]),
+            new Uint8ClampedArray([1, 0]),
+            new Uint8ClampedArray([1, 1]),
+        ];
+
+        run(type, values);
+    });
+
+    test('should compare float matrices', () => {
+        const type = MatrixType(FloatType);
+        const values = [
+            matrix(new Float64Array([]), 0, 0),
+            matrix(new Float64Array([1, 2, 3, 4]), 1, 4),
+            matrix(new Float64Array([1, 2, 3, 4]), 2, 2),
+            matrix(new Float64Array([1, 2, 5, 6]), 2, 2),
+            matrix(new Float64Array([1, 2, 3, 4, 5, 6]), 2, 3),
+        ];
+
+        run(type, values);
+    });
+
+    test('should compare integer matrices', () => {
+        const type = MatrixType(IntegerType);
+        const values = [
+            matrix(new BigInt64Array([]), 0, 0),
+            matrix(new BigInt64Array([1n, 2n]), 1, 2),
+            matrix(new BigInt64Array([1n, 2n, 3n, 4n]), 2, 2),
+            matrix(new BigInt64Array([1n, 2n, 3n, 5n]), 2, 2),
+        ];
+
+        run(type, values);
+    });
+
+    test('should handle Vector NaN edge cases', () => {
+        const type = VectorType(FloatType);
+        const equalCompare = equalFor(type);
+        const notEqualCompare = notEqualFor(type);
+
+        // NaN == NaN within vectors
+        const v1 = new Float64Array([NaN, 1.0]);
+        const v2 = new Float64Array([NaN, 1.0]);
+        assert.equal(equalCompare(v1, v2), true);
+        assert.equal(notEqualCompare(v1, v2), false);
+
+        // -0 vs +0 within vectors
+        const v3 = new Float64Array([-0]);
+        const v4 = new Float64Array([0]);
+        assert.equal(equalCompare(v3, v4), false);
+    });
+
+    test('should handle Vector identity with isFor', () => {
+        const type = VectorType(FloatType);
+        const isCompare = isFor(type);
+
+        const v1 = new Float64Array([1, 2, 3]);
+        const v2 = new Float64Array([1, 2, 3]); // different object, same values
+        const v3 = v1; // same reference
+
+        // isFor compares by identity for mutable types
+        assert.equal(isCompare(v1, v2), false);
+        assert.equal(isCompare(v1, v3), true);
+    });
+
+    test('should handle Matrix identity with isFor', () => {
+        const type = MatrixType(FloatType);
+        const isCompare = isFor(type);
+
+        const m1 = matrix(new Float64Array([1, 2, 3, 4]), 2, 2);
+        const m2 = matrix(new Float64Array([1, 2, 3, 4]), 2, 2); // different object
+        const m3 = m1; // same reference
+
+        // isFor compares by identity for mutable types
+        assert.equal(isCompare(m1, m2), false);
+        assert.equal(isCompare(m1, m3), true);
+    });
+
+    test('should handle Matrix NaN edge cases', () => {
+        const type = MatrixType(FloatType);
+        const equalCompare = equalFor(type);
+
+        // NaN == NaN within matrices
+        const m1 = matrix(new Float64Array([NaN, 1]), 1, 2);
+        const m2 = matrix(new Float64Array([NaN, 1]), 1, 2);
+        assert.equal(equalCompare(m1, m2), true);
+
+        // Different shapes but same data length
+        const m3 = matrix(new Float64Array([1, 2, 3, 4]), 2, 2);
+        const m4 = matrix(new Float64Array([1, 2, 3, 4]), 1, 4);
+        assert.equal(equalCompare(m3, m4), false);
+    });
+
+    test('should handle Vector prefix comparisons', () => {
+        const type = VectorType(IntegerType);
+        const lessCompare = lessFor(type);
+        const lessEqualCompare = lessEqualFor(type);
+        const greaterCompare = greaterFor(type);
+        const greaterEqualCompare = greaterEqualFor(type);
+
+        const v1 = new BigInt64Array([1n, 2n]);
+        const v2 = new BigInt64Array([1n, 2n, 3n]);
+
+        // Prefix comparison
+        assert.equal(lessCompare(v1, v2), true);
+        assert.equal(lessEqualCompare(v1, v2), true);
+        assert.equal(greaterCompare(v2, v1), true);
+        assert.equal(greaterEqualCompare(v2, v1), true);
     });
 
     test('should throw for invalid type in isFor', () => {

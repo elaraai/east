@@ -16,6 +16,7 @@ import {
 } from "./binary-utils.js";
 import { printFor } from "./east.js";
 import { ref } from "../containers/ref.js";
+import { matrix } from "../containers/matrix.js";
 import { EAST_IR_SYMBOL, EAST_CAPTURES_SYMBOL, compile_internal, type RuntimeContext } from "../compile.js";
 import { InternalError } from "../error.js";
 import { IRType, type FunctionIR, type AsyncFunctionIR } from "../ir.js";
@@ -24,6 +25,13 @@ import { analyzeIR } from "../analyze.js";
 
 const printTypeValue = printFor(EastTypeValueType) as (type: EastTypeValue) => string;
 const isTypeValueEqual = equalFor(EastTypeValueType) as (t1: EastTypeValue, t2: EastTypeValue) => boolean;
+
+function _bytesPerElement(elementType: EastTypeValue): number {
+  if (elementType.type === "Float") return 8;
+  if (elementType.type === "Integer") return 8;
+  if (elementType.type === "Boolean") return 1;
+  throw new Error(`Unsupported vector/matrix element type: ${elementType.type}`);
+}
 
 // =============================================================================
 // Context types for backreference tracking
@@ -288,6 +296,18 @@ export function encodeBeast2ValueToBufferFor(type: EastTypeValue, typeCtx: Beast
         const captureEncoder = encodeBeast2ValueToBufferFor(captureType, typeCtx);
         captureEncoder(captureValue, writer, ctx);
       }
+    };
+  } else if (type.type === "Vector") {
+    return (value: Float64Array | BigInt64Array | Uint8ClampedArray, writer: BufferWriter, _ctx: Beast2EncodeContext = { refs: new Map() }) => {
+      writer.writeVarint(value.length);
+      writer.writeBytes(new Uint8Array(value.buffer, value.byteOffset, value.byteLength));
+    };
+  } else if (type.type === "Matrix") {
+    return (value: any, writer: BufferWriter, _ctx: Beast2EncodeContext = { refs: new Map() }) => {
+      const { data, rows, cols } = value;
+      writer.writeVarint(rows);
+      writer.writeVarint(cols);
+      writer.writeBytes(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
     };
   } else {
     throw new Error(`Unhandled type ${(type satisfies never as EastTypeValue).type}`);
@@ -634,6 +654,48 @@ export function decodeBeast2ValueFor(type: EastTypeValue | EastType, typeCtx: Be
       }
 
       return [fn, currentOffset];
+    };
+  } else if (type.type === "Vector") {
+    const bytesPerElement = _bytesPerElement(type.value);
+    return (buffer: Uint8Array, offset: number, _ctx?: Beast2DecodeContext): [any, number] => {
+      const [length, newOffset] = readVarint(buffer, offset);
+      const byteLen = length * bytesPerElement;
+      if (newOffset + byteLen > buffer.length) {
+        throw new Error(`Buffer underflow reading vector at offset ${offset}, length ${length}`);
+      }
+      // Copy bytes to a new buffer to ensure proper alignment
+      const rawBytes = buffer.slice(newOffset, newOffset + byteLen);
+      let typedArray: Float64Array | BigInt64Array | Uint8ClampedArray;
+      if (type.value.type === "Float") {
+        typedArray = new Float64Array(rawBytes.buffer, rawBytes.byteOffset, length);
+      } else if (type.value.type === "Integer") {
+        typedArray = new BigInt64Array(rawBytes.buffer, rawBytes.byteOffset, length);
+      } else {
+        typedArray = new Uint8ClampedArray(rawBytes.buffer, rawBytes.byteOffset, length);
+      }
+      return [typedArray, newOffset + byteLen];
+    };
+  } else if (type.type === "Matrix") {
+    const bytesPerElement = _bytesPerElement(type.value);
+    return (buffer: Uint8Array, offset: number, _ctx?: Beast2DecodeContext): [any, number] => {
+      const [rows, offsetAfterRows] = readVarint(buffer, offset);
+      const [cols, offsetAfterCols] = readVarint(buffer, offsetAfterRows);
+      const totalElements = rows * cols;
+      const byteLen = totalElements * bytesPerElement;
+      if (offsetAfterCols + byteLen > buffer.length) {
+        throw new Error(`Buffer underflow reading matrix at offset ${offset}, rows ${rows}, cols ${cols}`);
+      }
+      // Copy bytes to a new buffer to ensure proper alignment
+      const rawBytes = buffer.slice(offsetAfterCols, offsetAfterCols + byteLen);
+      let typedArray: Float64Array | BigInt64Array | Uint8ClampedArray;
+      if (type.value.type === "Float") {
+        typedArray = new Float64Array(rawBytes.buffer, rawBytes.byteOffset, totalElements);
+      } else if (type.value.type === "Integer") {
+        typedArray = new BigInt64Array(rawBytes.buffer, rawBytes.byteOffset, totalElements);
+      } else {
+        typedArray = new Uint8ClampedArray(rawBytes.buffer, rawBytes.byteOffset, totalElements);
+      }
+      return [matrix(typedArray, rows, cols), offsetAfterCols + byteLen];
     };
   } else {
     throw new Error(`Unhandled type ${(type satisfies never as EastTypeValue).type}`);

@@ -11,6 +11,7 @@ Working code examples for common East use cases.
 - [Platform Functions](#platform-functions)
 - [Control Flow](#control-flow)
 - [Collections](#collections)
+- [Vectors and Matrices](#vectors-and-matrices)
 - [Grouping and Aggregation](#grouping-and-aggregation)
 - [Variants and Pattern Matching](#variants-and-pattern-matching)
 - [Error Handling](#error-handling)
@@ -360,6 +361,136 @@ const dictOps = East.function([DictType(StringType, IntegerType)], IntegerType, 
     }));
 
     $.return(inventory.sum());
+});
+```
+
+---
+
+## Vectors and Matrices
+
+### Vector Operations
+
+```typescript
+import { East, VectorType, FloatType, IntegerType, ArrayType } from "@elaraai/east";
+
+// Create and manipulate float vectors
+const vectorOps = East.function([ArrayType(FloatType)], VectorType(FloatType), ($, arr) => {
+    // Create vectors from the standard library
+    const zeros = $.let(East.Vector.zeros(5n));           // Float64Array of 5 zeros
+    const ones = $.let(East.Vector.ones(3n));             // Float64Array of 3 ones
+    const filled = $.let(East.Vector.fill(4n, 42.0));     // Float64Array of 4 x 42.0
+
+    // Convert from Array to Vector
+    const vec = $.let(East.Vector.fromArray(arr));
+
+    // Element access
+    const first = $.let(vec.get(0n));
+    const len = $.let(vec.length());
+
+    // Mutation
+    $(vec.set(0n, 99.0));
+
+    // Slicing and concatenation
+    const sliced = $.let(vec.slice(0n, 2n));
+    const combined = $.let(sliced.concat(ones));
+
+    // Higher-order operations
+    const doubled = $.let(vec.map(($, x, i) => x.multiply(2.0)));
+
+    $.return(doubled);
+});
+
+const compiled = East.compile(vectorOps, []);
+compiled([1.0, 2.0, 3.0]);  // Float64Array([198.0, 4.0, 6.0])
+```
+
+### Matrix Operations
+
+```typescript
+import { East, MatrixType, VectorType, FloatType, IntegerType, ArrayType, matrix } from "@elaraai/east";
+
+// Create and manipulate matrices
+const matrixOps = East.function([], MatrixType(FloatType), $ => {
+    // Create matrices from the standard library
+    const zeros = $.let(East.Matrix.zeros(2n, 3n));       // 2x3 zero matrix
+    const ones = $.let(East.Matrix.ones(3n, 3n));         // 3x3 ones matrix
+    const filled = $.let(East.Matrix.fill(2n, 2n, 5.0));  // 2x2 matrix of 5.0
+
+    // Create from nested array
+    const arr = $.let([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]);
+    const m = $.let(East.Matrix.fromArray(arr));
+
+    // Shape queries
+    const rows = $.let(m.rows());  // 2n
+    const cols = $.let(m.cols());  // 3n
+
+    // Element access
+    const val = $.let(m.get(0n, 1n));  // 2.0
+
+    // Mutation
+    $(m.set(0n, 0n, 99.0));
+
+    // Row/column extraction (returns vector copies)
+    const row0 = $.let(m.getRow(0n));  // Vector [99.0, 2.0, 3.0]
+    const col1 = $.let(m.getCol(1n));  // Vector [2.0, 5.0]
+
+    // Transpose
+    const t = $.let(m.transpose());  // 3x2 matrix
+
+    $.return(t);
+});
+
+const compiled = East.compile(matrixOps, []);
+compiled();  // matrix with 3 rows, 2 cols
+```
+
+### Vector-Matrix Conversions
+
+```typescript
+import { East, VectorType, MatrixType, FloatType, ArrayType } from "@elaraai/east";
+
+const reshapeDemo = East.function([], VectorType(FloatType), $ => {
+    // Create a matrix from nested array
+    const m = $.let(East.Matrix.fromArray([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]));
+
+    // Flatten to vector (row-major order)
+    const flat = $.let(m.toVector());  // [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+
+    // Reshape back to matrix
+    const m2 = $.let(flat.toMatrix(2n, 3n));  // 2x3 matrix
+
+    // Convert vector to/from array
+    const arr = $.let(flat.toArray());         // East Array [1.0, 2.0, ...]
+    const vec2 = $.let(East.Vector.fromArray(arr));
+
+    // Convert matrix to nested array
+    const nested = $.let(m.toArray());         // [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
+
+    $.return(flat);
+});
+```
+
+### Integer and Boolean Vectors/Matrices
+
+```typescript
+import { East, VectorType, MatrixType, IntegerType, BooleanType } from "@elaraai/east";
+
+const intVectorOps = East.function([], VectorType(IntegerType), $ => {
+    // Integer vectors (BigInt64Array)
+    const labels = $.let(East.Vector.fill(5n, 0n));
+    $(labels.set(2n, 1n));
+    $(labels.set(4n, 1n));
+
+    $.return(labels);
+});
+
+const boolMatrixOps = East.function([], MatrixType(BooleanType), $ => {
+    // Boolean matrices (Uint8ClampedArray) - useful for masks
+    const mask = $.let(East.Matrix.fill(2n, 3n, false));
+    $(mask.set(0n, 0n, true));
+    $(mask.set(1n, 2n, true));
+
+    $.return(mask);
 });
 ```
 

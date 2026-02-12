@@ -97,7 +97,7 @@ export interface InvertContext {
 
 /** Type-level computation of the patch type for a given East type. */
 export type PatchTypeOf<T extends EastType> =
-  T extends NeverType | NullType | BooleanType | IntegerType | FloatType | StringType | DateTimeType | BlobType
+  T extends NeverType | NullType | BooleanType | IntegerType | FloatType | StringType | DateTimeType | BlobType | import("../types.js").VectorType<any> | import("../types.js").MatrixType<any>
     ? VariantType<{ unchanged: NullType; replace: StructType<{ before: T; after: T }> }>
   : T extends RefType<infer V extends EastType>
     ? VariantType<{ unchanged: NullType; replace: StructType<{ before: T; after: T }>; patch: PatchTypeOf<V> }>

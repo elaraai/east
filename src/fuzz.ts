@@ -24,7 +24,10 @@ import {
   RecursiveType,
   FunctionType,
   RefType,
+  VectorType,
+  MatrixType,
 } from "./types.js";
+import { matrix } from "./containers/matrix.js";
 import { isVariant, variant } from "./containers/variant.js";
 import { printType } from "./types.js";
 import { printFor } from "./serialization/east.js";
@@ -79,7 +82,7 @@ export function randomType(
   }
 
   // Complex type - weights adjusted based on options
-  let totalWeight = 5; // Array, Set, Dict, Struct, Variant
+  let totalWeight = 7; // Array, Set, Dict, Struct, Variant, Vector, Matrix
   if (includeRecursive && depth === 0) totalWeight += 1; // Recursive only at top level
   if (includeFunctions) totalWeight += 1;
 
@@ -116,7 +119,15 @@ export function randomType(
       }
       return VariantType(cases);
     }
-  } else if (r < 6 && includeRecursive && depth === 0) {
+  } else if (r < 6) {
+    // Vector with random numeric element type
+    const elemTypes = [FloatType, IntegerType, BooleanType];
+    return VectorType(elemTypes[Math.floor(Math.random() * elemTypes.length)]!);
+  } else if (r < 7) {
+    // Matrix with random numeric element type
+    const elemTypes = [FloatType, IntegerType, BooleanType];
+    return MatrixType(elemTypes[Math.floor(Math.random() * elemTypes.length)]!);
+  } else if (r < 8 && includeRecursive && depth === 0) {
     // Recursive type - only at top level to avoid nested recursion complexity
     return randomRecursiveType();
   } else {
@@ -243,8 +254,10 @@ function containsRecursive(type: EastTypeValue): boolean {
       return type.value.some(f => containsRecursive(f.type));
     case "Variant":
       return type.value.some(c => containsRecursive(c.type));
+    case "Vector":
+    case "Matrix":
     default:
-      // Primitives, functions don't contain recursive refs
+      // Primitives, vectors, matrices, functions don't contain recursive refs
       return false;
   }
 }
@@ -443,6 +456,56 @@ function buildValueGenerator(
     outputGen = buildValueGenerator(type.value.output, ctx);
     ctx.generators.pop();
     return ret;
+  } else if (type.type === "Vector") {
+    const elemType = type.value;
+    return () => {
+      const length = Math.floor(Math.random() * 10);
+      if (elemType.type === "Float") {
+        const arr = new Float64Array(length);
+        for (let i = 0; i < length; i++) {
+          const r = Math.random();
+          if (r < 0.05) arr[i] = NaN;
+          else if (r < 0.10) arr[i] = Infinity;
+          else if (r < 0.15) arr[i] = -Infinity;
+          else arr[i] = Math.random() * 200 - 100;
+        }
+        return arr;
+      } else if (elemType.type === "Integer") {
+        const arr = new BigInt64Array(length);
+        for (let i = 0; i < length; i++) arr[i] = BigInt(Math.floor(Math.random() * 200) - 100);
+        return arr;
+      } else {
+        const arr = new Uint8ClampedArray(length);
+        for (let i = 0; i < length; i++) arr[i] = Math.random() < 0.5 ? 1 : 0;
+        return arr;
+      }
+    };
+  } else if (type.type === "Matrix") {
+    const elemType = type.value;
+    return () => {
+      const rows = Math.floor(Math.random() * 5);
+      const cols = rows === 0 ? 0 : Math.floor(Math.random() * 5);
+      const totalLen = rows * cols;
+      if (elemType.type === "Float") {
+        const data = new Float64Array(totalLen);
+        for (let i = 0; i < totalLen; i++) {
+          const r = Math.random();
+          if (r < 0.05) data[i] = NaN;
+          else if (r < 0.10) data[i] = Infinity;
+          else if (r < 0.15) data[i] = -Infinity;
+          else data[i] = Math.random() * 200 - 100;
+        }
+        return matrix(data, rows, cols);
+      } else if (elemType.type === "Integer") {
+        const data = new BigInt64Array(totalLen);
+        for (let i = 0; i < totalLen; i++) data[i] = BigInt(Math.floor(Math.random() * 200) - 100);
+        return matrix(data, rows, cols);
+      } else {
+        const data = new Uint8ClampedArray(totalLen);
+        for (let i = 0; i < totalLen; i++) data[i] = Math.random() < 0.5 ? 1 : 0;
+        return matrix(data, rows, cols);
+      }
+    };
   } else {
     throw new Error(`Unhandled type: ${printType(type)}`);
   }

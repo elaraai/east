@@ -32,11 +32,14 @@ import {
   VariantType,
   RecursiveType,
   AsyncFunctionType,
+  VectorType,
+  MatrixType,
 } from '../types.js';
 import { compareFor, equalFor } from '../comparison.js';
 import { SortedSet } from '../containers/sortedset.js';
 import { SortedMap } from '../containers/sortedmap.js';
 import { variant } from '../containers/variant.js';
+import { matrix } from '../containers/matrix.js';
 
 
 describe('parseFor (value parsing)', () => {
@@ -495,6 +498,106 @@ describe('parseFor (value parsing)', () => {
     });
   });
 
+  describe('vector values', () => {
+    test('should parse float vector', () => {
+      const type = VectorType(FloatType);
+      const parser = parseFor(type);
+      const equal = equalFor(type);
+
+      const result = parser('vec[1.0, 2.0, 3.0]');
+      assert.equal(result.success, true);
+      if (result.success) {
+        assert.ok(equal(result.value, new Float64Array([1.0, 2.0, 3.0])));
+      }
+    });
+
+    test('should parse empty float vector', () => {
+      const type = VectorType(FloatType);
+      const parser = parseFor(type);
+      const equal = equalFor(type);
+
+      const result = parser('vec[]');
+      assert.equal(result.success, true);
+      if (result.success) {
+        assert.ok(equal(result.value, new Float64Array([])));
+      }
+    });
+
+    test('should parse integer vector', () => {
+      const type = VectorType(IntegerType);
+      const parser = parseFor(type);
+      const equal = equalFor(type);
+
+      const result = parser('vec[10, 20, 30]');
+      assert.equal(result.success, true);
+      if (result.success) {
+        assert.ok(equal(result.value, new BigInt64Array([10n, 20n, 30n])));
+      }
+    });
+
+    test('should parse boolean vector', () => {
+      const type = VectorType(BooleanType);
+      const parser = parseFor(type);
+      const equal = equalFor(type);
+
+      const result = parser('vec[true, false, true]');
+      assert.equal(result.success, true);
+      if (result.success) {
+        assert.ok(equal(result.value, new Uint8ClampedArray([1, 0, 1])));
+      }
+    });
+
+    test('should parse vector with special floats', () => {
+      const type = VectorType(FloatType);
+      const parser = parseFor(type);
+      const equal = equalFor(type);
+
+      const result = parser('vec[NaN, Infinity, -Infinity]');
+      assert.equal(result.success, true);
+      if (result.success) {
+        assert.ok(equal(result.value, new Float64Array([NaN, Infinity, -Infinity])));
+      }
+    });
+  });
+
+  describe('matrix values', () => {
+    test('should parse float matrix', () => {
+      const type = MatrixType(FloatType);
+      const parser = parseFor(type);
+      const equal = equalFor(type);
+
+      const result = parser('mat[[1.0, 2.0], [3.0, 4.0]]');
+      assert.equal(result.success, true);
+      if (result.success) {
+        assert.ok(equal(result.value, matrix(new Float64Array([1.0, 2.0, 3.0, 4.0]), 2, 2)));
+      }
+    });
+
+    test('should parse empty matrix', () => {
+      const type = MatrixType(FloatType);
+      const parser = parseFor(type);
+      const equal = equalFor(type);
+
+      const result = parser('mat[]');
+      assert.equal(result.success, true);
+      if (result.success) {
+        assert.ok(equal(result.value, matrix(new Float64Array([]), 0, 0)));
+      }
+    });
+
+    test('should parse integer matrix', () => {
+      const type = MatrixType(IntegerType);
+      const parser = parseFor(type);
+      const equal = equalFor(type);
+
+      const result = parser('mat[[1, 2, 3], [4, 5, 6]]');
+      assert.equal(result.success, true);
+      if (result.success) {
+        assert.ok(equal(result.value, matrix(new BigInt64Array([1n, 2n, 3n, 4n, 5n, 6n]), 2, 3)));
+      }
+    });
+  });
+
   describe('error cases', () => {
     test('should return error for type mismatch', () => {
       const parser = parseFor(IntegerType);
@@ -930,6 +1033,116 @@ describe('printFor and round-trip tests', () => {
       assert.equal(result.success, true);
       if (result.success) {
         assert.ok(equal(result.value, value));
+      }
+    });
+  });
+
+  describe('vector and matrix types round-trip', () => {
+    test('float vector should round-trip', () => {
+      const type = VectorType(FloatType);
+      const printer = printFor(type);
+      const parser = parseFor(type);
+      const equal = equalFor(type);
+
+      const values = [
+        new Float64Array([]),
+        new Float64Array([1.0, 2.5, 3.14]),
+        new Float64Array([NaN, Infinity, -Infinity, -0.0]),
+      ];
+
+      for (const value of values) {
+        const printed = printer(value);
+        const result = parser(printed);
+        assert.equal(result.success, true);
+        if (result.success) {
+          assert.ok(equal(result.value, value), `Round-trip failed for ${printed}`);
+        }
+      }
+    });
+
+    test('integer vector should round-trip', () => {
+      const type = VectorType(IntegerType);
+      const printer = printFor(type);
+      const parser = parseFor(type);
+      const equal = equalFor(type);
+
+      const values = [
+        new BigInt64Array([]),
+        new BigInt64Array([1n, -2n, 300n]),
+        new BigInt64Array([9223372036854775807n, -9223372036854775808n]),
+      ];
+
+      for (const value of values) {
+        const printed = printer(value);
+        const result = parser(printed);
+        assert.equal(result.success, true);
+        if (result.success) {
+          assert.ok(equal(result.value, value), `Round-trip failed for ${printed}`);
+        }
+      }
+    });
+
+    test('boolean vector should round-trip', () => {
+      const type = VectorType(BooleanType);
+      const printer = printFor(type);
+      const parser = parseFor(type);
+      const equal = equalFor(type);
+
+      const values = [
+        new Uint8ClampedArray([]),
+        new Uint8ClampedArray([1, 0, 1, 1, 0]),
+      ];
+
+      for (const value of values) {
+        const printed = printer(value);
+        const result = parser(printed);
+        assert.equal(result.success, true);
+        if (result.success) {
+          assert.ok(equal(result.value, value), `Round-trip failed for ${printed}`);
+        }
+      }
+    });
+
+    test('float matrix should round-trip', () => {
+      const type = MatrixType(FloatType);
+      const printer = printFor(type);
+      const parser = parseFor(type);
+      const equal = equalFor(type);
+
+      const values = [
+        matrix(new Float64Array([]), 0, 0),
+        matrix(new Float64Array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0]), 2, 3),
+        matrix(new Float64Array([NaN, Infinity, -Infinity, 0.0]), 2, 2),
+      ];
+
+      for (const value of values) {
+        const printed = printer(value);
+        const result = parser(printed);
+        assert.equal(result.success, true);
+        if (result.success) {
+          assert.ok(equal(result.value, value), `Round-trip failed for ${printed}`);
+        }
+      }
+    });
+
+    test('integer matrix should round-trip', () => {
+      const type = MatrixType(IntegerType);
+      const printer = printFor(type);
+      const parser = parseFor(type);
+      const equal = equalFor(type);
+
+      const values = [
+        matrix(new BigInt64Array([]), 0, 0),
+        matrix(new BigInt64Array([1n, 2n, 3n, 4n]), 2, 2),
+      ];
+
+      for (const value of values) {
+        const printed = printer(value);
+        const result = parser(printed);
+        assert.equal(result.success, true);
+        if (result.success) {
+          assert.ok(equal(result.value, value), `Round-trip failed for ${printed}`);
+        }
       }
     });
   });

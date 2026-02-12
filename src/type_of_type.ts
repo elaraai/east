@@ -67,7 +67,9 @@ export const EastTypeType = RecursiveType(type => VariantType({
   "AsyncFunction": StructType({
     inputs: ArrayType(type),
     output: type,
-  })
+  }),
+  "Vector": type,
+  "Matrix": type,
 }));
 export type EastTypeType = typeof EastTypeType;
 
@@ -85,6 +87,8 @@ export type AsyncFunctionTypeValue = variant<"AsyncFunction", {
   inputs: any[],
   output: any,
 }>;
+export type VectorTypeValue = variant<"Vector", any>;
+export type MatrixTypeValue = variant<"Matrix", any>;
 
 /** A serializable representation of East types. Note that `any` is used to terminate recursing of TypeScript types. */
 export type EastTypeValue = 
@@ -104,7 +108,9 @@ export type EastTypeValue =
   | VariantTypeValue
   | variant<"Recursive", bigint>
   | FunctionTypeValue
-  | AsyncFunctionTypeValue;
+  | AsyncFunctionTypeValue
+  | VectorTypeValue
+  | MatrixTypeValue;
 
 
 // Cache for memoizing toEastTypeValue results (top-level non-recursive calls only)
@@ -208,6 +214,16 @@ function toEastTypeValueImpl(type: EastType, stack: EastType[], is_recursive: bo
       inputs: type.inputs.map(p => toEastTypeValue(p, stack, false)),
       output: toEastTypeValue(type.output, stack, false),
     });
+    stack.pop();
+    return ret;
+  } else if (type.type === "Vector") {
+    stack.push(type);
+    const ret = variant("Vector", toEastTypeValue(type.element, stack, false));
+    stack.pop();
+    return ret;
+  } else if (type.type === "Matrix") {
+    stack.push(type);
+    const ret = variant("Matrix", toEastTypeValue(type.element, stack, false));
     stack.pop();
     return ret;
   } else {
@@ -365,6 +381,16 @@ function isSubtypeValueImpl(
     return isTypeValueEqual(t1.value, t2.value);
   }
 
+  // Vector type - invariant (mutable)
+  if (t1.type === "Vector" && t2.type === "Vector") {
+    return isTypeValueEqual(t1.value, t2.value);
+  }
+
+  // Matrix type - invariant (mutable)
+  if (t1.type === "Matrix" && t2.type === "Matrix") {
+    return isTypeValueEqual(t1.value, t2.value);
+  }
+
   // Set type - invariant (mutable)
   if (t1.type === "Set" && t2.type === "Set") {
     return isTypeValueEqual(t1.value, t2.value);
@@ -471,7 +497,8 @@ export function expandTypeValue(type: EastTypeValue, root: EastTypeValue = type,
   // Fast path: primitive types cannot contain recursive references
   if (type.type === "Never" || type.type === "Null" || type.type === "Boolean" ||
       type.type === "Integer" || type.type === "Float" || type.type === "String" ||
-      type.type === "DateTime" || type.type === "Blob") {
+      type.type === "DateTime" || type.type === "Blob" ||
+      type.type === "Vector" || type.type === "Matrix") {
     return type;
   }
 
@@ -493,6 +520,10 @@ function expandTypeValueImpl(type: EastTypeValue, root: EastTypeValue, depth: bi
     return variant("Ref", expandTypeValue(type.value, root, depth + 1n));
   } else if (type.type === "Array") {
     return variant("Array", expandTypeValue(type.value, root, depth + 1n));
+  } else if (type.type === "Vector") {
+    return variant("Vector", expandTypeValue(type.value, root, depth + 1n));
+  } else if (type.type === "Matrix") {
+    return variant("Matrix", expandTypeValue(type.value, root, depth + 1n));
   } else if (type.type === "Dict") {
     return variant("Dict", {
       key: type.value.key,
@@ -566,6 +597,10 @@ export function isDataTypeValue(
 
   if (type.type === "Array") {
     return isDataTypeValue(type.value, depth + 1);
+  }
+
+  if (type.type === "Vector" || type.type === "Matrix") {
+    return true;
   }
 
   if (type.type === "Set") {

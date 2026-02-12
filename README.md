@@ -108,6 +108,11 @@ East supports a rich type system optimized for business logic and data processin
 | `SetType<K>` | `Set<ValueTypeOf<K>>` | **Mutable** | Sorted set |
 | `DictType<K, V>` | `Map<ValueTypeOf<K>, ValueTypeOf<V>>` | **Mutable** | Sorted dictionary |
 | `RefType<T>` | `ref<ValueTypeOf<T>>` | **Mutable** | Refcell, mutable box |
+| **Numeric Arrays** | | | |
+| `VectorType<FloatType>` | `Float64Array` | **Mutable** | Dense float vector |
+| `VectorType<IntegerType>` | `BigInt64Array` | **Mutable** | Dense integer vector |
+| `VectorType<BooleanType>` | `Uint8ClampedArray` | **Mutable** | Dense boolean vector |
+| `MatrixType<T>` | `matrix<TypedArray>` | **Mutable** | Dense 2D matrix (row-major) |
 | **Compound types** | | | |
 | `StructType<Fields>` | `{...}` | Immutable | Product type (records) |
 | `VariantType<Cases>` | `variant` | Immutable | Sum type (tagged unions) |
@@ -196,7 +201,7 @@ const compiled = receivedIR.compile(platform);
 
 ## Examples
 
-See the [USAGE.md](./USAGE.md) for more.
+See the [SKILL.md](./SKILL.md) for more.
 
 ## Development
 

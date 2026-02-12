@@ -50,6 +50,12 @@ export function isFor(type: EastTypeValue | EastType, typeCtx: TypeContext = [])
   } else if (type.type === "Array") {
     // mutable types are compared by identity
     return (x: any[], y: any, _ctx?: ValueContext) => Object.is(x, y);
+  } else if (type.type === "Vector") {
+    // mutable types are compared by identity
+    return (x: any, y: any, _ctx?: ValueContext) => Object.is(x, y);
+  } else if (type.type === "Matrix") {
+    // mutable types are compared by identity
+    return (x: any, y: any, _ctx?: ValueContext) => Object.is(x, y);
   } else if (type.type === "Set") {
     // mutable types are compared by identity
     return (x: Set<any>, y: any, _ctx?: ValueContext) => Object.is(x, y);
@@ -136,6 +142,28 @@ export function equalFor(type: EastTypeValue | EastType, typeCtx: TypeContext = 
       }
       return true;
     }
+  } else if (type.type === "Vector") {
+    const elemEqual = equalFor(type.value, typeCtx);
+    return (x: any, y: any, _ctx?: ValueContext) => {
+      if (Object.is(x, y)) return true;
+      if (x.length !== y.length) return false;
+      for (let i = 0; i < x.length; i++) {
+        if (!elemEqual(x[i], y[i])) return false;
+      }
+      return true;
+    };
+  } else if (type.type === "Matrix") {
+    const elemEqual = equalFor(type.value, typeCtx);
+    return (x: any, y: any, _ctx?: ValueContext) => {
+      if (Object.is(x, y)) return true;
+      if (x.rows !== y.rows || x.cols !== y.cols) return false;
+      const xd = x.data;
+      const yd = y.data;
+      for (let i = 0; i < xd.length; i++) {
+        if (!elemEqual(xd[i], yd[i])) return false;
+      }
+      return true;
+    };
   } else if (type.type === "Ref") {
     let value_comparer: (x: any, y: any, ctx?: ValueContext) => boolean;
     const ret = (x: ref<any>, y: ref<any>, ctx?: ValueContext) => {
@@ -855,6 +883,34 @@ export function compareFor(type: EastTypeValue | EastType, typeCtx: TypeContext 
       }
       return x.length < y.length ? -1 : (x.length > y.length ? 1 : 0);
     }
+  } else if (type.type === "Vector") {
+    const elemCompare = compareFor(type.value, typeCtx);
+    return (x: any, y: any, _ctx?: ValueContext) => {
+      if (Object.is(x, y)) return 0;
+      const length = x.length < y.length ? x.length : y.length;
+      for (let i = 0; i < length; i++) {
+        const cmp = elemCompare(x[i], y[i]);
+        if (cmp !== 0) return cmp;
+      }
+      return x.length < y.length ? -1 : (x.length > y.length ? 1 : 0);
+    };
+  } else if (type.type === "Matrix") {
+    const elemCompare = compareFor(type.value, typeCtx);
+    return (x: any, y: any, _ctx?: ValueContext) => {
+      if (Object.is(x, y)) return 0;
+      // Compare by rows, cols, then data
+      if (x.rows < y.rows) return -1;
+      if (x.rows > y.rows) return 1;
+      if (x.cols < y.cols) return -1;
+      if (x.cols > y.cols) return 1;
+      const xd = x.data;
+      const yd = y.data;
+      for (let i = 0; i < xd.length; i++) {
+        const cmp = elemCompare(xd[i], yd[i]);
+        if (cmp !== 0) return cmp;
+      }
+      return 0;
+    };
   } else if (type.type === "Ref") {
     let value_comparer: (x: any, y: any, ctx?: ValueContext) => 1 | 0 | -1;
     const ret = (x: ref<any>, y: ref<any>, ctx?: ValueContext) => {

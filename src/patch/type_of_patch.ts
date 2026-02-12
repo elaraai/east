@@ -44,7 +44,9 @@ export function PatchType<T extends EastType>(type: T, ctx?: Map<EastType, EastT
     t.type === "Float" ||
     t.type === "String" ||
     t.type === "DateTime" ||
-    t.type === "Blob"
+    t.type === "Blob" ||
+    t.type === "Vector" ||
+    t.type === "Matrix"
   ) {
     return VariantType({
       unchanged: NullType,

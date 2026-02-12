@@ -11,9 +11,17 @@ import { EastTypeValueType, toEastTypeValue, type EastTypeValue } from "../type_
 import { equalFor } from "../comparison.js";
 import { printFor } from "./east.js";
 import { ref } from "../containers/ref.js";
+import { matrix } from "../containers/matrix.js";
 
 const printTypeValue = printFor(EastTypeValueType) as (type: EastTypeValue) => string;
 const isTypeValueEqual = equalFor(EastTypeValueType) as (t1: EastTypeValue, t2: EastTypeValue) => boolean;
+
+function _bytesPerElement(elementType: EastTypeValue): number {
+  if (elementType.type === "Float") return 8;
+  if (elementType.type === "Integer") return 8;
+  if (elementType.type === "Boolean") return 1;
+  throw new Error(`Unsupported vector/matrix element type: ${elementType.type}`);
+}
 
 // Chunk size for streaming (64KB - good balance of memory vs throughput)
 const CHUNK_SIZE = 64 * 1024;
@@ -377,6 +385,54 @@ function encodeBeast2ValueToStreamFor(
       throw new Error(`Recursive type depth ${type.value} exceeds type context stack size ${typeCtx.length}`);
     }
     return targetEncoder;
+  } else if (type.type === "Vector") {
+    return function* (value: Float64Array | BigInt64Array | Uint8ClampedArray, writer: BufferWriter, _ctx?: Beast2EncodeContext) {
+      writer.writeVarint(value.length);
+      const raw = new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+      if (raw.length > CHUNK_SIZE) {
+        // Large vector - flush buffer first, then send in chunks
+        if (writer.size > 0) {
+          yield writer.pop();
+        }
+        let offset = 0;
+        while (offset < raw.length) {
+          const chunkSize = Math.min(CHUNK_SIZE, raw.length - offset);
+          writer.writeBytes(raw.subarray(offset, offset + chunkSize));
+          yield writer.pop();
+          offset += chunkSize;
+        }
+      } else {
+        writer.writeBytes(raw);
+        if (writer.size >= CHUNK_SIZE) {
+          yield writer.pop();
+        }
+      }
+    };
+  } else if (type.type === "Matrix") {
+    return function* (value: any, writer: BufferWriter, _ctx?: Beast2EncodeContext) {
+      const { data, rows, cols } = value;
+      writer.writeVarint(rows);
+      writer.writeVarint(cols);
+      const raw = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+      if (raw.length > CHUNK_SIZE) {
+        // Large matrix - flush buffer first, then send in chunks
+        if (writer.size > 0) {
+          yield writer.pop();
+        }
+        let offset = 0;
+        while (offset < raw.length) {
+          const chunkSize = Math.min(CHUNK_SIZE, raw.length - offset);
+          writer.writeBytes(raw.subarray(offset, offset + chunkSize));
+          yield writer.pop();
+          offset += chunkSize;
+        }
+      } else {
+        writer.writeBytes(raw);
+        if (writer.size >= CHUNK_SIZE) {
+          yield writer.pop();
+        }
+      }
+    };
   } else {
     // Should never reach here - all types handled above
     throw new Error(`Unhandled type: ${type.type}`);
@@ -663,6 +719,40 @@ function decodeBeast2ValueFromStreamFor(type: EastTypeValue, typeCtx: Beast2Stre
     return (_reader: StreamBufferReader, _ctx?: Beast2DecodeContext) => { throw new Error(`Functions cannot be deserialized`); };
   } else if (type.type === "AsyncFunction") {
     return (_reader: StreamBufferReader, _ctx?: Beast2DecodeContext) => { throw new Error(`AsyncFunctions cannot be deserialized`); };
+  } else if (type.type === "Vector") {
+    const bytesPerElement = _bytesPerElement(type.value);
+    return async (reader: StreamBufferReader, _ctx?: Beast2DecodeContext) => {
+      const length = await reader.readVarint();
+      const byteLen = length * bytesPerElement;
+      const rawBytes = new Uint8Array(byteLen);
+      await reader.readBytes(rawBytes);
+      if (type.value.type === "Float") {
+        return new Float64Array(rawBytes.buffer, rawBytes.byteOffset, length);
+      } else if (type.value.type === "Integer") {
+        return new BigInt64Array(rawBytes.buffer, rawBytes.byteOffset, length);
+      } else {
+        return new Uint8ClampedArray(rawBytes.buffer, rawBytes.byteOffset, length);
+      }
+    };
+  } else if (type.type === "Matrix") {
+    const bytesPerElement = _bytesPerElement(type.value);
+    return async (reader: StreamBufferReader, _ctx?: Beast2DecodeContext) => {
+      const rows = await reader.readVarint();
+      const cols = await reader.readVarint();
+      const totalElements = rows * cols;
+      const byteLen = totalElements * bytesPerElement;
+      const rawBytes = new Uint8Array(byteLen);
+      await reader.readBytes(rawBytes);
+      let typedArray: Float64Array | BigInt64Array | Uint8ClampedArray;
+      if (type.value.type === "Float") {
+        typedArray = new Float64Array(rawBytes.buffer, rawBytes.byteOffset, totalElements);
+      } else if (type.value.type === "Integer") {
+        typedArray = new BigInt64Array(rawBytes.buffer, rawBytes.byteOffset, totalElements);
+      } else {
+        typedArray = new Uint8ClampedArray(rawBytes.buffer, rawBytes.byteOffset, totalElements);
+      }
+      return matrix(typedArray, rows, cols);
+    };
   } else {
     throw new Error(`Unhandled type ${(type satisfies never as EastTypeValue).type}`);
   }

@@ -36,7 +36,9 @@ export function composeFor(type: EastTypeValue | EastType, ctx: ComposeContext =
     t.type === "Float" ||
     t.type === "String" ||
     t.type === "DateTime" ||
-    t.type === "Blob"
+    t.type === "Blob" ||
+    t.type === "Vector" ||
+    t.type === "Matrix"
   ) {
     return (first: VariantValue, second: VariantValue) => {
       if (first.type === "unchanged") {

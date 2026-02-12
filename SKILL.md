@@ -42,6 +42,7 @@ Task → What do you need?
     ├─ Define a Type (import from package, NOT East.*)
     │   ├─ Primitive → IntegerType, FloatType, StringType, BooleanType, DateTimeType, BlobType, NullType
     │   ├─ Collection → ArrayType(T), SetType(K), DictType(K, V), RefType(T)
+    │   ├─ Numeric → VectorType(T), MatrixType(T) where T is FloatType, IntegerType, or BooleanType
     │   ├─ Compound → StructType({...}), VariantType({...}), RecursiveType(...)
     │   ├─ Function → FunctionType<I, O>, AsyncFunctionType<I, O>
     │   └─ Patch → PatchType(T) (compute patch type for any East type)
@@ -61,6 +62,12 @@ Task → What do you need?
     │   ├─ VariantType({...}) (use helpers from package)
     │   │   ├─ Option type → some(value), none  ← preferred for Option/Maybe
     │   │   └─ Other variants → variant("caseName", value)
+    │   ├─ VectorType(FloatType) → new Float64Array([1.0, 2.0, 3.0])
+    │   ├─ VectorType(IntegerType) → new BigInt64Array([1n, 2n, 3n])
+    │   ├─ VectorType(BooleanType) → new Uint8ClampedArray([1, 0, 1])
+    │   ├─ MatrixType(FloatType) → matrix(Float64Array.from([1.0, 2.0, 3.0, 4.0]), 2, 2)
+    │   ├─ MatrixType(IntegerType) → matrix(BigInt64Array.from([1n, 2n, 3n, 4n]), 2, 2)
+    │   ├─ MatrixType(BooleanType) → matrix(Uint8ClampedArray.from([1, 0, 0, 1]), 2, 2)
     │   └─ RefType(T) (use helper from package) → ref(value)
     │
     ├─ Write a Function (East.*)
@@ -138,6 +145,16 @@ Task → What do you need?
     │   │   ├─ Convert → .toArray(), .toSet(), .toDict(), .flattenToArray(), .flattenToSet(), .flattenToDict()
     │   │   ├─ Group → .groupReduce(), .groupSize(), .groupSum(), .groupMean(), .groupToArrays(), .groupToSets(), .groupToDicts(), .groupEvery(), .groupSome()
     │   │   └─ Compare → .equals()/.equal()/.eq(), .notEquals()/.notEqual()/.ne()
+    │   ├─ Vector
+    │   │   ├─ Read → .length(), .get()
+    │   │   ├─ Mutate → .set()
+    │   │   ├─ Transform → .slice(), .concat(), .map(), .reduce()
+    │   │   └─ Convert → .toArray(), .toMatrix()
+    │   ├─ Matrix
+    │   │   ├─ Read → .rows(), .cols(), .get(), .getRow(), .getCol()
+    │   │   ├─ Mutate → .set()
+    │   │   ├─ Transform → .transpose()
+    │   │   └─ Convert → .toVector(), .toArray()
     │   ├─ Struct → .fieldName (direct property access)
     │   ├─ Variant → .match(), .unwrap(), .hasTag(), .getTag(), .equals()/.equal()/.eq(), .notEquals()/.notEqual()/.ne()
     │   └─ Ref → .get(), .update(), .merge()
@@ -150,6 +167,8 @@ Task → What do you need?
     │   ├─ Set → East.Set.generate()
     │   ├─ Dict → East.Dict.generate()
     │   ├─ Blob → East.Blob.encodeBeast(), blob.decodeCsv(), array.encodeCsv()
+    │   ├─ Vector → East.Vector.zeros(), .ones(), .fill(), .fromArray()
+    │   ├─ Matrix → East.Matrix.zeros(), .ones(), .fill(), .fromArray()
     │   └─ String → East.String.printJson(), East.String.printError()
     │
     ├─ Comparisons (East.*)
@@ -193,6 +212,10 @@ Task → What do you need?
 | `SetType<K>` | `Set<ValueTypeOf<K>>` | **Mutable** |
 | `DictType<K, V>` | `Map<ValueTypeOf<K>, ValueTypeOf<V>>` | **Mutable** |
 | `RefType<T>` | `ref<ValueTypeOf<T>>` | **Mutable** |
+| `VectorType<FloatType>` | `Float64Array` | **Mutable** |
+| `VectorType<IntegerType>` | `BigInt64Array` | **Mutable** |
+| `VectorType<BooleanType>` | `Uint8ClampedArray` | **Mutable** |
+| `MatrixType<T>` | `matrix<TypedArray>` | **Mutable** |
 | `StructType<Fields>` | `{...}` | Immutable |
 | `VariantType<Cases>` | `variant` | Immutable |
 | `FunctionType<I, O>` | Function | Immutable |

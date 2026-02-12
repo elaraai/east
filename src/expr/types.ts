@@ -4,7 +4,7 @@
  */
 
 import type { variant } from "../containers/variant.js";
-import type { ArrayType, BooleanType, FloatType, FunctionType, IntegerType, NeverType, NullType, StructType, StringType, VariantType, SubType, SetType, DictType, DateTimeType, BlobType, RecursiveType, RecursiveTypeMarker, RefType, AsyncFunctionType } from "../types.js";
+import type { ArrayType, BooleanType, FloatType, FunctionType, IntegerType, NeverType, NullType, StructType, StringType, VariantType, SubType, SetType, DictType, DateTimeType, BlobType, RecursiveType, RecursiveTypeMarker, RefType, AsyncFunctionType, VectorType, MatrixType } from "../types.js";
 import type { Expr } from "./expr.js";
 import type { NeverExpr } from "./never.js";
 import type { NullExpr } from "./null.js";
@@ -25,6 +25,8 @@ import type { BlockBuilder } from "./block.js";
 import type { ref } from "../containers/ref.js";
 import type { RefExpr } from "./ref.js";
 import type { CallableAsyncFunctionExpr } from "./asyncfunction.js";
+import type { VectorExpr } from "./vector.js";
+import type { MatrixExpr } from "./matrix.js";
 
 /**
  * Type mapping for values that can be passed to expression methods
@@ -42,6 +44,8 @@ export type SubtypeExprOrValue<T> =
   T extends BlobType ? Expr<NeverType> | Expr<BlobType> | Uint8Array :
   T extends RefType<infer U> ? Expr<NeverType> | Expr<RefType<U>> | ref<SubtypeExprOrValue<U>> :
   T extends ArrayType<infer V> ? Expr<NeverType> | Expr<ArrayType<V>> | SubtypeExprOrValue<V>[] :
+  T extends VectorType<infer V> ? Expr<NeverType> | Expr<VectorType<V>> | Float64Array | BigInt64Array | Uint8ClampedArray :
+  T extends MatrixType<infer V> ? Expr<NeverType> | Expr<MatrixType<V>> :
   T extends SetType<infer K> ? Expr<NeverType> | Expr<SetType<K>> | Set<SubtypeExprOrValue<K>> :
   T extends DictType<infer K, infer V> ? Expr<NeverType> | Expr<DictType<K, V>> | Map<SubtypeExprOrValue<K>, SubtypeExprOrValue<V>> :
   T extends StructType<infer Fields> ? Expr<NeverType> | Expr<StructType<{ [K in keyof Fields]: SubType<Fields[K]> }>> | { [K in keyof Fields]: SubtypeExprOrValue<Fields[K]> } :
@@ -61,6 +65,8 @@ export type SubtypeExprOrValue<T> =
 export type ExpandOnce<T, NodeType> =
   T extends RefType<infer U> ? RefType<ExpandOnce<U, NodeType>> :
   T extends ArrayType<infer U> ? ArrayType<ExpandOnce<U, NodeType>> :
+  T extends VectorType<infer V> ? VectorType<ExpandOnce<V, NodeType>> :
+  T extends MatrixType<infer V> ? MatrixType<ExpandOnce<V, NodeType>> :
   T extends SetType<infer U> ? SetType<ExpandOnce<U, NodeType>> :
   T extends DictType<infer K, infer V> ? DictType<ExpandOnce<K, NodeType>, ExpandOnce<V, NodeType>> :
   T extends StructType<infer Fields> ? StructType<{ [K in keyof Fields]: ExpandOnce<Fields[K], NodeType> }> :
@@ -86,6 +92,8 @@ export type ExprType<T> =
   T extends NeverType | BlobType ? BlobExpr :
   T extends NeverType | RefType<infer U> ? RefExpr<U> :
   T extends NeverType | ArrayType<infer V> ? ArrayExpr<V> :
+  T extends NeverType | VectorType<infer V> ? VectorExpr<V> :
+  T extends NeverType | MatrixType<infer V> ? MatrixExpr<V> :
   T extends NeverType | SetType<infer K> ? SetExpr<K> :
   T extends NeverType | DictType<infer K, infer V> ? DictExpr<K, V> :
   T extends NeverType | StructType<infer Fields> ? StructExpr<Fields> :
@@ -112,6 +120,9 @@ export type TypeOf<T> =
   T extends number | Expr<FloatType> ? FloatType :
   T extends string | Expr<StringType> ? StringType :
   T extends Date | Expr<DateTimeType> ? DateTimeType :
+  T extends Float64Array ? VectorType<FloatType> :
+  T extends BigInt64Array ? VectorType<IntegerType> :
+  T extends Uint8ClampedArray ? VectorType<BooleanType> :
   T extends Uint8Array | Expr<BlobType> ? BlobType :
   T extends Expr<RefType<infer U>> ? RefType<U> :
   T extends ref<infer U> ? RefType<TypeOf<U>> :

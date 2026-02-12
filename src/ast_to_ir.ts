@@ -6,7 +6,7 @@ import type { AST, Label, VariableAST } from "./ast.js";
 import { printLocationValue, type IR, type IRLabel, type LocationValue, type VariableIR } from "./ir.js";
 import { printLocations, type Location } from "./location.js";
 import { toEastTypeValue, type LiteralValue } from "./type_of_type.js";
-import { ArrayType, DictType, type EastType, FunctionType, isSubtype, isTypeEqual, NeverType, NullType, printType, RefType, SetType, StructType, VariantType } from "./types.js";
+import { ArrayType, DictType, type EastType, FunctionType, isSubtype, isTypeEqual, NeverType, NullType, printType, RefType, SetType, StructType, VariantType, VectorType, MatrixType } from "./types.js";
 import { variant } from "./containers/variant.js";
 import { applyTypeParameters, Builtins } from "./builtins.js";
 
@@ -990,6 +990,52 @@ export function ast_to_ir(ast: AST, ctx: Ctx = { local_ctx: new Map(), parent_ct
         type: variant("Never", null),
         location: toLocationValues(ast.location),
         value: ast_to_ir(ast.value, ctx),
+      });
+    } else if (ast.ast_type === "NewVector") {
+      const elementType = (ast.type as VectorType).element;
+      return variant("NewVector", {
+        type: toEastTypeValue(ast.type),
+        location: toLocationValues(ast.location),
+        values: ast.values.map((v, i) => {
+          let value = ast_to_ir(v, ctx);
+          if (!isTypeEqual(v.type, elementType)) {
+            if (!isSubtype(v.type, elementType)) {
+              throw new Error(
+                `Vector value at entry ${i} of type ${printType(v.type)} is not compatible with expected type ${printType(elementType)} at ${printLocations(ast.location)}`
+              );
+            }
+            value = variant("As", {
+              type: toEastTypeValue(elementType),
+              value,
+              location: toLocationValues(ast.location),
+            });
+          }
+          return value;
+        }),
+      });
+    } else if (ast.ast_type === "NewMatrix") {
+      const elementType = (ast.type as MatrixType).element;
+      return variant("NewMatrix", {
+        type: toEastTypeValue(ast.type),
+        location: toLocationValues(ast.location),
+        rows: BigInt(ast.rows),
+        cols: BigInt(ast.cols),
+        values: ast.values.map((v, i) => {
+          let value = ast_to_ir(v, ctx);
+          if (!isTypeEqual(v.type, elementType)) {
+            if (!isSubtype(v.type, elementType)) {
+              throw new Error(
+                `Matrix value at entry ${i} of type ${printType(v.type)} is not compatible with expected type ${printType(elementType)} at ${printLocations(ast.location)}`
+              );
+            }
+            value = variant("As", {
+              type: toEastTypeValue(elementType),
+              value,
+              location: toLocationValues(ast.location),
+            });
+          }
+          return value;
+        }),
       });
     } else {
       throw new Error(`Cannot check ${((ast satisfies never) as AST).type}`)

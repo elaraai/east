@@ -81,7 +81,7 @@ Supported element types:
 |--------------|------------|----------------|
 | `FloatType` | `Float64Array` | `np.ndarray` (float64) |
 | `IntegerType` | `BigInt64Array` | `np.ndarray` (int64) |
-| `BooleanType` | `Uint8Array` | `np.ndarray` (bool) |
+| `BooleanType` | `Uint8ClampedArray` | `np.ndarray` (bool) |
 
 Rationale:
 - Float: features, predictions, probabilities
@@ -471,7 +471,7 @@ export type NewMatrixIR = variant<"NewMatrix", {
 
 ### Phase 5: Documentation (East)
 
-1. **USAGE.md** - Add Vector and Matrix sections following USAGE.md standards
+1. **SKILL.md** - Add Vector and Matrix sections following SKILL.md standards
 2. **STDLIB.md** - Document `East.Vector` and `East.Matrix` functions
 
 ### Phase 6: Testing (East)
