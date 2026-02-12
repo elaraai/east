@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Elara AI Pty Ltd
  * Dual-licensed under AGPL-3.0 and commercial license. See LICENSE for details.
  */
-import { East } from "../src/index.js";
+import { East, ArrayType, FloatType } from "../src/index.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
 
 await describe("Vector", (test) => {
@@ -348,5 +348,11 @@ await describe("Vector", (test) => {
         $(assert.equal(m.get(0n, 1n), 2n))
         $(assert.equal(m.get(1n, 0n), 3n))
         $(assert.equal(m.get(1n, 1n), 4n))
+    });
+
+    test("Vector fromArray with empty array", $ => {
+        const arr = $.let([], ArrayType(FloatType));
+        const v = $.let(East.Vector.fromArray(arr));
+        $(assert.equal(v.length(), 0n))
     });
 });

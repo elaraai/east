@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Elara AI Pty Ltd
  * Dual-licensed under AGPL-3.0 and commercial license. See LICENSE for details.
  */
-import { East } from "../src/index.js";
+import { East, ArrayType, FloatType } from "../src/index.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
 
 await describe("Matrix", (test) => {
@@ -324,5 +324,20 @@ await describe("Matrix", (test) => {
         const m = $.let(East.Matrix.fromArray(arr));
         const result = $.let(m.toArray());
         $(assert.equal(result, [[true, false], [false, true]]))
+    });
+
+    test("Matrix fromArray with inline literal", $ => {
+        const m = $.let(East.Matrix.fromArray([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]));
+        $(assert.equal(m.rows(), 2n))
+        $(assert.equal(m.cols(), 3n))
+        $(assert.equal(m.get(0n, 0n), 1.0))
+        $(assert.equal(m.get(1n, 2n), 6.0))
+    });
+
+    test("Matrix fromArray with empty array", $ => {
+        const arr = $.let([], ArrayType(ArrayType(FloatType)));
+        const m = $.let(East.Matrix.fromArray(arr));
+        $(assert.equal(m.rows(), 0n))
+        $(assert.equal(m.cols(), 0n))
     });
 });
