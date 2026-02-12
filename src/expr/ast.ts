@@ -59,6 +59,10 @@ export function valueOrExprToAst(value: any): AST {
     const values: AST[] = [];
     for (let i = 0; i < value.length; i++) values.push({ ast_type: "Value", type: IntegerType, value: value[i]!, location: get_location() });
     return { ast_type: "NewVector", type: VectorType(IntegerType), values, location: get_location() };
+  } else if (value instanceof Uint8ClampedArray) {
+    const values: AST[] = [];
+    for (let i = 0; i < value.length; i++) values.push({ ast_type: "Value", type: BooleanType, value: value[i]! !== 0, location: get_location() });
+    return { ast_type: "NewVector", type: VectorType(BooleanType), values, location: get_location() };
   } else if (value instanceof Uint8Array) {
     return { ast_type: "Value", type: BlobType, value, location: get_location() };
   } else if (isMatrix(value)) {
@@ -321,7 +325,7 @@ export function valueOrExprToAstTyped<T extends EastType>(value: any, type: T, v
     return Expr.asyncFunction(type.inputs, type.output, value)[AstSymbol] as any; // location?
   } else if (type.type === "Vector") {
     const elemType = type.element;
-    if (value instanceof Float64Array || value instanceof BigInt64Array || value instanceof Uint8Array) {
+    if (value instanceof Float64Array || value instanceof BigInt64Array || value instanceof Uint8ClampedArray || value instanceof Uint8Array) {
       const values: AST[] = [];
       for (let i = 0; i < value.length; i++) {
         if (elemType.type === "Boolean") {

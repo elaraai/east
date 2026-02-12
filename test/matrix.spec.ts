@@ -203,4 +203,126 @@ await describe("Matrix", (test) => {
         $(assert.equal(m.cols(), 1n))
         $(assert.equal(m.get(2n, 0n), 3.0))
     });
+
+    test("Matrix from integer array", $ => {
+        const arr = $.let([[1n, 2n], [3n, 4n]]);
+        const m = $.let(East.Matrix.fromArray(arr));
+        $(assert.equal(m.rows(), 2n))
+        $(assert.equal(m.cols(), 2n))
+        $(assert.equal(m.get(0n, 0n), 1n))
+        $(assert.equal(m.get(0n, 1n), 2n))
+        $(assert.equal(m.get(1n, 0n), 3n))
+        $(assert.equal(m.get(1n, 1n), 4n))
+    });
+
+    test("Matrix from boolean array", $ => {
+        const arr = $.let([[true, false], [false, true]]);
+        const m = $.let(East.Matrix.fromArray(arr));
+        $(assert.equal(m.rows(), 2n))
+        $(assert.equal(m.cols(), 2n))
+        $(assert.equal(m.get(0n, 0n), true))
+        $(assert.equal(m.get(0n, 1n), false))
+        $(assert.equal(m.get(1n, 0n), false))
+        $(assert.equal(m.get(1n, 1n), true))
+    });
+
+    test("Matrix fill boolean", $ => {
+        const m = $.let(East.Matrix.fill(2n, 3n, true));
+        $(assert.equal(m.rows(), 2n))
+        $(assert.equal(m.cols(), 3n))
+        $(assert.equal(m.get(0n, 0n), true))
+        $(assert.equal(m.get(1n, 2n), true))
+    });
+
+    test("Matrix integer get row", $ => {
+        const arr = $.let([[1n, 2n], [3n, 4n]]);
+        const m = $.let(East.Matrix.fromArray(arr));
+        const row0 = $.let(m.getRow(0n));
+        $(assert.equal(row0.length(), 2n))
+        $(assert.equal(row0.get(0n), 1n))
+        $(assert.equal(row0.get(1n), 2n))
+    });
+
+    test("Matrix integer get col", $ => {
+        const arr = $.let([[1n, 2n], [3n, 4n]]);
+        const m = $.let(East.Matrix.fromArray(arr));
+        const col1 = $.let(m.getCol(1n));
+        $(assert.equal(col1.length(), 2n))
+        $(assert.equal(col1.get(0n), 2n))
+        $(assert.equal(col1.get(1n), 4n))
+    });
+
+    test("Matrix integer transpose", $ => {
+        const arr = $.let([[1n, 2n], [3n, 4n]]);
+        const m = $.let(East.Matrix.fromArray(arr));
+        const t = $.let(m.transpose());
+        $(assert.equal(t.rows(), 2n))
+        $(assert.equal(t.cols(), 2n))
+        $(assert.equal(t.get(0n, 0n), 1n))
+        $(assert.equal(t.get(0n, 1n), 3n))
+        $(assert.equal(t.get(1n, 0n), 2n))
+        $(assert.equal(t.get(1n, 1n), 4n))
+    });
+
+    test("Matrix integer to vector", $ => {
+        const arr = $.let([[1n, 2n], [3n, 4n]]);
+        const m = $.let(East.Matrix.fromArray(arr));
+        const v = $.let(m.toVector());
+        $(assert.equal(v.length(), 4n))
+        $(assert.equal(v.get(0n), 1n))
+        $(assert.equal(v.get(3n), 4n))
+    });
+
+    test("Matrix integer to array", $ => {
+        const arr = $.let([[1n, 2n], [3n, 4n]]);
+        const m = $.let(East.Matrix.fromArray(arr));
+        const result = $.let(m.toArray());
+        $(assert.equal(result, [[1n, 2n], [3n, 4n]]))
+    });
+
+    test("Matrix boolean get row", $ => {
+        const arr = $.let([[true, false], [false, true]]);
+        const m = $.let(East.Matrix.fromArray(arr));
+        const row0 = $.let(m.getRow(0n));
+        $(assert.equal(row0.length(), 2n))
+        $(assert.equal(row0.get(0n), true))
+        $(assert.equal(row0.get(1n), false))
+    });
+
+    test("Matrix boolean get col", $ => {
+        const arr = $.let([[true, false], [false, true]]);
+        const m = $.let(East.Matrix.fromArray(arr));
+        const col0 = $.let(m.getCol(0n));
+        $(assert.equal(col0.length(), 2n))
+        $(assert.equal(col0.get(0n), true))
+        $(assert.equal(col0.get(1n), false))
+    });
+
+    test("Matrix boolean transpose", $ => {
+        const arr = $.let([[true, false], [true, true]]);
+        const m = $.let(East.Matrix.fromArray(arr));
+        const t = $.let(m.transpose());
+        $(assert.equal(t.get(0n, 0n), true))
+        $(assert.equal(t.get(0n, 1n), true))
+        $(assert.equal(t.get(1n, 0n), false))
+        $(assert.equal(t.get(1n, 1n), true))
+    });
+
+    test("Matrix boolean to vector", $ => {
+        const arr = $.let([[true, false], [false, true]]);
+        const m = $.let(East.Matrix.fromArray(arr));
+        const v = $.let(m.toVector());
+        $(assert.equal(v.length(), 4n))
+        $(assert.equal(v.get(0n), true))
+        $(assert.equal(v.get(1n), false))
+        $(assert.equal(v.get(2n), false))
+        $(assert.equal(v.get(3n), true))
+    });
+
+    test("Matrix boolean to array", $ => {
+        const arr = $.let([[true, false], [false, true]]);
+        const m = $.let(East.Matrix.fromArray(arr));
+        const result = $.let(m.toArray());
+        $(assert.equal(result, [[true, false], [false, true]]))
+    });
 });

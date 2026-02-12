@@ -222,4 +222,131 @@ await describe("Vector", (test) => {
         const result = $.let(v.reduce(($, acc, val) => acc.multiply(val), 1.0));
         $(assert.equal(result, 24.0))
     });
+
+    test("Vector from boolean array", $ => {
+        const arr = $.let([true, false, true]);
+        const v = $.let(East.Vector.fromArray(arr));
+        $(assert.equal(v.length(), 3n))
+        $(assert.equal(v.get(0n), true))
+        $(assert.equal(v.get(1n), false))
+        $(assert.equal(v.get(2n), true))
+    });
+
+    test("Vector to array boolean", $ => {
+        const v = $.let(East.Vector.fill(3n, false));
+        $(v.set(0n, true))
+        $(v.set(2n, true))
+        const result = $.let(v.toArray());
+        $(assert.equal(result, [true, false, true]))
+    });
+
+    test("Vector literal boolean", $ => {
+        const v = $.let(new Uint8ClampedArray([1, 0, 1]));
+        $(assert.equal(v.length(), 3n))
+        $(assert.equal(v.get(0n), true))
+        $(assert.equal(v.get(1n), false))
+        $(assert.equal(v.get(2n), true))
+    });
+
+    test("Vector boolean slice", $ => {
+        const v = $.let(East.Vector.fill(4n, false));
+        $(v.set(0n, true))
+        $(v.set(1n, false))
+        $(v.set(2n, true))
+        $(v.set(3n, true))
+        const s = $.let(v.slice(1n, 3n));
+        $(assert.equal(s.length(), 2n))
+        $(assert.equal(s.get(0n), false))
+        $(assert.equal(s.get(1n), true))
+    });
+
+    test("Vector boolean concat", $ => {
+        const a = $.let(East.Vector.fill(2n, true));
+        const b = $.let(East.Vector.fill(2n, false));
+        const c = $.let(a.concat(b));
+        $(assert.equal(c.length(), 4n))
+        $(assert.equal(c.get(0n), true))
+        $(assert.equal(c.get(1n), true))
+        $(assert.equal(c.get(2n), false))
+        $(assert.equal(c.get(3n), false))
+    });
+
+    test("Vector boolean map", $ => {
+        const v = $.let(East.Vector.fill(3n, true));
+        $(v.set(1n, false))
+        const negated = $.let(v.map(($, x) => x.not()));
+        $(assert.equal(negated.get(0n), false))
+        $(assert.equal(negated.get(1n), true))
+        $(assert.equal(negated.get(2n), false))
+    });
+
+    test("Vector boolean reduce", $ => {
+        const v = $.let(East.Vector.fill(3n, true));
+        $(v.set(1n, false))
+        // count trues via ifElse: true→1n, false→0n, sum them
+        const count = $.let(v.reduce(($, acc, val) => acc.add(val.ifElse(() => 1n, () => 0n)), 0n));
+        $(assert.equal(count, 2n))
+    });
+
+    test("Vector boolean to matrix", $ => {
+        const v = $.let(East.Vector.fill(4n, false));
+        $(v.set(0n, true))
+        $(v.set(3n, true))
+        const m = $.let(v.toMatrix(2n, 2n));
+        $(assert.equal(m.rows(), 2n))
+        $(assert.equal(m.cols(), 2n))
+        $(assert.equal(m.get(0n, 0n), true))
+        $(assert.equal(m.get(0n, 1n), false))
+        $(assert.equal(m.get(1n, 0n), false))
+        $(assert.equal(m.get(1n, 1n), true))
+    });
+
+    test("Vector integer slice", $ => {
+        const v = $.let(East.Vector.fill(4n, 0n));
+        $(v.set(0n, 10n))
+        $(v.set(1n, 20n))
+        $(v.set(2n, 30n))
+        $(v.set(3n, 40n))
+        const s = $.let(v.slice(1n, 3n));
+        $(assert.equal(s.length(), 2n))
+        $(assert.equal(s.get(0n), 20n))
+        $(assert.equal(s.get(1n), 30n))
+    });
+
+    test("Vector integer concat", $ => {
+        const a = $.let(East.Vector.fill(2n, 1n));
+        const b = $.let(East.Vector.fill(2n, 2n));
+        const c = $.let(a.concat(b));
+        $(assert.equal(c.length(), 4n))
+        $(assert.equal(c.get(0n), 1n))
+        $(assert.equal(c.get(2n), 2n))
+    });
+
+    test("Vector integer map", $ => {
+        const arr = $.let([1n, 2n, 3n]);
+        const v = $.let(East.Vector.fromArray(arr));
+        const doubled = $.let(v.map(($, x) => x.multiply(2n)));
+        $(assert.equal(doubled.get(0n), 2n))
+        $(assert.equal(doubled.get(1n), 4n))
+        $(assert.equal(doubled.get(2n), 6n))
+    });
+
+    test("Vector integer reduce", $ => {
+        const arr = $.let([1n, 2n, 3n, 4n]);
+        const v = $.let(East.Vector.fromArray(arr));
+        const sum = $.let(v.reduce(($, acc, val) => acc.add(val), 0n));
+        $(assert.equal(sum, 10n))
+    });
+
+    test("Vector integer to matrix", $ => {
+        const arr = $.let([1n, 2n, 3n, 4n]);
+        const v = $.let(East.Vector.fromArray(arr));
+        const m = $.let(v.toMatrix(2n, 2n));
+        $(assert.equal(m.rows(), 2n))
+        $(assert.equal(m.cols(), 2n))
+        $(assert.equal(m.get(0n, 0n), 1n))
+        $(assert.equal(m.get(0n, 1n), 2n))
+        $(assert.equal(m.get(1n, 0n), 3n))
+        $(assert.equal(m.get(1n, 1n), 4n))
+    });
 });

@@ -427,7 +427,7 @@ export function toJSONFor(type: EastType | EastTypeValue, typeCtx: JSONEncodeTyp
     } else if (type.type === "Vector") {
         const elementToJson = toJSONFor(type.value, typeCtx);
         const isBoolean = type.value.type === "Boolean";
-        return (value: Float64Array | BigInt64Array | Uint8Array, _ctx?: JSONEncodeValueContext) => {
+        return (value: Float64Array | BigInt64Array | Uint8ClampedArray, _ctx?: JSONEncodeValueContext) => {
             const result = [];
             for (let i = 0; i < value.length; i++) {
                 result.push(elementToJson(isBoolean ? value[i] !== 0 : value[i]));
@@ -985,14 +985,14 @@ function createJSONDecoder(
     }
 }
 
-function _createTypedArray(element_type: EastTypeValue, values: any[], frozen: boolean): Float64Array | BigInt64Array | Uint8Array {
-    let result: Float64Array | BigInt64Array | Uint8Array;
+function _createTypedArray(element_type: EastTypeValue, values: any[], frozen: boolean): Float64Array | BigInt64Array | Uint8ClampedArray {
+    let result: Float64Array | BigInt64Array | Uint8ClampedArray;
     if (element_type.type === "Float") {
         result = new Float64Array(values);
     } else if (element_type.type === "Integer") {
         result = new BigInt64Array(values);
     } else if (element_type.type === "Boolean") {
-        result = new Uint8Array(values.map(v => v ? 1 : 0));
+        result = new Uint8ClampedArray(values.map(v => v ? 1 : 0));
     } else {
         throw new Error(`Unsupported vector/matrix element type: ${element_type.type}`);
     }

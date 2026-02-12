@@ -5,14 +5,14 @@
 export const matrix_symbol = Symbol("matrix");
 export type matrix_symbol = typeof matrix_symbol;
 
-export type matrix<T = Float64Array | BigInt64Array | Uint8Array> = {
+export type matrix<T = Float64Array | BigInt64Array | Uint8ClampedArray> = {
     data: T;
     rows: number;
     cols: number;
     [matrix_symbol]: null;
 };
 
-export function matrix<T extends Float64Array | BigInt64Array | Uint8Array>(
+export function matrix<T extends Float64Array | BigInt64Array | Uint8ClampedArray>(
     data: T, rows: number, cols: number
 ): matrix<T> {
     if (data.length !== rows * cols) {

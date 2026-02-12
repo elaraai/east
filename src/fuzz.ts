@@ -475,7 +475,7 @@ function buildValueGenerator(
         for (let i = 0; i < length; i++) arr[i] = BigInt(Math.floor(Math.random() * 200) - 100);
         return arr;
       } else {
-        const arr = new Uint8Array(length);
+        const arr = new Uint8ClampedArray(length);
         for (let i = 0; i < length; i++) arr[i] = Math.random() < 0.5 ? 1 : 0;
         return arr;
       }
@@ -501,7 +501,7 @@ function buildValueGenerator(
         for (let i = 0; i < totalLen; i++) data[i] = BigInt(Math.floor(Math.random() * 200) - 100);
         return matrix(data, rows, cols);
       } else {
-        const data = new Uint8Array(totalLen);
+        const data = new Uint8ClampedArray(totalLen);
         for (let i = 0; i < totalLen; i++) data[i] = Math.random() < 0.5 ? 1 : 0;
         return matrix(data, rows, cols);
       }

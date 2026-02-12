@@ -298,7 +298,7 @@ export function encodeBeast2ValueToBufferFor(type: EastTypeValue, typeCtx: Beast
       }
     };
   } else if (type.type === "Vector") {
-    return (value: Float64Array | BigInt64Array | Uint8Array, writer: BufferWriter, _ctx: Beast2EncodeContext = { refs: new Map() }) => {
+    return (value: Float64Array | BigInt64Array | Uint8ClampedArray, writer: BufferWriter, _ctx: Beast2EncodeContext = { refs: new Map() }) => {
       writer.writeVarint(value.length);
       writer.writeBytes(new Uint8Array(value.buffer, value.byteOffset, value.byteLength));
     };
@@ -665,13 +665,13 @@ export function decodeBeast2ValueFor(type: EastTypeValue | EastType, typeCtx: Be
       }
       // Copy bytes to a new buffer to ensure proper alignment
       const rawBytes = buffer.slice(newOffset, newOffset + byteLen);
-      let typedArray: Float64Array | BigInt64Array | Uint8Array;
+      let typedArray: Float64Array | BigInt64Array | Uint8ClampedArray;
       if (type.value.type === "Float") {
         typedArray = new Float64Array(rawBytes.buffer, rawBytes.byteOffset, length);
       } else if (type.value.type === "Integer") {
         typedArray = new BigInt64Array(rawBytes.buffer, rawBytes.byteOffset, length);
       } else {
-        typedArray = rawBytes;
+        typedArray = new Uint8ClampedArray(rawBytes.buffer, rawBytes.byteOffset, length);
       }
       return [typedArray, newOffset + byteLen];
     };
@@ -687,13 +687,13 @@ export function decodeBeast2ValueFor(type: EastTypeValue | EastType, typeCtx: Be
       }
       // Copy bytes to a new buffer to ensure proper alignment
       const rawBytes = buffer.slice(offsetAfterCols, offsetAfterCols + byteLen);
-      let typedArray: Float64Array | BigInt64Array | Uint8Array;
+      let typedArray: Float64Array | BigInt64Array | Uint8ClampedArray;
       if (type.value.type === "Float") {
         typedArray = new Float64Array(rawBytes.buffer, rawBytes.byteOffset, totalElements);
       } else if (type.value.type === "Integer") {
         typedArray = new BigInt64Array(rawBytes.buffer, rawBytes.byteOffset, totalElements);
       } else {
-        typedArray = rawBytes;
+        typedArray = new Uint8ClampedArray(rawBytes.buffer, rawBytes.byteOffset, totalElements);
       }
       return [matrix(typedArray, rows, cols), offsetAfterCols + byteLen];
     };

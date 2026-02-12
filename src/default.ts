@@ -55,13 +55,13 @@ export function defaultValue(type: EastType | EastTypeValue): any {
       const et = elementType as EastTypeValue;
       if (et.type === "Float") return new Float64Array(0);
       if (et.type === "Integer") return new BigInt64Array(0);
-      return new Uint8Array(0);
+      return new Uint8ClampedArray(0);
     },
     Matrix: elementType => {
       const et = elementType as EastTypeValue;
       if (et.type === "Float") return matrix(new Float64Array(0), 0, 0);
       if (et.type === "Integer") return matrix(new BigInt64Array(0), 0, 0);
-      return matrix(new Uint8Array(0), 0, 0);
+      return matrix(new Uint8ClampedArray(0), 0, 0);
     },
   });
 }
@@ -115,13 +115,13 @@ export function minimalValue(type: EastType | EastTypeValue): any {
       const et = elementType as EastTypeValue;
       if (et.type === "Float") return new Float64Array(0);
       if (et.type === "Integer") return new BigInt64Array(0);
-      return new Uint8Array(0);
+      return new Uint8ClampedArray(0);
     },
     Matrix: elementType => {
       const et = elementType as EastTypeValue;
       if (et.type === "Float") return matrix(new Float64Array(0), 0, 0);
       if (et.type === "Integer") return matrix(new BigInt64Array(0), 0, 0);
-      return matrix(new Uint8Array(0), 0, 0);
+      return matrix(new Uint8ClampedArray(0), 0, 0);
     },
   });
 }

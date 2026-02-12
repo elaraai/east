@@ -4,7 +4,7 @@
  */
 import { VectorType, FloatType, IntegerType, type EastType, ArrayType } from "../../types.js";
 import { AstSymbol, Expr, TypeSymbol } from "../expr.js";
-import type { SubtypeExprOrValue } from "../types.js";
+import type { SubtypeExprOrValue, TypeOf } from "../types.js";
 import type { VectorExpr } from "../vector.js";
 
 export default {
@@ -24,9 +24,9 @@ export default {
     }) as any;
   },
 
-  fill<T extends EastType>(length: Expr<typeof IntegerType> | bigint, value: SubtypeExprOrValue<T>): VectorExpr<T> {
+  fill<V extends SubtypeExprOrValue<EastType>>(length: Expr<typeof IntegerType> | bigint, value: V): VectorExpr<TypeOf<V>> {
     const len = Expr.from(length, IntegerType);
-    const val = Expr.from(value as any, undefined as any);
+    const val = Expr.from(value as any);
     const elemType = val[TypeSymbol];
     return Expr.fromAst({
       ast_type: "Builtin", type: VectorType(elemType), builtin: "VectorFill",
@@ -34,9 +34,13 @@ export default {
     }) as any;
   },
 
-  fromArray<T extends EastType>(arr: Expr<ArrayType<T>>): VectorExpr<T> {
-    const arrAst = Expr.ast(arr);
+  fromArray<V extends readonly unknown[] | Expr<ArrayType<EastType>>>(arr: V): VectorExpr<TypeOf<V> extends ArrayType<infer U> ? U : EastType> {
+    const arrExpr = Expr.from(arr as any);
+    const arrAst = Expr.ast(arrExpr as any);
     const elemType = (arrAst.type as ArrayType).value;
+    if (elemType.type !== "Float" && elemType.type !== "Integer" && elemType.type !== "Boolean") {
+      throw new Error(`Vector.fromArray requires Float, Integer, or Boolean element type, got ${elemType.type}`);
+    }
     return Expr.fromAst({
       ast_type: "Builtin", type: VectorType(elemType), builtin: "VectorFromArray",
       type_parameters: [elemType as EastType], arguments: [arrAst], location: arrAst.location,

@@ -729,8 +729,8 @@ describe('Json encoding/decoding of EAST values', () => {
     test('should encode/decode boolean vector', () => {
         const type = VectorType(BooleanType);
         const decoded = [
-            new Uint8Array([]),
-            new Uint8Array([1, 0, 1]),
+            new Uint8ClampedArray([]),
+            new Uint8ClampedArray([1, 0, 1]),
         ];
         const encoded = [
             [],

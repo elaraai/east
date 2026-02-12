@@ -1248,7 +1248,7 @@ function call_function(location: LocationValue[], compiled_f: (...args: any[]) =
 
 
 /** Creates the appropriate TypedArray for a given element type */
-function createTypedArray(elementType: EastTypeValue, values: any[]): Float64Array | BigInt64Array | Uint8Array {
+function createTypedArray(elementType: EastTypeValue, values: any[]): Float64Array | BigInt64Array | Uint8ClampedArray {
   if (elementType.type === "Float") {
     const arr = new Float64Array(values.length);
     for (let i = 0; i < values.length; i++) arr[i] = values[i];
@@ -1258,7 +1258,7 @@ function createTypedArray(elementType: EastTypeValue, values: any[]): Float64Arr
     for (let i = 0; i < values.length; i++) arr[i] = values[i];
     return arr;
   } else if (elementType.type === "Boolean") {
-    const arr = new Uint8Array(values.length);
+    const arr = new Uint8ClampedArray(values.length);
     for (let i = 0; i < values.length; i++) arr[i] = values[i] ? 1 : 0;
     return arr;
   } else {
@@ -3156,18 +3156,18 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue[], platfo
   },
 
   // Vector builtins
-  VectorLength: (_location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue) => (vec: Float64Array | BigInt64Array | Uint8Array) => BigInt(vec.length),
+  VectorLength: (_location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue) => (vec: Float64Array | BigInt64Array | Uint8ClampedArray) => BigInt(vec.length),
 
-  VectorGet: (location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue) => (vec: Float64Array | BigInt64Array | Uint8Array, idx: bigint) => {
+  VectorGet: (location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue) => (vec: Float64Array | BigInt64Array | Uint8ClampedArray, idx: bigint) => {
     const i = Number(idx);
     if (i < 0 || i >= vec.length) {
       throw new EastError(`Vector index ${idx} out of bounds (length ${vec.length})`, { location });
     }
-    if (vec instanceof Uint8Array) return vec[i]! !== 0;
+    if (vec instanceof Uint8ClampedArray) return vec[i]! !== 0;
     return vec[i]!;
   },
 
-  VectorSet: (location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue) => (vec: Float64Array | BigInt64Array | Uint8Array, idx: bigint, value: any) => {
+  VectorSet: (location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue) => (vec: Float64Array | BigInt64Array | Uint8ClampedArray, idx: bigint, value: any) => {
     if (Object.isFrozen(vec)) {
       throw new EastError("Cannot modify frozen Vector", { location });
     }
@@ -3175,7 +3175,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue[], platfo
     if (i < 0 || i >= vec.length) {
       throw new EastError(`Vector index ${idx} out of bounds (length ${vec.length})`, { location });
     }
-    if (vec instanceof Uint8Array) {
+    if (vec instanceof Uint8ClampedArray) {
       vec[i] = value ? 1 : 0;
     } else {
       (vec as any)[i] = value;
@@ -3183,7 +3183,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue[], platfo
     return null;
   },
 
-  VectorSlice: (location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue) => (vec: Float64Array | BigInt64Array | Uint8Array, start: bigint, end: bigint) => {
+  VectorSlice: (location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue) => (vec: Float64Array | BigInt64Array | Uint8ClampedArray, start: bigint, end: bigint) => {
     const s = Number(start);
     const e = Number(end);
     if (s < 0 || e > vec.length || s > e) {
@@ -3192,7 +3192,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue[], platfo
     return vec.slice(s, e);
   },
 
-  VectorConcat: (_location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue) => (a: Float64Array | BigInt64Array | Uint8Array, b: Float64Array | BigInt64Array | Uint8Array) => {
+  VectorConcat: (_location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue) => (a: Float64Array | BigInt64Array | Uint8ClampedArray, b: Float64Array | BigInt64Array | Uint8ClampedArray) => {
     if (a instanceof Float64Array) {
       const result = new Float64Array(a.length + b.length);
       result.set(a);
@@ -3204,9 +3204,9 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue[], platfo
       result.set(b as BigInt64Array, a.length);
       return result;
     } else {
-      const result = new Uint8Array(a.length + b.length);
+      const result = new Uint8ClampedArray(a.length + b.length);
       result.set(a);
-      result.set(b as Uint8Array, a.length);
+      result.set(b as Uint8ClampedArray, a.length);
       return result;
     }
   },
@@ -3215,8 +3215,8 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue[], platfo
     return createTypedArray(T, arr);
   },
 
-  VectorToArray: (_location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue) => (vec: Float64Array | BigInt64Array | Uint8Array) => {
-    if (vec instanceof Uint8Array) {
+  VectorToArray: (_location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue) => (vec: Float64Array | BigInt64Array | Uint8ClampedArray) => {
+    if (vec instanceof Uint8ClampedArray) {
       return Array.from(vec, v => v !== 0);
     }
     if (vec instanceof BigInt64Array) {
@@ -3227,7 +3227,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue[], platfo
     return Array.from(vec);
   },
 
-  VectorToMatrix: (location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue) => (vec: Float64Array | BigInt64Array | Uint8Array, rows: bigint, cols: bigint) => {
+  VectorToMatrix: (location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue) => (vec: Float64Array | BigInt64Array | Uint8ClampedArray, rows: bigint, cols: bigint) => {
     const r = Number(rows);
     const c = Number(cols);
     if (r * c !== vec.length) {
@@ -3236,11 +3236,11 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue[], platfo
     return matrix(vec.slice() as any, r, c);
   },
 
-  VectorZeros: (_location: LocationValue[], _platformDef: PlatformFunction[]) => (len: bigint) => {
+  VectorZeros: (_location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue) => (len: bigint) => {
     return new Float64Array(Number(len));
   },
 
-  VectorOnes: (_location: LocationValue[], _platformDef: PlatformFunction[]) => (len: bigint) => {
+  VectorOnes: (_location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue) => (len: bigint) => {
     const arr = new Float64Array(Number(len));
     arr.fill(1.0);
     return arr;
@@ -3257,26 +3257,26 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue[], platfo
       arr.fill(value);
       return arr;
     } else {
-      const arr = new Uint8Array(n);
+      const arr = new Uint8ClampedArray(n);
       arr.fill(value ? 1 : 0);
       return arr;
     }
   },
 
-  VectorMap: (location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue, U: EastTypeValue) => (vec: Float64Array | BigInt64Array | Uint8Array, f: (elem: any, idx: bigint) => any) => {
+  VectorMap: (location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue, U: EastTypeValue) => (vec: Float64Array | BigInt64Array | Uint8ClampedArray, f: (elem: any, idx: bigint) => any) => {
     const len = vec.length;
     const results: any[] = [];
     for (let i = 0; i < len; i++) {
-      const elem = vec instanceof Uint8Array ? (vec[i]! !== 0) : vec[i]!;
+      const elem = vec instanceof Uint8ClampedArray ? (vec[i]! !== 0) : vec[i]!;
       results.push(call_function(location, f, elem, BigInt(i)));
     }
     return createTypedArray(U, results);
   },
 
-  VectorFold: (location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue, _U: EastTypeValue) => (vec: Float64Array | BigInt64Array | Uint8Array, init: any, f: (acc: any, elem: any, idx: bigint) => any) => {
+  VectorFold: (location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue, _U: EastTypeValue) => (vec: Float64Array | BigInt64Array | Uint8ClampedArray, init: any, f: (acc: any, elem: any, idx: bigint) => any) => {
     let acc = init;
     for (let i = 0; i < vec.length; i++) {
-      const elem = vec instanceof Uint8Array ? (vec[i]! !== 0) : vec[i]!;
+      const elem = vec instanceof Uint8ClampedArray ? (vec[i]! !== 0) : vec[i]!;
       acc = call_function(location, f, acc, elem, BigInt(i));
     }
     return acc;
@@ -3294,7 +3294,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue[], platfo
       throw new EastError(`Matrix index (${row}, ${col}) out of bounds (${m.rows}×${m.cols})`, { location });
     }
     const val = m.data[r * m.cols + c];
-    if (m.data instanceof Uint8Array) return val !== 0;
+    if (m.data instanceof Uint8ClampedArray) return val !== 0;
     return val;
   },
 
@@ -3307,7 +3307,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue[], platfo
     if (r < 0 || r >= m.rows || c < 0 || c >= m.cols) {
       throw new EastError(`Matrix index (${row}, ${col}) out of bounds (${m.rows}×${m.cols})`, { location });
     }
-    if (m.data instanceof Uint8Array) {
+    if (m.data instanceof Uint8ClampedArray) {
       m.data[r * m.cols + c] = value ? 1 : 0;
     } else {
       m.data[r * m.cols + c] = value;
@@ -3338,7 +3338,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue[], platfo
       for (let r = 0; r < m.rows; r++) result[r] = m.data[r * m.cols + c];
       return result;
     } else {
-      const result = new Uint8Array(m.rows);
+      const result = new Uint8ClampedArray(m.rows);
       for (let r = 0; r < m.rows; r++) result[r] = m.data[r * m.cols + c];
       return result;
     }
@@ -3372,7 +3372,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue[], platfo
       const row: any[] = [];
       for (let c = 0; c < m.cols; c++) {
         const val = m.data[r * m.cols + c];
-        row.push(m.data instanceof Uint8Array ? val !== 0 : val);
+        row.push(m.data instanceof Uint8ClampedArray ? val !== 0 : val);
       }
       result.push(row);
     }
@@ -3397,7 +3397,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue[], platfo
       }
       return matrix(result, m.cols, m.rows);
     } else {
-      const result = new Uint8Array(m.rows * m.cols);
+      const result = new Uint8ClampedArray(m.rows * m.cols);
       for (let r = 0; r < m.rows; r++) {
         for (let c = 0; c < m.cols; c++) {
           result[c * m.rows + r] = m.data[r * m.cols + c];
@@ -3407,11 +3407,11 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue[], platfo
     }
   },
 
-  MatrixZeros: (_location: LocationValue[], _platformDef: PlatformFunction[]) => (rows: bigint, cols: bigint) => {
+  MatrixZeros: (_location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue) => (rows: bigint, cols: bigint) => {
     return matrix(new Float64Array(Number(rows) * Number(cols)), Number(rows), Number(cols));
   },
 
-  MatrixOnes: (_location: LocationValue[], _platformDef: PlatformFunction[]) => (rows: bigint, cols: bigint) => {
+  MatrixOnes: (_location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue) => (rows: bigint, cols: bigint) => {
     const data = new Float64Array(Number(rows) * Number(cols));
     data.fill(1.0);
     return matrix(data, Number(rows), Number(cols));
@@ -3430,7 +3430,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue[], platfo
       data.fill(value);
       return matrix(data, r, c);
     } else {
-      const data = new Uint8Array(n);
+      const data = new Uint8ClampedArray(n);
       data.fill(value ? 1 : 0);
       return matrix(data, r, c);
     }
@@ -3441,7 +3441,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue[], platfo
     for (let r = 0; r < m.rows; r++) {
       for (let c = 0; c < m.cols; c++) {
         const val = m.data[r * m.cols + c];
-        const elem = m.data instanceof Uint8Array ? val !== 0 : val;
+        const elem = m.data instanceof Uint8ClampedArray ? val !== 0 : val;
         results.push(call_function(location, f, elem, BigInt(r), BigInt(c)));
       }
     }
@@ -3476,7 +3476,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue[], platfo
       }
       return matrix(data, m.rows, newCols);
     } else {
-      const data = new Uint8Array(totalLen);
+      const data = new Uint8ClampedArray(totalLen);
       for (let r = 0; r < m.rows; r++) {
         data.set(resultRows[r], r * newCols);
       }

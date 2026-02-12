@@ -1353,14 +1353,14 @@ describe('Comparison of EAST values', () => {
 
     test('should compare boolean vectors', () => {
         const type = VectorType(BooleanType);
-        const values: Uint8Array[] = [
-            new Uint8Array([]),
-            new Uint8Array([0]),
-            new Uint8Array([0, 0]),
-            new Uint8Array([0, 1]),
-            new Uint8Array([1]),
-            new Uint8Array([1, 0]),
-            new Uint8Array([1, 1]),
+        const values: Uint8ClampedArray[] = [
+            new Uint8ClampedArray([]),
+            new Uint8ClampedArray([0]),
+            new Uint8ClampedArray([0, 0]),
+            new Uint8ClampedArray([0, 1]),
+            new Uint8ClampedArray([1]),
+            new Uint8ClampedArray([1, 0]),
+            new Uint8ClampedArray([1, 1]),
         ];
 
         run(type, values);

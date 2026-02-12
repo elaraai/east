@@ -383,7 +383,7 @@ export function printFor(
   } else if (type.type === "Vector") {
     const elementPrinter = printFor(type.value, typeCtx);
     const isBoolean = type.value.type === "Boolean";
-    return (v: Float64Array | BigInt64Array | Uint8Array, _ctx?: EastPrintValueContext) => {
+    return (v: Float64Array | BigInt64Array | Uint8ClampedArray, _ctx?: EastPrintValueContext) => {
       const parts: string[] = [];
       for (let i = 0; i < v.length; i++) {
         parts.push(elementPrinter(isBoolean ? v[i] !== 0 : v[i]));
@@ -1478,7 +1478,7 @@ const createVariantParser = (cases: { name: string, type: EastTypeValue }[], fro
   return ret;
 }
 
-const createVectorParser = (element_type: EastTypeValue, frozen: boolean): Parser<Float64Array | BigInt64Array | Uint8Array> => {
+const createVectorParser = (element_type: EastTypeValue, frozen: boolean): Parser<Float64Array | BigInt64Array | Uint8ClampedArray> => {
   const elementParser = createParser(element_type, frozen);
   return (input: string, pos: number, _ctx?: EastParseValueContext) => {
     pos = consumeWhitespace(input, pos);
@@ -1604,14 +1604,14 @@ const createMatrixParser = (element_type: EastTypeValue, frozen: boolean): Parse
   };
 };
 
-function _createTypedArray(element_type: EastTypeValue, values: any[], frozen: boolean): Float64Array | BigInt64Array | Uint8Array {
-  let result: Float64Array | BigInt64Array | Uint8Array;
+function _createTypedArray(element_type: EastTypeValue, values: any[], frozen: boolean): Float64Array | BigInt64Array | Uint8ClampedArray {
+  let result: Float64Array | BigInt64Array | Uint8ClampedArray;
   if (element_type.type === "Float") {
     result = new Float64Array(values);
   } else if (element_type.type === "Integer") {
     result = new BigInt64Array(values);
   } else if (element_type.type === "Boolean") {
-    result = new Uint8Array(values.map(v => v ? 1 : 0));
+    result = new Uint8ClampedArray(values.map(v => v ? 1 : 0));
   } else {
     throw new Error(`Unsupported vector/matrix element type: ${element_type.type}`);
   }

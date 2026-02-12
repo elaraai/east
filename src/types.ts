@@ -633,11 +633,11 @@ export type ValueTypeOf<T> =
   T extends RecursiveTypeMarker ? any : // make TypeScript faster - don't expand further
   T extends VectorType<FloatType> ? Float64Array :
   T extends VectorType<IntegerType> ? BigInt64Array :
-  T extends VectorType<BooleanType> ? Uint8Array :
-  T extends VectorType ? Float64Array | BigInt64Array | Uint8Array :
+  T extends VectorType<BooleanType> ? Uint8ClampedArray :
+  T extends VectorType ? Float64Array | BigInt64Array | Uint8ClampedArray :
   T extends MatrixType<FloatType> ? matrix<Float64Array> :
   T extends MatrixType<IntegerType> ? matrix<BigInt64Array> :
-  T extends MatrixType<BooleanType> ? matrix<Uint8Array> :
+  T extends MatrixType<BooleanType> ? matrix<Uint8ClampedArray> :
   T extends MatrixType ? matrix :
   T extends FunctionType<infer I, infer O> ? (...inputs: { [K in keyof I]: ValueTypeOf<I[K]> }) => ValueTypeOf<O> :
   T extends AsyncFunctionType<infer I, infer O> ? (...inputs: { [K in keyof I]: ValueTypeOf<I[K]> }) => Promise<ValueTypeOf<O>> :
@@ -664,6 +664,7 @@ export type EastTypeOf<V> =
   V extends Date ? DateTimeType :
   V extends Float64Array ? VectorType<FloatType> :
   V extends BigInt64Array ? VectorType<IntegerType> :
+  V extends Uint8ClampedArray ? VectorType<BooleanType> :
   V extends Uint8Array ? BlobType :
   V extends ref<infer U> ? RefType<EastTypeOf<U>> :
   V extends Array<infer U> ? ArrayType<EastTypeOf<U>> :
@@ -697,6 +698,8 @@ export function EastTypeOf<V>(value: V): EastTypeOf<V> {
     return StringType as EastTypeOf<V>;
   } if (value instanceof Date) {
     return DateTimeType as EastTypeOf<V>;
+  } else if (value instanceof Uint8ClampedArray) {
+    return VectorType(BooleanType) as EastTypeOf<V>;
   } else if (value instanceof Uint8Array) {
     return BlobType as EastTypeOf<V>;
   } else if (Array.isArray(value)) {
@@ -1003,13 +1006,13 @@ export function isValueOf(value: any, type: EastType, node_type?: EastType, node
   } else if (type.type === "Vector") {
     if (type.element.type === "Float") return value instanceof Float64Array;
     if (type.element.type === "Integer") return value instanceof BigInt64Array;
-    if (type.element.type === "Boolean") return value instanceof Uint8Array;
+    if (type.element.type === "Boolean") return value instanceof Uint8ClampedArray;
     return false;
   } else if (type.type === "Matrix") {
     if (!isMatrix(value)) return false;
     if (type.element.type === "Float") return value.data instanceof Float64Array;
     if (type.element.type === "Integer") return value.data instanceof BigInt64Array;
-    if (type.element.type === "Boolean") return value.data instanceof Uint8Array;
+    if (type.element.type === "Boolean") return value.data instanceof Uint8ClampedArray;
     return false;
   } else if (type.type === "Recursive") {
     if (node_type === type.node) {

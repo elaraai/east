@@ -44,7 +44,7 @@ export type SubtypeExprOrValue<T> =
   T extends BlobType ? Expr<NeverType> | Expr<BlobType> | Uint8Array :
   T extends RefType<infer U> ? Expr<NeverType> | Expr<RefType<U>> | ref<SubtypeExprOrValue<U>> :
   T extends ArrayType<infer V> ? Expr<NeverType> | Expr<ArrayType<V>> | SubtypeExprOrValue<V>[] :
-  T extends VectorType<infer V> ? Expr<NeverType> | Expr<VectorType<V>> | Float64Array | BigInt64Array | Uint8Array :
+  T extends VectorType<infer V> ? Expr<NeverType> | Expr<VectorType<V>> | Float64Array | BigInt64Array | Uint8ClampedArray :
   T extends MatrixType<infer V> ? Expr<NeverType> | Expr<MatrixType<V>> :
   T extends SetType<infer K> ? Expr<NeverType> | Expr<SetType<K>> | Set<SubtypeExprOrValue<K>> :
   T extends DictType<infer K, infer V> ? Expr<NeverType> | Expr<DictType<K, V>> | Map<SubtypeExprOrValue<K>, SubtypeExprOrValue<V>> :
@@ -122,6 +122,7 @@ export type TypeOf<T> =
   T extends Date | Expr<DateTimeType> ? DateTimeType :
   T extends Float64Array ? VectorType<FloatType> :
   T extends BigInt64Array ? VectorType<IntegerType> :
+  T extends Uint8ClampedArray ? VectorType<BooleanType> :
   T extends Uint8Array | Expr<BlobType> ? BlobType :
   T extends Expr<RefType<infer U>> ? RefType<U> :
   T extends ref<infer U> ? RefType<TypeOf<U>> :

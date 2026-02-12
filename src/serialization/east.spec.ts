@@ -543,7 +543,7 @@ describe('parseFor (value parsing)', () => {
       const result = parser('vec[true, false, true]');
       assert.equal(result.success, true);
       if (result.success) {
-        assert.ok(equal(result.value, new Uint8Array([1, 0, 1])));
+        assert.ok(equal(result.value, new Uint8ClampedArray([1, 0, 1])));
       }
     });
 
@@ -1089,8 +1089,8 @@ describe('printFor and round-trip tests', () => {
       const equal = equalFor(type);
 
       const values = [
-        new Uint8Array([]),
-        new Uint8Array([1, 0, 1, 1, 0]),
+        new Uint8ClampedArray([]),
+        new Uint8ClampedArray([1, 0, 1, 1, 0]),
       ];
 
       for (const value of values) {

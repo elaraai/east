@@ -386,7 +386,7 @@ function encodeBeast2ValueToStreamFor(
     }
     return targetEncoder;
   } else if (type.type === "Vector") {
-    return function* (value: Float64Array | BigInt64Array | Uint8Array, writer: BufferWriter, _ctx?: Beast2EncodeContext) {
+    return function* (value: Float64Array | BigInt64Array | Uint8ClampedArray, writer: BufferWriter, _ctx?: Beast2EncodeContext) {
       writer.writeVarint(value.length);
       const raw = new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
       if (raw.length > CHUNK_SIZE) {
@@ -731,7 +731,7 @@ function decodeBeast2ValueFromStreamFor(type: EastTypeValue, typeCtx: Beast2Stre
       } else if (type.value.type === "Integer") {
         return new BigInt64Array(rawBytes.buffer, rawBytes.byteOffset, length);
       } else {
-        return rawBytes;
+        return new Uint8ClampedArray(rawBytes.buffer, rawBytes.byteOffset, length);
       }
     };
   } else if (type.type === "Matrix") {
@@ -743,13 +743,13 @@ function decodeBeast2ValueFromStreamFor(type: EastTypeValue, typeCtx: Beast2Stre
       const byteLen = totalElements * bytesPerElement;
       const rawBytes = new Uint8Array(byteLen);
       await reader.readBytes(rawBytes);
-      let typedArray: Float64Array | BigInt64Array | Uint8Array;
+      let typedArray: Float64Array | BigInt64Array | Uint8ClampedArray;
       if (type.value.type === "Float") {
         typedArray = new Float64Array(rawBytes.buffer, rawBytes.byteOffset, totalElements);
       } else if (type.value.type === "Integer") {
         typedArray = new BigInt64Array(rawBytes.buffer, rawBytes.byteOffset, totalElements);
       } else {
-        typedArray = rawBytes;
+        typedArray = new Uint8ClampedArray(rawBytes.buffer, rawBytes.byteOffset, totalElements);
       }
       return matrix(typedArray, rows, cols);
     };
