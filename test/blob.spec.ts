@@ -11,6 +11,8 @@ import {
   RecursiveType,
   ref,
   RefType,
+  VectorType,
+  MatrixType,
 } from "../src/index.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
 
@@ -2035,6 +2037,91 @@ await describe("Blob", (test) => {
     const emptyArray = $.let(East.value([], ArrayType(IntegerType)));
     const encodedEmpty = $.let(East.Blob.encodeBeast(emptyArray, 'v2'));
     $(assert.equal(encodedEmpty.size(), 12n));
+  });
+
+  // ===========================================================================
+  // Beast v2 - Vector and Matrix types
+  // ===========================================================================
+
+  test("Beast v2 - Vector<Float> round-trip", $ => {
+    const v = $.let(East.Vector.fromArray([1.0, 2.5, 3.7]));
+    const encoded = $.let(East.Blob.encodeBeast(v, 'v2'));
+    const decoded = $.let(encoded.decodeBeast(VectorType(FloatType), 'v2'));
+    $(assert.equal(decoded.length(), 3n));
+    $(assert.equal(decoded.get(0n), 1.0));
+    $(assert.equal(decoded.get(1n), 2.5));
+    $(assert.equal(decoded.get(2n), 3.7));
+  });
+
+  test("Beast v2 - Vector<Integer> round-trip", $ => {
+    const v = $.let(East.Vector.fromArray([10n, 20n, 30n]));
+    const encoded = $.let(East.Blob.encodeBeast(v, 'v2'));
+    const decoded = $.let(encoded.decodeBeast(VectorType(IntegerType), 'v2'));
+    $(assert.equal(decoded.length(), 3n));
+    $(assert.equal(decoded.get(0n), 10n));
+    $(assert.equal(decoded.get(1n), 20n));
+    $(assert.equal(decoded.get(2n), 30n));
+  });
+
+  test("Beast v2 - Vector<Boolean> round-trip", $ => {
+    const v = $.let(East.Vector.fromArray([true, false, true]));
+    const encoded = $.let(East.Blob.encodeBeast(v, 'v2'));
+    const decoded = $.let(encoded.decodeBeast(VectorType(BooleanType), 'v2'));
+    $(assert.equal(decoded.length(), 3n));
+    $(assert.equal(decoded.get(0n), true));
+    $(assert.equal(decoded.get(1n), false));
+    $(assert.equal(decoded.get(2n), true));
+  });
+
+  test("Beast v2 - Vector empty round-trip", $ => {
+    const v = $.let(East.Vector.zeros(0n));
+    const encoded = $.let(East.Blob.encodeBeast(v, 'v2'));
+    const decoded = $.let(encoded.decodeBeast(VectorType(FloatType), 'v2'));
+    $(assert.equal(decoded.length(), 0n));
+  });
+
+  test("Beast v2 - Matrix<Float> round-trip", $ => {
+    const m = $.let(East.Matrix.fromArray([[1.0, 2.0], [3.0, 4.0]]));
+    const encoded = $.let(East.Blob.encodeBeast(m, 'v2'));
+    const decoded = $.let(encoded.decodeBeast(MatrixType(FloatType), 'v2'));
+    $(assert.equal(decoded.rows(), 2n));
+    $(assert.equal(decoded.cols(), 2n));
+    $(assert.equal(decoded.get(0n, 0n), 1.0));
+    $(assert.equal(decoded.get(0n, 1n), 2.0));
+    $(assert.equal(decoded.get(1n, 0n), 3.0));
+    $(assert.equal(decoded.get(1n, 1n), 4.0));
+  });
+
+  test("Beast v2 - Matrix<Integer> round-trip", $ => {
+    const m = $.let(East.Matrix.fromArray([[10n, 20n], [30n, 40n]]));
+    const encoded = $.let(East.Blob.encodeBeast(m, 'v2'));
+    const decoded = $.let(encoded.decodeBeast(MatrixType(IntegerType), 'v2'));
+    $(assert.equal(decoded.rows(), 2n));
+    $(assert.equal(decoded.cols(), 2n));
+    $(assert.equal(decoded.get(0n, 0n), 10n));
+    $(assert.equal(decoded.get(0n, 1n), 20n));
+    $(assert.equal(decoded.get(1n, 0n), 30n));
+    $(assert.equal(decoded.get(1n, 1n), 40n));
+  });
+
+  test("Beast v2 - Matrix<Boolean> round-trip", $ => {
+    const m = $.let(East.Matrix.fromArray([[true, false], [false, true]]));
+    const encoded = $.let(East.Blob.encodeBeast(m, 'v2'));
+    const decoded = $.let(encoded.decodeBeast(MatrixType(BooleanType), 'v2'));
+    $(assert.equal(decoded.rows(), 2n));
+    $(assert.equal(decoded.cols(), 2n));
+    $(assert.equal(decoded.get(0n, 0n), true));
+    $(assert.equal(decoded.get(0n, 1n), false));
+    $(assert.equal(decoded.get(1n, 0n), false));
+    $(assert.equal(decoded.get(1n, 1n), true));
+  });
+
+  test("Beast v2 - Matrix empty round-trip", $ => {
+    const m = $.let(East.Matrix.zeros(0n, 0n));
+    const encoded = $.let(East.Blob.encodeBeast(m, 'v2'));
+    const decoded = $.let(encoded.decodeBeast(MatrixType(FloatType), 'v2'));
+    $(assert.equal(decoded.rows(), 0n));
+    $(assert.equal(decoded.cols(), 0n));
   });
 
   // ===========================================================================

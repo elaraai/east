@@ -663,15 +663,17 @@ export function decodeBeast2ValueFor(type: EastTypeValue | EastType, typeCtx: Be
       if (newOffset + byteLen > buffer.length) {
         throw new Error(`Buffer underflow reading vector at offset ${offset}, length ${length}`);
       }
-      // Copy bytes to a new buffer to ensure proper alignment
-      const rawBytes = buffer.slice(newOffset, newOffset + byteLen);
+      // Copy bytes to a new aligned buffer. Note: buffer.slice() on a Node.js
+      // Buffer creates a view (not a copy), so we use Uint8Array.from() to
+      // guarantee a fresh ArrayBuffer with byteOffset === 0.
+      const rawBytes = new Uint8Array(buffer.subarray(newOffset, newOffset + byteLen));
       let typedArray: Float64Array | BigInt64Array | Uint8ClampedArray;
       if (type.value.type === "Float") {
-        typedArray = new Float64Array(rawBytes.buffer, rawBytes.byteOffset, length);
+        typedArray = new Float64Array(rawBytes.buffer, 0, length);
       } else if (type.value.type === "Integer") {
-        typedArray = new BigInt64Array(rawBytes.buffer, rawBytes.byteOffset, length);
+        typedArray = new BigInt64Array(rawBytes.buffer, 0, length);
       } else {
-        typedArray = new Uint8ClampedArray(rawBytes.buffer, rawBytes.byteOffset, length);
+        typedArray = new Uint8ClampedArray(rawBytes.buffer, 0, length);
       }
       return [typedArray, newOffset + byteLen];
     };
@@ -685,15 +687,17 @@ export function decodeBeast2ValueFor(type: EastTypeValue | EastType, typeCtx: Be
       if (offsetAfterCols + byteLen > buffer.length) {
         throw new Error(`Buffer underflow reading matrix at offset ${offset}, rows ${rows}, cols ${cols}`);
       }
-      // Copy bytes to a new buffer to ensure proper alignment
-      const rawBytes = buffer.slice(offsetAfterCols, offsetAfterCols + byteLen);
+      // Copy bytes to a new aligned buffer. Note: buffer.slice() on a Node.js
+      // Buffer creates a view (not a copy), so we use Uint8Array.from() to
+      // guarantee a fresh ArrayBuffer with byteOffset === 0.
+      const rawBytes = new Uint8Array(buffer.subarray(offsetAfterCols, offsetAfterCols + byteLen));
       let typedArray: Float64Array | BigInt64Array | Uint8ClampedArray;
       if (type.value.type === "Float") {
-        typedArray = new Float64Array(rawBytes.buffer, rawBytes.byteOffset, totalElements);
+        typedArray = new Float64Array(rawBytes.buffer, 0, totalElements);
       } else if (type.value.type === "Integer") {
-        typedArray = new BigInt64Array(rawBytes.buffer, rawBytes.byteOffset, totalElements);
+        typedArray = new BigInt64Array(rawBytes.buffer, 0, totalElements);
       } else {
-        typedArray = new Uint8ClampedArray(rawBytes.buffer, rawBytes.byteOffset, totalElements);
+        typedArray = new Uint8ClampedArray(rawBytes.buffer, 0, totalElements);
       }
       return [matrix(typedArray, rows, cols), offsetAfterCols + byteLen];
     };
