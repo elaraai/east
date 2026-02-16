@@ -120,6 +120,7 @@ The first argument (`$`) in function body provides scope operations.
 | `$.break(label: Label): NeverExpr` | Break from loop |
 | `$.continue(label: Label): NeverExpr` | Continue to next iteration |
 | `$.match<Cases>(variant: VariantExpr<Cases>, cases: { [Tag in keyof Cases]: ($: BlockBuilder, data: ExprType<Cases[Tag]>) => void \| Expr }): NullExpr` | Pattern match (statement form) |
+| `$.matchTag<Cases, K>(variant: VariantExpr<Cases>, tag: K, handler: ($: BlockBuilder, data: ExprType<Cases[K]>) => void \| Expr): void` | Single-tag match (unmatched tags do nothing) |
 
 ### Error Handling
 
@@ -701,7 +702,7 @@ For `DictExpr<K, V>` where `K` is the key type and `V` is the value type:
 | Signature | Description |
 |-----------|-------------|
 | `dict.insert(key: ExprType<K> \| ValueTypeOf<K>, value: ExprType<V> \| ValueTypeOf<V>): NullExpr` | Insert (throws if exists) |
-| `dict.insertOrUpdate(key: ExprType<K> \| ValueTypeOf<K>, value: ExprType<V> \| ValueTypeOf<V>): NullExpr` | Insert or update |
+| `dict.insertOrUpdate(key: ExprType<K> \| ValueTypeOf<K>, value: ExprType<V> \| ValueTypeOf<V>, onConflict?: ($: BlockBuilder, existing: ExprType<V>, new_: ExprType<V>, key: ExprType<K>) => ExprType<V>): NullExpr` | Insert or update (optional conflict handler) |
 | `dict.update(key: ExprType<K> \| ValueTypeOf<K>, value: ExprType<V> \| ValueTypeOf<V>): NullExpr` | Update (throws if missing) |
 | `dict.merge<T2>(key: ExprType<K> \| ValueTypeOf<K>, value: ExprType<T2> \| ValueTypeOf<T2>, updateFn: ($: BlockBuilder, old: ExprType<V>, new_: ExprType<T2>, key: ExprType<K>) => ExprType<V>, initialFn?: ($: BlockBuilder, key: ExprType<K>) => ExprType<V>): NullExpr` | Merge with function |
 | `dict.getOrInsert(key: ExprType<K> \| ValueTypeOf<K>, defaultFn: ($: BlockBuilder, key: ExprType<K>) => ExprType<V>): ExprType<V>` | Get or insert default |
@@ -786,6 +787,7 @@ For `VariantExpr<Cases>` where `Cases` is a record of `{ tag: ValueType, ... }`:
 |-----------|---------|-------------|
 | `variant.match<R>(handlers: { [Tag in keyof Cases]: ($: BlockBuilder, data: ExprType<Cases[Tag]>) => ExprType<R> }): ExprType<R>` | | Full match |
 | `variant.match<R>(handlers: { [Tag in keyof Cases]?: ($: BlockBuilder, data: ExprType<Cases[Tag]>) => ExprType<R> }, defaultFn: ($: BlockBuilder) => ExprType<R>): ExprType<R>` | | Partial match with default |
+| `variant.matchTag<K, R>(tag: K, handler: ($: BlockBuilder, data: ExprType<Cases[K]>) => ExprType<R>, defaultFn: ($: BlockBuilder) => ExprType<R>): ExprType<R>` | | Single-tag match with default |
 | `variant.unwrap<Tag extends keyof Cases>(tag?: Tag): ExprType<Cases[Tag]>` | | Extract value (throws if wrong tag) |
 | `variant.unwrap<Tag extends keyof Cases>(tag: Tag, defaultFn: ($: BlockBuilder) => ExprType<Cases[Tag]>): ExprType<Cases[Tag]>` | | Extract or compute default |
 | `variant.getTag(): StringExpr` | | Get tag as string |

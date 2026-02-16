@@ -72,6 +72,13 @@ await describe("Variant", (test) => {
         const r2 = $.let(variant("error", -1n), ResultType);
         const r3 = $.let(variant("pending", null), ResultType);
 
+        // matchTag: single tag match with default
+        $(assert.equal(v1.matchTag("some", (_$, val) => val, _$ => 0n), 42n));
+        $(assert.equal(v2.matchTag("some", (_$, val) => val, _$ => 0n), 0n));
+        $(assert.equal(r1.matchTag("ok", (_$, val) => val, _$ => 0n), 100n));
+        $(assert.equal(r2.matchTag("ok", (_$, val) => val, _$ => 0n), 0n));
+        $(assert.equal(r3.matchTag("ok", (_$, val) => val, _$ => 0n), 0n));
+
         // partial match: only some cases + default (2nd arg)
         $(assert.equal(v1.match({ some: (_$, val) => val }, _$ => 0n), 42n));
         $(assert.equal(v2.match({ some: (_$, val) => val }, _$ => 0n), 0n));

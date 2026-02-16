@@ -253,6 +253,45 @@ export class VariantExpr<Cases extends Record<string, any>> extends Expr<Variant
   }
 
   /**
+   * Match a single variant tag and handle it, with a default for all other tags.
+   *
+   * This is a shorthand for partial matching when you only care about one case.
+   *
+   * @typeParam K - The case name to match
+   * @typeParam Default - Type of the default handler function
+   * @param tag - The case name to match
+   * @param handler - Function to handle the matched case, receiving the unwrapped data
+   * @param defaultHandler - Function to handle all other cases
+   * @returns Expression of the union type of the handler and default return types
+   *
+   * @see {@link match} for matching multiple cases
+   * @see {@link unwrap} for extracting a single case value
+   *
+   * @example
+   * ```ts
+   * const OptionType = VariantType({ some: IntegerType, none: NullType });
+   *
+   * const doubleOrZero = East.function([OptionType], IntegerType, ($, opt) => {
+   *   $.return(opt.matchTag("some", ($, val) => val.multiply(2n), ($) => 0n));
+   * });
+   * const compiled = East.compile(doubleOrZero.toIR(), []);
+   * compiled(Expr.variant("some", 42n));   // 84n
+   * compiled(Expr.variant("none", null));  // 0n
+   * ```
+   */
+  matchTag<
+    K extends keyof Cases & string,
+    Handler extends ($: BlockBuilder<NeverType>, data: ExprType<Cases[K]>) => any,
+    Default extends ($: BlockBuilder<NeverType>) => any
+  >(
+    tag: K,
+    handler: Handler,
+    defaultHandler: Default
+  ): ExprType<TypeUnion<TypeOf<ReturnType<Handler>>, TypeOf<ReturnType<Default>>>> {
+    return this.match({ [tag]: handler } as any, defaultHandler) as any;
+  }
+
+  /**
    * Checks if this variant equals another variant (same tag and value).
    *
    * @param other - The variant to compare against
