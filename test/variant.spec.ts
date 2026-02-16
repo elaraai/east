@@ -24,6 +24,17 @@ await describe("Variant", (test) => {
         $(assert.equal(f(variant("none", null)), 0n));
     });
 
+    test("matchTag statement", $ => {
+        const f = $.const(East.function([VariantType({ none: NullType, some: IntegerType })], IntegerType, ($, x) => {
+            let ret = $.let(0n);
+            $.matchTag(x, "some", ($, data) => $.assign(ret, data));
+            $.return(ret);
+        }));
+
+        $(assert.equal(f(variant("some", 42n)), 42n));
+        $(assert.equal(f(variant("none", null)), 0n));
+    });
+
     test("Expressions", $ => {
         const v1 = $.let(variant("some", 42n), OptionType(IntegerType));
         const v2 = $.let(variant("none", null), OptionType(IntegerType));

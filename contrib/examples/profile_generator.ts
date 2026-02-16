@@ -35,7 +35,7 @@ import type { IR } from "../../src/ir.js";
 // =============================================================================
 
 interface ProfileConfig {
-    size: "small" | "medium" | "large" | "xlarge" | "stress";
+    size: "small" | "medium" | "large" | "xlarge" | "stress" | "massive";
     outputDir: string;
 }
 
@@ -45,6 +45,7 @@ const SIZE_CONFIGS = {
     large: { collectionSize: 500, loopIterations: 2000, nestingDepth: 7 },
     xlarge: { collectionSize: 2000, loopIterations: 10000, nestingDepth: 10 },
     stress: { collectionSize: 5000, loopIterations: 50000, nestingDepth: 12 },
+    massive: { collectionSize: 100000, loopIterations: 100000, nestingDepth: 12 },
 };
 
 // =============================================================================
@@ -419,7 +420,7 @@ function parseArgs(): ProfileConfig {
     const config: ProfileConfig = { size: "medium", outputDir: "/tmp/east-profile-ir" };
     for (let i = 0; i < args.length; i++) {
         if (args[i] === "--size" && args[i + 1]) {
-            const size = args[i + 1] as "small" | "medium" | "large" | "xlarge" | "stress";
+            const size = args[i + 1] as "small" | "medium" | "large" | "xlarge" | "stress" | "massive";
             if (size in SIZE_CONFIGS) config.size = size;
             i++;
         } else if (args[i] === "--output" && args[i + 1]) {
@@ -443,6 +444,7 @@ async function main() {
     const encodeBeast2 = encodeBeast2For(IRType);
 
     let totalJsonSize = 0, totalBeast2Size = 0;
+    const beast2Only = config.size === "massive";
     const testNames = [
         "array_operations", "dict_struct_keys", "nested_loops", "while_loop",
         "variant_matching", "set_operations", "deep_struct", "string_operations",
@@ -454,26 +456,32 @@ async function main() {
         const ir = irList[i]!;
         const name = testNames[i]!;
 
-        const jsonData = toJSON(ir);
-        const jsonStr = JSON.stringify(jsonData);
-        writeFileSync(`${config.outputDir}/${name}_${config.size}.json`, jsonStr);
-        totalJsonSize += jsonStr.length;
+        let jsonSizeKB = "skipped";
+        if (!beast2Only) {
+            const jsonData = toJSON(ir);
+            const jsonStr = JSON.stringify(jsonData);
+            writeFileSync(`${config.outputDir}/${name}_${config.size}.json`, jsonStr);
+            totalJsonSize += jsonStr.length;
+            jsonSizeKB = `${(jsonStr.length / 1024).toFixed(1)}KB`;
+        }
 
         const beast2Data = encodeBeast2(ir);
         writeFileSync(`${config.outputDir}/${name}_${config.size}.beast2`, beast2Data);
         totalBeast2Size += beast2Data.length;
 
-        console.log(`  ${name}: JSON=${(jsonStr.length / 1024).toFixed(1)}KB, BEAST2=${(beast2Data.length / 1024).toFixed(1)}KB`);
+        console.log(`  ${name}: JSON=${jsonSizeKB}, BEAST2=${(beast2Data.length / 1024).toFixed(1)}KB`);
     }
 
     console.log("\n" + "=".repeat(60));
-    console.log(` Total JSON: ${(totalJsonSize / 1024).toFixed(1)} KB`);
+    if (!beast2Only) {
+        console.log(` Total JSON: ${(totalJsonSize / 1024).toFixed(1)} KB`);
+        console.log(` Compression: ${(totalJsonSize / totalBeast2Size).toFixed(2)}x`);
+    }
     console.log(` Total BEAST2: ${(totalBeast2Size / 1024).toFixed(1)} KB`);
-    console.log(` Compression: ${(totalJsonSize / totalBeast2Size).toFixed(2)}x`);
     console.log(` Output: ${config.outputDir}`);
     console.log("=".repeat(60));
     console.log(`\nRun profiler:`);
-    console.log(`  uv run --package east-py python packages/east-py/scripts/east_profiler.py ${config.outputDir}/*.json`);
+    console.log(`  uv run --package east-py python packages/east-py/scripts/east_profiler.py ${config.outputDir}/*.beast2`);
 }
 
 main().catch(console.error);

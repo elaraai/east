@@ -96,6 +96,36 @@ await describe("Dict", (test) => {
 
     });
 
+    test("Dict insertOrUpdate", $ => {
+
+        const d = $.let(new Map([[1n, "a"], [2n, "b"]]), DictType(IntegerType, StringType))
+
+        // Insert new key
+        $(d.insertOrUpdate(3n, "c"))
+        $(assert.equal(d.size(), 3n))
+        $(assert.equal(d.has(3n), true))
+        $(assert.equal(d.get(3n), "c"))
+
+        // Update existing key (default: overwrite)
+        $(d.insertOrUpdate(1n, "A"))
+        $(assert.equal(d.size(), 3n))
+        $(assert.equal(d.get(1n), "A"))
+
+        // Other values unchanged
+        $(assert.equal(d.get(2n), "b"))
+        $(assert.equal(d.get(3n), "c"))
+
+        // Custom conflict handler: concatenate existing and new
+        $(d.insertOrUpdate(2n, "_updated", ($, existing, newVal) => existing.concat(newVal)))
+        $(assert.equal(d.get(2n), "b_updated"))
+
+        // Custom conflict handler on missing key: just inserts
+        $(d.insertOrUpdate(4n, "d", ($, existing, newVal) => existing.concat(newVal)))
+        $(assert.equal(d.get(4n), "d"))
+        $(assert.equal(d.size(), 4n))
+
+    });
+
     test("Dict update", $ => {
         const d = $.let(new Map([[1n, "a"], [2n, "b"]]), DictType(IntegerType, StringType))
 
