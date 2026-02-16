@@ -25,6 +25,8 @@ import {
     VariantType,
     IRType,
     variant,
+    BlobType,
+    OptionType,
 } from "../../src/index.js";
 import { toJSONFor } from "../../src/serialization/json.js";
 import { encodeBeast2For } from "../../src/serialization/beast2.js";
@@ -384,6 +386,60 @@ function createStringStressTest(size: number) {
     });
 }
 
+/** CSV decode: parse a large CSV blob into an array of structs */
+function createCsvDecodeTest(size: number) {
+    const RowType = StructType({
+        id: IntegerType,
+        name: StringType,
+        score: FloatType,
+        active: BooleanType,
+        notes: OptionType(StringType),
+    });
+
+    // Build CSV string with header + size rows
+    const lines: string[] = ["id,name,score,active,notes"];
+    for (let i = 0; i < size; i++) {
+        const active = i % 2 === 0 ? "true" : "false";
+        const notes = i % 3 === 0 ? "" : `note_${i}`;
+        lines.push(`${i},person_${i},${(i * 1.5).toFixed(2)},${active},${notes}`);
+    }
+    const csvBytes = new TextEncoder().encode(lines.join("\n"));
+
+    return East.function([], IntegerType, $ => {
+        const blob = $.let(East.value(csvBytes, BlobType));
+        const rows = $.let(blob.decodeCsv(RowType, { nullStrings: [""] }));
+        const count = $.let(rows.size());
+        return count;
+    });
+}
+
+/** CSV encode: build an array of structs and encode to CSV blob */
+function createCsvEncodeTest(size: number) {
+    const RowType = StructType({
+        id: IntegerType,
+        name: StringType,
+        value: FloatType,
+        flag: BooleanType,
+    });
+
+    // Build records as JS values (embedded in IR)
+    const records: any[] = [];
+    for (let i = 0; i < size; i++) {
+        records.push({
+            id: BigInt(i),
+            name: `item_${i}`,
+            value: i * 2.5,
+            flag: i % 2 === 0,
+        });
+    }
+
+    return East.function([], IntegerType, $ => {
+        const arr = $.let(records, ArrayType(RowType));
+        const blob = $.let(arr.encodeCsv());
+        return blob.size();
+    });
+}
+
 // =============================================================================
 // Main
 // =============================================================================
@@ -407,6 +463,8 @@ function generateProfileIR(config: ProfileConfig): IR[] {
         { name: "dict_lookup_stress", fn: createDictLookupStressTest(sizeConfig.collectionSize) },
         { name: "deep_variant", fn: createDeepVariantTest(sizeConfig.nestingDepth) },
         { name: "string_stress", fn: createStringStressTest(sizeConfig.collectionSize) },
+        { name: "csv_decode", fn: createCsvDecodeTest(sizeConfig.collectionSize) },
+        { name: "csv_encode", fn: createCsvEncodeTest(sizeConfig.collectionSize) },
     ];
 
     return tests.map(t => {
@@ -449,7 +507,7 @@ async function main() {
         "array_operations", "dict_struct_keys", "nested_loops", "while_loop",
         "variant_matching", "set_operations", "deep_struct", "string_operations",
         "mixed_operations", "arithmetic_operations", "complex_sort", "dict_lookup_stress",
-        "deep_variant", "string_stress"
+        "deep_variant", "string_stress", "csv_decode", "csv_encode"
     ];
 
     for (let i = 0; i < irList.length; i++) {
