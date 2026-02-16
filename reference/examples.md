@@ -346,8 +346,14 @@ const dictOps = East.function([DictType(StringType, IntegerType)], IntegerType, 
     // Get with default
     const count = inventory.get("widget", East.function([StringType], IntegerType, ($, key) => 0n));
 
-    // Merge (update or initialize)
-    $(inventory.merge("widget", 5n,
+    // Insert or update (simple overwrite)
+    $(inventory.insertOrUpdate("widget", 10n));
+
+    // Insert or update with conflict handler (add to existing)
+    $(inventory.insertOrUpdate("widget", 5n, ($, existing, delta) => existing.add(delta)));
+
+    // Merge (update or initialize with custom logic)
+    $(inventory.merge("gadget", 5n,
         ($, old, delta, key) => old.add(delta),
         ($, key) => 0n  // Initial value if key doesn't exist
     ));
@@ -597,6 +603,26 @@ const processStatus = East.function([StatusType], StringType, ($, status) => {
     });
 
     $.return(result);
+});
+```
+
+### Single-Tag Match
+
+```typescript
+import { East, variant, VariantType, IntegerType, NullType } from "@elaraai/east";
+
+const OptionType = VariantType({ some: IntegerType, none: NullType });
+
+// Expression-style matchTag (returns a value, requires default)
+const doubleOrZero = East.function([OptionType], IntegerType, ($, opt) => {
+    $.return(opt.matchTag("some", ($, x) => x.multiply(2n), ($) => 0n));
+});
+
+// Statement-style matchTag (side effects only, unmatched tags do nothing)
+const addIfSome = East.function([OptionType], IntegerType, ($, opt) => {
+    const total = $.let(0n);
+    $.matchTag(opt, "some", ($, x) => $.assign(total, total.add(x)));
+    $.return(total);
 });
 ```
 

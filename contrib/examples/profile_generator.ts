@@ -25,6 +25,8 @@ import {
     VariantType,
     IRType,
     variant,
+    BlobType,
+    OptionType,
 } from "../../src/index.js";
 import { toJSONFor } from "../../src/serialization/json.js";
 import { encodeBeast2For } from "../../src/serialization/beast2.js";
@@ -35,7 +37,7 @@ import type { IR } from "../../src/ir.js";
 // =============================================================================
 
 interface ProfileConfig {
-    size: "small" | "medium" | "large" | "xlarge" | "stress";
+    size: "small" | "medium" | "large" | "xlarge" | "stress" | "massive";
     outputDir: string;
 }
 
@@ -45,6 +47,7 @@ const SIZE_CONFIGS = {
     large: { collectionSize: 500, loopIterations: 2000, nestingDepth: 7 },
     xlarge: { collectionSize: 2000, loopIterations: 10000, nestingDepth: 10 },
     stress: { collectionSize: 5000, loopIterations: 50000, nestingDepth: 12 },
+    massive: { collectionSize: 100000, loopIterations: 100000, nestingDepth: 12 },
 };
 
 // =============================================================================
@@ -383,6 +386,60 @@ function createStringStressTest(size: number) {
     });
 }
 
+/** CSV decode: parse a large CSV blob into an array of structs */
+function createCsvDecodeTest(size: number) {
+    const RowType = StructType({
+        id: IntegerType,
+        name: StringType,
+        score: FloatType,
+        active: BooleanType,
+        notes: OptionType(StringType),
+    });
+
+    // Build CSV string with header + size rows
+    const lines: string[] = ["id,name,score,active,notes"];
+    for (let i = 0; i < size; i++) {
+        const active = i % 2 === 0 ? "true" : "false";
+        const notes = i % 3 === 0 ? "" : `note_${i}`;
+        lines.push(`${i},person_${i},${(i * 1.5).toFixed(2)},${active},${notes}`);
+    }
+    const csvBytes = new TextEncoder().encode(lines.join("\n"));
+
+    return East.function([], IntegerType, $ => {
+        const blob = $.let(East.value(csvBytes, BlobType));
+        const rows = $.let(blob.decodeCsv(RowType, { nullStrings: [""] }));
+        const count = $.let(rows.size());
+        return count;
+    });
+}
+
+/** CSV encode: build an array of structs and encode to CSV blob */
+function createCsvEncodeTest(size: number) {
+    const RowType = StructType({
+        id: IntegerType,
+        name: StringType,
+        value: FloatType,
+        flag: BooleanType,
+    });
+
+    // Build records as JS values (embedded in IR)
+    const records: any[] = [];
+    for (let i = 0; i < size; i++) {
+        records.push({
+            id: BigInt(i),
+            name: `item_${i}`,
+            value: i * 2.5,
+            flag: i % 2 === 0,
+        });
+    }
+
+    return East.function([], IntegerType, $ => {
+        const arr = $.let(records, ArrayType(RowType));
+        const blob = $.let(arr.encodeCsv());
+        return blob.size();
+    });
+}
+
 // =============================================================================
 // Main
 // =============================================================================
@@ -406,6 +463,8 @@ function generateProfileIR(config: ProfileConfig): IR[] {
         { name: "dict_lookup_stress", fn: createDictLookupStressTest(sizeConfig.collectionSize) },
         { name: "deep_variant", fn: createDeepVariantTest(sizeConfig.nestingDepth) },
         { name: "string_stress", fn: createStringStressTest(sizeConfig.collectionSize) },
+        { name: "csv_decode", fn: createCsvDecodeTest(sizeConfig.collectionSize) },
+        { name: "csv_encode", fn: createCsvEncodeTest(sizeConfig.collectionSize) },
     ];
 
     return tests.map(t => {
@@ -419,7 +478,7 @@ function parseArgs(): ProfileConfig {
     const config: ProfileConfig = { size: "medium", outputDir: "/tmp/east-profile-ir" };
     for (let i = 0; i < args.length; i++) {
         if (args[i] === "--size" && args[i + 1]) {
-            const size = args[i + 1] as "small" | "medium" | "large" | "xlarge" | "stress";
+            const size = args[i + 1] as "small" | "medium" | "large" | "xlarge" | "stress" | "massive";
             if (size in SIZE_CONFIGS) config.size = size;
             i++;
         } else if (args[i] === "--output" && args[i + 1]) {
@@ -443,37 +502,44 @@ async function main() {
     const encodeBeast2 = encodeBeast2For(IRType);
 
     let totalJsonSize = 0, totalBeast2Size = 0;
+    const beast2Only = config.size === "massive";
     const testNames = [
         "array_operations", "dict_struct_keys", "nested_loops", "while_loop",
         "variant_matching", "set_operations", "deep_struct", "string_operations",
         "mixed_operations", "arithmetic_operations", "complex_sort", "dict_lookup_stress",
-        "deep_variant", "string_stress"
+        "deep_variant", "string_stress", "csv_decode", "csv_encode"
     ];
 
     for (let i = 0; i < irList.length; i++) {
         const ir = irList[i]!;
         const name = testNames[i]!;
 
-        const jsonData = toJSON(ir);
-        const jsonStr = JSON.stringify(jsonData);
-        writeFileSync(`${config.outputDir}/${name}_${config.size}.json`, jsonStr);
-        totalJsonSize += jsonStr.length;
+        let jsonSizeKB = "skipped";
+        if (!beast2Only) {
+            const jsonData = toJSON(ir);
+            const jsonStr = JSON.stringify(jsonData);
+            writeFileSync(`${config.outputDir}/${name}_${config.size}.json`, jsonStr);
+            totalJsonSize += jsonStr.length;
+            jsonSizeKB = `${(jsonStr.length / 1024).toFixed(1)}KB`;
+        }
 
         const beast2Data = encodeBeast2(ir);
         writeFileSync(`${config.outputDir}/${name}_${config.size}.beast2`, beast2Data);
         totalBeast2Size += beast2Data.length;
 
-        console.log(`  ${name}: JSON=${(jsonStr.length / 1024).toFixed(1)}KB, BEAST2=${(beast2Data.length / 1024).toFixed(1)}KB`);
+        console.log(`  ${name}: JSON=${jsonSizeKB}, BEAST2=${(beast2Data.length / 1024).toFixed(1)}KB`);
     }
 
     console.log("\n" + "=".repeat(60));
-    console.log(` Total JSON: ${(totalJsonSize / 1024).toFixed(1)} KB`);
+    if (!beast2Only) {
+        console.log(` Total JSON: ${(totalJsonSize / 1024).toFixed(1)} KB`);
+        console.log(` Compression: ${(totalJsonSize / totalBeast2Size).toFixed(2)}x`);
+    }
     console.log(` Total BEAST2: ${(totalBeast2Size / 1024).toFixed(1)} KB`);
-    console.log(` Compression: ${(totalJsonSize / totalBeast2Size).toFixed(2)}x`);
     console.log(` Output: ${config.outputDir}`);
     console.log("=".repeat(60));
     console.log(`\nRun profiler:`);
-    console.log(`  uv run --package east-py python packages/east-py/scripts/east_profiler.py ${config.outputDir}/*.json`);
+    console.log(`  uv run --package east-py python packages/east-py/scripts/east_profiler.py ${config.outputDir}/*.beast2`);
 }
 
 main().catch(console.error);

@@ -17,7 +17,7 @@ import {
 import { printFor } from "./east.js";
 import { ref } from "../containers/ref.js";
 import { matrix } from "../containers/matrix.js";
-import { EAST_IR_SYMBOL, EAST_CAPTURES_SYMBOL, compile_internal, type RuntimeContext } from "../compile.js";
+import { EAST_IR_SYMBOL, EAST_CAPTURES_SYMBOL, ReturnException, compile_internal, type RuntimeContext } from "../compile.js";
 import { InternalError } from "../error.js";
 import { IRType, type FunctionIR, type AsyncFunctionIR } from "../ir.js";
 import type { PlatformFunction } from "../platform.js";
@@ -569,14 +569,35 @@ export function decodeBeast2ValueFor(type: EastTypeValue | EastType, typeCtx: Be
       }
 
       // Analyze and compile the function with capture context
-      let fn: any;
+      let rawFn: any;
       try {
         const analyzedIR = analyzeIR(ir, platform, variableContext);
         const compiled = compile_internal(analyzedIR, typeContext, platformFns, asyncPlatformFns, platform, true, new Set());
-        fn = compiled(captureContext);
+        rawFn = compiled(captureContext);
       } catch (e: unknown) {
         throw new Error(`Failed to compile decoded function: ${(e as Error).message}`);
       }
+
+      // Wrap with ReturnException handler (same as EastIR.compile)
+      const fn = (...inputs: any[]) => {
+        try {
+          return rawFn(...inputs);
+        } catch (e: unknown) {
+          if (e instanceof ReturnException) {
+            return e.value;
+          } else {
+            throw e;
+          }
+        }
+      };
+
+      // Attach IR to wrapper for re-serialization support
+      Object.defineProperty(fn, EAST_IR_SYMBOL, {
+        value: ir,
+        writable: false,
+        enumerable: false,
+        configurable: false
+      });
 
       return [fn, currentOffset];
     };
@@ -644,14 +665,35 @@ export function decodeBeast2ValueFor(type: EastTypeValue | EastType, typeCtx: Be
       }
 
       // Analyze and compile the function with capture context
-      let fn: any;
+      let rawFn: any;
       try {
         const analyzedIR = analyzeIR(ir, platform, variableContext);
         const compiled = compile_internal(analyzedIR, typeContext, platformFns, asyncPlatformFns, platform, true, new Set());
-        fn = compiled(captureContext);
+        rawFn = compiled(captureContext);
       } catch (e: unknown) {
         throw new Error(`Failed to compile decoded async function: ${(e as Error).message}`);
       }
+
+      // Wrap with ReturnException handler (same as AsyncEastIR.compile)
+      const fn = async (...inputs: any[]) => {
+        try {
+          return await rawFn(...inputs);
+        } catch (e: unknown) {
+          if (e instanceof ReturnException) {
+            return e.value;
+          } else {
+            throw e;
+          }
+        }
+      };
+
+      // Attach IR to wrapper for re-serialization support
+      Object.defineProperty(fn, EAST_IR_SYMBOL, {
+        value: ir,
+        writable: false,
+        enumerable: false,
+        configurable: false
+      });
 
       return [fn, currentOffset];
     };

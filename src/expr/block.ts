@@ -1808,6 +1808,8 @@ export type BlockBuilder<Ret> = ((expr: Expr) => void) & {
   if: (predicate: BooleanExpr | boolean, true_branch: ($: BlockBuilder<Ret>) => void | Expr) => IfElseExpr<Ret>,
   /** Perform logic on different possible variants. For each variant tag, the associated data is unwrapped and provided to the branch. */
   match: <Cases extends Record<string, any>>(variant: Expr<VariantType<Cases>>, cases: { [K in keyof Cases]?: ($: BlockBuilder<Ret>, data: ExprType<Cases[K]>) => (void | Expr) }) => void,
+  /** Perform logic on a single variant tag. The associated data is unwrapped and provided to the handler. Unmatched tags do nothing. */
+  matchTag: <Cases extends Record<string, any>, K extends keyof Cases & string>(variant: Expr<VariantType<Cases>>, tag: K, handler: ($: BlockBuilder<Ret>, data: ExprType<Cases[K]>) => (void | Expr)) => void,
   /** Loop while a condition is true */
   while: (predicate: BooleanExpr | boolean, body: ($: BlockBuilder<Ret>, label: Label) => (void | Expr)) => void,
   /** Loop over the values in a collection (array, set or dictionary) */
@@ -2127,6 +2129,10 @@ export const BlockBuilder = <Ret>(return_type: Ret): BlockBuilder<Ret> => {
     statements.push(ast);
 
     return fromAst(ast) as any;
+  };
+
+  $.matchTag = (variant: any, tag: string, handler: any): any => {
+    return $.match(variant, { [tag]: handler } as any);
   };
 
   $.while = (predicate: BooleanExpr | boolean, body: ($: BlockBuilder<Ret>, label: Label) => (void | Expr)): NullExpr => {

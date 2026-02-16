@@ -24,6 +24,17 @@ await describe("Variant", (test) => {
         $(assert.equal(f(variant("none", null)), 0n));
     });
 
+    test("matchTag statement", $ => {
+        const f = $.const(East.function([VariantType({ none: NullType, some: IntegerType })], IntegerType, ($, x) => {
+            let ret = $.let(0n);
+            $.matchTag(x, "some", ($, data) => $.assign(ret, data));
+            $.return(ret);
+        }));
+
+        $(assert.equal(f(variant("some", 42n)), 42n));
+        $(assert.equal(f(variant("none", null)), 0n));
+    });
+
     test("Expressions", $ => {
         const v1 = $.let(variant("some", 42n), OptionType(IntegerType));
         const v2 = $.let(variant("none", null), OptionType(IntegerType));
@@ -60,6 +71,13 @@ await describe("Variant", (test) => {
         const r1 = $.let(variant("ok", 100n), ResultType);
         const r2 = $.let(variant("error", -1n), ResultType);
         const r3 = $.let(variant("pending", null), ResultType);
+
+        // matchTag: single tag match with default
+        $(assert.equal(v1.matchTag("some", (_$, val) => val, _$ => 0n), 42n));
+        $(assert.equal(v2.matchTag("some", (_$, val) => val, _$ => 0n), 0n));
+        $(assert.equal(r1.matchTag("ok", (_$, val) => val, _$ => 0n), 100n));
+        $(assert.equal(r2.matchTag("ok", (_$, val) => val, _$ => 0n), 0n));
+        $(assert.equal(r3.matchTag("ok", (_$, val) => val, _$ => 0n), 0n));
 
         // partial match: only some cases + default (2nd arg)
         $(assert.equal(v1.match({ some: (_$, val) => val }, _$ => 0n), 42n));

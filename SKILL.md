@@ -85,7 +85,7 @@ Task → What do you need?
     ├─ Block Operations ($)
     │   ├─ Variables → $.let(value), $.const(value), $.assign(var, value)
     │   ├─ Execute → $(expr), $.return(value), $.error(message)
-    │   ├─ Control Flow → $.if(...), $.while(...), $.for(...), $.match(...)
+    │   ├─ Control Flow → $.if(...), $.while(...), $.for(...), $.match(...), $.matchTag(...)
     │   └─ Error Handling → $.try(...).catch(...).finally(...)
     │
     ├─ Expression Operations
@@ -156,7 +156,7 @@ Task → What do you need?
     │   │   ├─ Transform → .transpose()
     │   │   └─ Convert → .toVector(), .toArray()
     │   ├─ Struct → .fieldName (direct property access)
-    │   ├─ Variant → .match(), .unwrap(), .hasTag(), .getTag(), .equals()/.equal()/.eq(), .notEquals()/.notEqual()/.ne()
+    │   ├─ Variant → .match(), .matchTag(), .unwrap(), .hasTag(), .getTag(), .equals()/.equal()/.eq(), .notEquals()/.notEqual()/.ne()
     │   └─ Ref → .get(), .update(), .merge()
     │
     ├─ Standard Library (East.*)

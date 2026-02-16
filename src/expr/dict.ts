@@ -257,14 +257,17 @@ export class DictExpr<K extends any, T extends any> extends Expr<DictType<K, T>>
   /**
    * Inserts or updates a key-value pair in the dictionary.
    *
-   * If the key already exists, the value is overwritten with the provided value. This operation is idempotent.
+   * If the key does not exist, inserts the value. If the key already exists, the value is replaced by default,
+   * or resolved using the optional `onConflict` handler.
    *
    * @param key - The key to insert or update
    * @param value - The new value to associate with the key
+   * @param onConflict - Optional conflict handler called with (existing, new, key) when the key already exists; if omitted, the new value overwrites the existing one
    * @returns A NullExpr
    *
    * @see {@link insert} for inserting only (errors on duplicate)
    * @see {@link update} for updating only (errors on missing key)
+   * @see {@link merge} to update based on the existing value
    *
    * @example
    * ```ts
@@ -278,9 +281,17 @@ export class DictExpr<K extends any, T extends any> extends Expr<DictType<K, T>>
    * compiled(dict, "a", 10n);  // dict now has Map([["a", 10n], ["b", 2n]])
    * ```
    */
-  insertOrUpdate(key: SubtypeExprOrValue<K>, value: SubtypeExprOrValue<T>): ExprType<NullType> {
+  insertOrUpdate(key: SubtypeExprOrValue<K>, value: SubtypeExprOrValue<T>, onConflict?: SubtypeExprOrValue<FunctionType<[T, T, K], T>>): ExprType<NullType> {
     const keyAst = valueOrExprToAstTyped(key, this.key_type as EastType);
     const valueAst = valueOrExprToAstTyped(value, this.value_type as EastType);
+
+    let onConflictExpr;
+    if (onConflict === undefined) {
+      // Default: replace existing with new value
+      onConflictExpr = Expr.function([this.value_type as EastType, this.value_type as EastType, this.key_type as EastType], this.value_type as EastType, (_$, _existing, newValue) => newValue);
+    } else {
+      onConflictExpr = Expr.from(onConflict as any, FunctionType([this.value_type, this.value_type, this.key_type], this.value_type));
+    }
 
     return this[FactorySymbol]({
       ast_type: "Builtin",
@@ -288,7 +299,7 @@ export class DictExpr<K extends any, T extends any> extends Expr<DictType<K, T>>
       location: get_location(),
       builtin: "DictInsertOrUpdate",
       type_parameters: [this.key_type as EastType, this.value_type as EastType],
-      arguments: [this[AstSymbol], keyAst, valueAst],
+      arguments: [this[AstSymbol], keyAst, valueAst, Expr.ast(onConflictExpr as any)],
     }) as ExprType<NullType>;
   }
 
