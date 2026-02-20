@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Elara AI Pty Ltd
  * Dual-licensed under AGPL-3.0 and commercial license. See LICENSE for details.
  */
-import { East, ArrayType, FloatType } from "../src/index.js";
+import { East, ArrayType, FloatType, VectorType, IntegerType } from "../src/index.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
 
 await describe("Matrix", (test) => {
@@ -339,5 +339,167 @@ await describe("Matrix", (test) => {
         const m = $.let(East.Matrix.fromArray(arr));
         $(assert.equal(m.rows(), 0n))
         $(assert.equal(m.cols(), 0n))
+    });
+
+    // ================================================================
+    // mapRows tests
+    // ================================================================
+
+    test("Matrix mapRows identity", $ => {
+        const m = $.let(East.Matrix.fromArray([[1.0, 2.0], [3.0, 4.0]]));
+        const result = $.let(m.mapRows(($, row) => row));
+        $(assert.equal(result.rows(), 2n))
+        $(assert.equal(result.cols(), 2n))
+        $(assert.equal(result.get(0n, 0n), 1.0))
+        $(assert.equal(result.get(0n, 1n), 2.0))
+        $(assert.equal(result.get(1n, 0n), 3.0))
+        $(assert.equal(result.get(1n, 1n), 4.0))
+    });
+
+    test("Matrix mapRows element transformation", $ => {
+        const m = $.let(East.Matrix.fromArray([[1.0, 2.0], [3.0, 4.0]]));
+        const result = $.let(m.mapRows(($, row) => row.map(($, x) => x.multiply(10.0))));
+        $(assert.equal(result.get(0n, 0n), 10.0))
+        $(assert.equal(result.get(0n, 1n), 20.0))
+        $(assert.equal(result.get(1n, 0n), 30.0))
+        $(assert.equal(result.get(1n, 1n), 40.0))
+    });
+
+    test("Matrix mapRows changing column count", $ => {
+        const m = $.let(East.Matrix.fromArray([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]));
+        // Slice each row to first 2 elements
+        const result = $.let(m.mapRows(($, row) => row.slice(0n, 2n)));
+        $(assert.equal(result.rows(), 2n))
+        $(assert.equal(result.cols(), 2n))
+        $(assert.equal(result.get(0n, 0n), 1.0))
+        $(assert.equal(result.get(0n, 1n), 2.0))
+        $(assert.equal(result.get(1n, 0n), 4.0))
+        $(assert.equal(result.get(1n, 1n), 5.0))
+    });
+
+    test("Matrix mapRows with index", $ => {
+        const m = $.let(East.Matrix.fromArray([[10.0, 20.0], [30.0, 40.0]]));
+        // Add row index to each element
+        const result = $.let(m.mapRows(($, row, idx) => row.map(($, x) => x.add(idx.toFloat()))));
+        $(assert.equal(result.get(0n, 0n), 10.0))  // 10 + 0
+        $(assert.equal(result.get(0n, 1n), 20.0))  // 20 + 0
+        $(assert.equal(result.get(1n, 0n), 31.0))  // 30 + 1
+        $(assert.equal(result.get(1n, 1n), 41.0))  // 40 + 1
+    });
+
+    test("Matrix mapRows concat extends columns", $ => {
+        const m = $.let(East.Matrix.fromArray([[1.0, 2.0], [3.0, 4.0]]));
+        const extra = $.let(East.Vector.fill(1n, 99.0));
+        const result = $.let(m.mapRows(($, row) => row.concat(extra)));
+        $(assert.equal(result.rows(), 2n))
+        $(assert.equal(result.cols(), 3n))
+        $(assert.equal(result.get(0n, 2n), 99.0))
+        $(assert.equal(result.get(1n, 2n), 99.0))
+    });
+
+    test("Matrix mapRows integer", $ => {
+        const m = $.let(East.Matrix.fromArray([[1n, 2n], [3n, 4n]]));
+        const result = $.let(m.mapRows(($, row) => row.map(($, x) => x.multiply(2n))));
+        $(assert.equal(result.get(0n, 0n), 2n))
+        $(assert.equal(result.get(1n, 1n), 8n))
+    });
+
+    // ================================================================
+    // toRows tests
+    // ================================================================
+
+    test("Matrix toRows float", $ => {
+        const m = $.let(East.Matrix.fromArray([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]));
+        const rows = $.let(m.toRows());
+        $(assert.equal(rows.length(), 2n))
+        const row0 = $.let(rows.get(0n));
+        $(assert.equal(row0.length(), 3n))
+        $(assert.equal(row0.get(0n), 1.0))
+        $(assert.equal(row0.get(1n), 2.0))
+        $(assert.equal(row0.get(2n), 3.0))
+        const row1 = $.let(rows.get(1n));
+        $(assert.equal(row1.get(0n), 4.0))
+        $(assert.equal(row1.get(2n), 6.0))
+    });
+
+    test("Matrix toRows integer", $ => {
+        const m = $.let(East.Matrix.fromArray([[10n, 20n], [30n, 40n]]));
+        const rows = $.let(m.toRows());
+        $(assert.equal(rows.length(), 2n))
+        $(assert.equal(rows.get(0n).get(0n), 10n))
+        $(assert.equal(rows.get(1n).get(1n), 40n))
+    });
+
+    test("Matrix toRows empty", $ => {
+        const m = $.let(East.Matrix.zeros(0n, 0n));
+        const rows = $.let(m.toRows());
+        $(assert.equal(rows.length(), 0n))
+    });
+
+    test("Matrix toRows roundtrip", $ => {
+        const m = $.let(East.Matrix.fromArray([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]));
+        const m2 = $.let(East.Matrix.fromRows(m.toRows()));
+        $(assert.equal(m2.rows(), 3n))
+        $(assert.equal(m2.cols(), 2n))
+        $(assert.equal(m2.get(0n, 0n), 1.0))
+        $(assert.equal(m2.get(0n, 1n), 2.0))
+        $(assert.equal(m2.get(1n, 0n), 3.0))
+        $(assert.equal(m2.get(1n, 1n), 4.0))
+        $(assert.equal(m2.get(2n, 0n), 5.0))
+        $(assert.equal(m2.get(2n, 1n), 6.0))
+    });
+
+    // ================================================================
+    // fromRows tests
+    // ================================================================
+
+    test("Matrix fromRows float", $ => {
+        const rows = $.let([], ArrayType(VectorType(FloatType)));
+        $(rows.pushLast(East.Vector.fromArray([1.0, 2.0, 3.0])))
+        $(rows.pushLast(East.Vector.fromArray([4.0, 5.0, 6.0])))
+        const m = $.let(East.Matrix.fromRows(rows));
+        $(assert.equal(m.rows(), 2n))
+        $(assert.equal(m.cols(), 3n))
+        $(assert.equal(m.get(0n, 0n), 1.0))
+        $(assert.equal(m.get(0n, 2n), 3.0))
+        $(assert.equal(m.get(1n, 0n), 4.0))
+        $(assert.equal(m.get(1n, 2n), 6.0))
+    });
+
+    test("Matrix fromRows integer", $ => {
+        const rows = $.let([], ArrayType(VectorType(IntegerType)));
+        $(rows.pushLast(East.Vector.fromArray([1n, 2n])))
+        $(rows.pushLast(East.Vector.fromArray([3n, 4n])))
+        const m = $.let(East.Matrix.fromRows(rows));
+        $(assert.equal(m.rows(), 2n))
+        $(assert.equal(m.cols(), 2n))
+        $(assert.equal(m.get(0n, 0n), 1n))
+        $(assert.equal(m.get(1n, 1n), 4n))
+    });
+
+    test("Matrix fromRows empty", $ => {
+        const rows = $.let([], ArrayType(VectorType(FloatType)));
+        const m = $.let(East.Matrix.fromRows(rows));
+        $(assert.equal(m.rows(), 0n))
+        $(assert.equal(m.cols(), 0n))
+    });
+
+    test("Matrix fromRows single row", $ => {
+        const rows = $.let([], ArrayType(VectorType(FloatType)));
+        $(rows.pushLast(East.Vector.fromArray([10.0, 20.0, 30.0])))
+        const m = $.let(East.Matrix.fromRows(rows));
+        $(assert.equal(m.rows(), 1n))
+        $(assert.equal(m.cols(), 3n))
+        $(assert.equal(m.get(0n, 0n), 10.0))
+        $(assert.equal(m.get(0n, 2n), 30.0))
+    });
+
+    test("Matrix fromRows roundtrip integer", $ => {
+        const m = $.let(East.Matrix.fromArray([[10n, 20n], [30n, 40n]]));
+        const m2 = $.let(East.Matrix.fromRows(m.toRows()));
+        $(assert.equal(m2.rows(), 2n))
+        $(assert.equal(m2.cols(), 2n))
+        $(assert.equal(m2.get(0n, 0n), 10n))
+        $(assert.equal(m2.get(1n, 1n), 40n))
     });
 });

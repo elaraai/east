@@ -26,7 +26,7 @@ export type BuiltinName = "Is" | "Equal" | "NotEqual" | "Less" | "LessEqual" | "
   | "SetGenerate" | "SetSize" | "SetHas" | "SetInsert" | "SetTryInsert" | "SetDelete" | "SetTryDelete" | "SetClear" | "SetUnionInPlace" | "SetUnion" | "SetIntersect" | "SetDiff" | "SetSymDiff" | "SetIsSubset" | "SetIsDisjoint" | "SetCopy" | "SetForEach" | "SetMap" | "SetFilter" | "SetFilterMap" | "SetFirstMap" | "SetMapReduce" | "SetReduce" | "SetToArray" | "SetToSet" |"SetToDict" | "SetFlattenToArray" | "SetFlattenToSet" | "SetFlattenToDict" | "SetGroupFold"
   | "DictGenerate" | "DictSize" | "DictHas" | "DictGet" | "DictGetOrDefault" | "DictTryGet" | "DictInsert" | "DictGetOrInsert" | "DictInsertOrUpdate" | "DictUpdate" | "DictSwap" | "DictMerge" | "DictDelete" | "DictTryDelete" | "DictPop" | "DictClear" | "DictUnionInPlace" | "DictMergeAll" | "DictKeys" | "DictGetKeys" | "DictForEach" | "DictCopy" | "DictMap" | "DictFilter" | "DictFilterMap" | "DictFirstMap" | "DictMapReduce" | "DictReduce" | "DictToArray" | "DictToSet" | "DictToDict" | "DictFlattenToArray" | "DictFlattenToSet" | "DictFlattenToDict" | "DictGroupFold"
   | "VectorLength" | "VectorGet" | "VectorSet" | "VectorSlice" | "VectorConcat" | "VectorFromArray" | "VectorToArray" | "VectorToMatrix" | "VectorZeros" | "VectorOnes" | "VectorFill" | "VectorMap" | "VectorFold"
-  | "MatrixRows" | "MatrixCols" | "MatrixGet" | "MatrixSet" | "MatrixGetRow" | "MatrixGetCol" | "MatrixToVector" | "MatrixFromArray" | "MatrixToArray" | "MatrixTranspose" | "MatrixZeros" | "MatrixOnes" | "MatrixFill" | "MatrixMapElements" | "MatrixMapRows"
+  | "MatrixRows" | "MatrixCols" | "MatrixGet" | "MatrixSet" | "MatrixGetRow" | "MatrixGetCol" | "MatrixToVector" | "MatrixFromArray" | "MatrixToArray" | "MatrixTranspose" | "MatrixZeros" | "MatrixOnes" | "MatrixFill" | "MatrixMapElements" | "MatrixMapRows" | "MatrixToRows" | "MatrixFromRows"
   ;
 
 /** @internal */
@@ -1205,6 +1205,16 @@ export const Builtins: Record<BuiltinName, BuiltinType> = {
     type_parameters: ["T", "T2"],
     inputs: [MatrixType("T" as any), FunctionType([VectorType("T" as any), IntegerType], VectorType("T2" as any))] as const,
     output: MatrixType("T2" as any),
+  },
+  MatrixToRows: {
+    type_parameters: ["T"],
+    inputs: [MatrixType("T" as any)] as const,
+    output: ArrayType(VectorType("T" as any)),
+  },
+  MatrixFromRows: {
+    type_parameters: ["T"],
+    inputs: [ArrayType(VectorType("T" as any))] as const,
+    output: MatrixType("T" as any),
   },
 }
 
