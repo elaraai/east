@@ -1247,6 +1247,14 @@ function call_function(location: LocationValue[], compiled_f: (...args: any[]) =
 }
 
 
+/** Allocates an empty TypedArray of the given length for a given element type */
+function allocateTypedArray(elementType: EastTypeValue, length: number): Float64Array | BigInt64Array | Uint8ClampedArray {
+  if (elementType.type === "Float") return new Float64Array(length);
+  if (elementType.type === "Integer") return new BigInt64Array(length);
+  if (elementType.type === "Boolean") return new Uint8ClampedArray(length);
+  throw new Error(`Unsupported vector element type: ${elementType.type}`);
+}
+
 /** Creates the appropriate TypedArray for a given element type */
 function createTypedArray(elementType: EastTypeValue, values: any[]): Float64Array | BigInt64Array | Uint8ClampedArray {
   if (elementType.type === "Float") {
@@ -3192,23 +3200,11 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue[], platfo
     return vec.slice(s, e);
   },
 
-  VectorConcat: (_location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue) => (a: Float64Array | BigInt64Array | Uint8ClampedArray, b: Float64Array | BigInt64Array | Uint8ClampedArray) => {
-    if (a instanceof Float64Array) {
-      const result = new Float64Array(a.length + b.length);
-      result.set(a);
-      result.set(b as Float64Array, a.length);
-      return result;
-    } else if (a instanceof BigInt64Array) {
-      const result = new BigInt64Array(a.length + b.length);
-      result.set(a);
-      result.set(b as BigInt64Array, a.length);
-      return result;
-    } else {
-      const result = new Uint8ClampedArray(a.length + b.length);
-      result.set(a);
-      result.set(b as Uint8ClampedArray, a.length);
-      return result;
-    }
+  VectorConcat: (_location: LocationValue[], _platformDef: PlatformFunction[], T: EastTypeValue) => (a: Float64Array | BigInt64Array | Uint8ClampedArray, b: Float64Array | BigInt64Array | Uint8ClampedArray) => {
+    const result = allocateTypedArray(T, a.length + b.length);
+    result.set(a as any);
+    result.set(b as any, a.length);
+    return result;
   },
 
   VectorFromArray: (_location: LocationValue[], _platformDef: PlatformFunction[], T: EastTypeValue) => (arr: any[]) => {
@@ -3324,24 +3320,14 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue[], platfo
     return m.data.slice(start, start + m.cols);
   },
 
-  MatrixGetCol: (location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue) => (m: any, col: bigint) => {
+  MatrixGetCol: (location: LocationValue[], _platformDef: PlatformFunction[], T: EastTypeValue) => (m: any, col: bigint) => {
     const c = Number(col);
     if (c < 0 || c >= m.cols) {
       throw new EastError(`Matrix column ${col} out of bounds (${m.cols} cols)`, { location });
     }
-    if (m.data instanceof Float64Array) {
-      const result = new Float64Array(m.rows);
-      for (let r = 0; r < m.rows; r++) result[r] = m.data[r * m.cols + c];
-      return result;
-    } else if (m.data instanceof BigInt64Array) {
-      const result = new BigInt64Array(m.rows);
-      for (let r = 0; r < m.rows; r++) result[r] = m.data[r * m.cols + c];
-      return result;
-    } else {
-      const result = new Uint8ClampedArray(m.rows);
-      for (let r = 0; r < m.rows; r++) result[r] = m.data[r * m.cols + c];
-      return result;
-    }
+    const result = allocateTypedArray(T, m.rows);
+    for (let r = 0; r < m.rows; r++) result[r] = m.data[r * m.cols + c] as never;
+    return result;
   },
 
   MatrixToVector: (_location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue) => (m: any) => {
@@ -3379,32 +3365,14 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue[], platfo
     return result;
   },
 
-  MatrixTranspose: (_location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue) => (m: any) => {
-    if (m.data instanceof Float64Array) {
-      const result = new Float64Array(m.rows * m.cols);
-      for (let r = 0; r < m.rows; r++) {
-        for (let c = 0; c < m.cols; c++) {
-          result[c * m.rows + r] = m.data[r * m.cols + c];
-        }
+  MatrixTranspose: (_location: LocationValue[], _platformDef: PlatformFunction[], T: EastTypeValue) => (m: any) => {
+    const result = allocateTypedArray(T, m.rows * m.cols);
+    for (let r = 0; r < m.rows; r++) {
+      for (let c = 0; c < m.cols; c++) {
+        result[c * m.rows + r] = m.data[r * m.cols + c] as never;
       }
-      return matrix(result, m.cols, m.rows);
-    } else if (m.data instanceof BigInt64Array) {
-      const result = new BigInt64Array(m.rows * m.cols);
-      for (let r = 0; r < m.rows; r++) {
-        for (let c = 0; c < m.cols; c++) {
-          result[c * m.rows + r] = m.data[r * m.cols + c];
-        }
-      }
-      return matrix(result, m.cols, m.rows);
-    } else {
-      const result = new Uint8ClampedArray(m.rows * m.cols);
-      for (let r = 0; r < m.rows; r++) {
-        for (let c = 0; c < m.cols; c++) {
-          result[c * m.rows + r] = m.data[r * m.cols + c];
-        }
-      }
-      return matrix(result, m.cols, m.rows);
     }
+    return matrix(result, m.cols, m.rows);
   },
 
   MatrixZeros: (_location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue) => (rows: bigint, cols: bigint) => {
@@ -3448,7 +3416,7 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue[], platfo
     return matrix(createTypedArray(U, results), m.rows, m.cols);
   },
 
-  MatrixMapRows: (location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue, _U: EastTypeValue) => (m: any, f: (row: any, idx: bigint) => any) => {
+  MatrixMapRows: (location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue, U: EastTypeValue) => (m: any, f: (row: any, idx: bigint) => any) => {
     const resultRows: any[] = [];
     for (let r = 0; r < m.rows; r++) {
       const start = r * m.cols;
@@ -3456,32 +3424,38 @@ const builtin_evaluators: Record<BuiltinName, (location: LocationValue[], platfo
       const resultRow = call_function(location, f, rowVec, BigInt(r));
       resultRows.push(resultRow);
     }
-    // Build result matrix from row vectors
     if (resultRows.length === 0) {
-      return matrix(new Float64Array(0), 0, 0);
+      return matrix(allocateTypedArray(U, 0), 0, 0);
     }
     const newCols = resultRows[0].length;
-    const totalLen = m.rows * newCols;
-    // Determine result type from first row
-    if (resultRows[0] instanceof Float64Array) {
-      const data = new Float64Array(totalLen);
-      for (let r = 0; r < m.rows; r++) {
-        data.set(resultRows[r], r * newCols);
-      }
-      return matrix(data, m.rows, newCols);
-    } else if (resultRows[0] instanceof BigInt64Array) {
-      const data = new BigInt64Array(totalLen);
-      for (let r = 0; r < m.rows; r++) {
-        data.set(resultRows[r], r * newCols);
-      }
-      return matrix(data, m.rows, newCols);
-    } else {
-      const data = new Uint8ClampedArray(totalLen);
-      for (let r = 0; r < m.rows; r++) {
-        data.set(resultRows[r], r * newCols);
-      }
-      return matrix(data, m.rows, newCols);
+    const data = allocateTypedArray(U, m.rows * newCols);
+    for (let r = 0; r < m.rows; r++) {
+      data.set(resultRows[r] as any, r * newCols);
     }
+    return matrix(data, m.rows, newCols);
+  },
+
+  MatrixToRows: (_location: LocationValue[], _platformDef: PlatformFunction[], _T: EastTypeValue) => (m: any): (Float64Array | BigInt64Array | Uint8ClampedArray)[] => {
+    const rows: (Float64Array | BigInt64Array | Uint8ClampedArray)[] = [];
+    for (let r = 0; r < m.rows; r++) {
+      rows.push(m.data.slice(r * m.cols, (r + 1) * m.cols));
+    }
+    return rows;
+  },
+
+  MatrixFromRows: (location: LocationValue[], _platformDef: PlatformFunction[], T: EastTypeValue) => (arr: any[]) => {
+    if (arr.length === 0) {
+      return matrix(allocateTypedArray(T, 0), 0, 0);
+    }
+    const cols = arr[0].length;
+    for (let i = 1; i < arr.length; i++) {
+      if (arr[i].length !== cols) {
+        throw new EastError(`Jagged rows: row 0 has ${cols} columns but row ${i} has ${arr[i].length}`, { location });
+      }
+    }
+    const data = allocateTypedArray(T, arr.length * cols);
+    for (let r = 0; r < arr.length; r++) data.set(arr[r] as any, r * cols);
+    return matrix(data, arr.length, cols);
   },
 }
 

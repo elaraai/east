@@ -4,14 +4,15 @@
  */
 import type { AST } from "../ast.js";
 import { get_location } from "../location.js";
-import { IntegerType, VectorType, MatrixType, NullType, ArrayType, type EastType } from "../types.js";
+import { IntegerType, VectorType, MatrixType, NullType, FunctionType, ArrayType, type EastType, type NeverType, isSubtype, printType, isTypeEqual } from "../types.js";
 import { valueOrExprToAstTyped } from "./ast.js";
 import type { IntegerExpr } from "./integer.js";
 import type { NullExpr } from "./null.js";
-import { AstSymbol, Expr, FactorySymbol, type ToExpr } from "./expr.js";
+import { AstSymbol, Expr, FactorySymbol, TypeSymbol, type ToExpr } from "./expr.js";
 import type { SubtypeExprOrValue, ExprType } from "./types.js";
 import type { VectorExpr } from "./vector.js";
 import type { ArrayExpr } from "./array.js";
+import type { BlockBuilder } from "./block.js";
 
 /**
  * Expression representing mutable matrix (2D typed array) values and operations.
@@ -190,5 +191,61 @@ export class MatrixExpr<T extends any> extends Expr<MatrixType<T>> {
       type_parameters: [this.element_type as EastType],
       arguments: [this[AstSymbol]],
     }) as any;
+  }
+
+  /**
+   * Converts this matrix to an Array of row Vectors.
+   *
+   * @returns An ArrayExpr of VectorExprs, one per row
+   */
+  toRows(): ArrayExpr<VectorType<T>> {
+    return this[FactorySymbol]({
+      ast_type: "Builtin",
+      type: ArrayType(VectorType(this.element_type as EastType)),
+      location: get_location(),
+      builtin: "MatrixToRows",
+      type_parameters: [this.element_type as EastType],
+      arguments: [this[AstSymbol]],
+    }) as any;
+  }
+
+  /**
+   * Maps a function over each row vector and its index, producing a new matrix.
+   *
+   * @param fn - Function taking (row_vector, row_index) and returning a new row vector
+   * @returns A new MatrixExpr with the mapped row vectors
+   */
+  mapRows<T2>(fn: Expr<FunctionType<[VectorType<T>, IntegerType], VectorType<T2>>>): MatrixExpr<T2>;
+  mapRows<F extends (($: BlockBuilder<NeverType>, row: VectorExpr<T>, idx: ExprType<IntegerType>) => VectorExpr<any>)>(fn: F): MatrixExpr<ReturnType<F> extends VectorExpr<infer U> ? U : never>;
+  mapRows(fn: Expr<FunctionType> | (($: BlockBuilder<NeverType>, row: VectorExpr<T>, idx: ExprType<IntegerType>) => any)): Expr<MatrixType> {
+    if (fn instanceof Expr) {
+      if (!(fn[TypeSymbol] && fn[TypeSymbol].type === "Function")) {
+        throw new Error("Expected a Function expression");
+      }
+      const fnType = fn[TypeSymbol] as FunctionType<any[], any>;
+      const output_type = fnType.output as EastType;
+      if (fnType.inputs.length !== 2) {
+        throw new Error(`Expected Function to have 2 inputs, got ${fnType.inputs.length} inputs`);
+      }
+      if (!isSubtype(VectorType(this.element_type as EastType), fnType.inputs[0] as EastType)) {
+        throw new Error(`Expected Function first input to be ${printType(VectorType(this.element_type as EastType))}, got ${printType(fnType.inputs[0] as EastType)}`);
+      }
+      if (!isTypeEqual(IntegerType, fnType.inputs[1] as EastType)) {
+        throw new Error(`Expected Function second input to be ${printType(IntegerType)}, got ${printType(fnType.inputs[1] as EastType)}`);
+      }
+      // output_type is VectorType<T2>, extract T2 for the result MatrixType
+      const result_elem_type = (output_type as VectorType).element;
+      return this[FactorySymbol]({
+        ast_type: "Builtin",
+        type: MatrixType(result_elem_type),
+        location: get_location(),
+        builtin: "MatrixMapRows",
+        type_parameters: [this.element_type as EastType, result_elem_type],
+        arguments: [this[AstSymbol], fn[AstSymbol]],
+      });
+    } else {
+      const functionExpr = Expr.function([VectorType(this.element_type as EastType), IntegerType], undefined, fn as any);
+      return this.mapRows(functionExpr as unknown as Expr<FunctionType<[VectorType<T>, IntegerType], VectorType<any>>>);
+    }
   }
 }

@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Elara AI Pty Ltd
  * Dual-licensed under AGPL-3.0 and commercial license. See LICENSE for details.
  */
-import { MatrixType, FloatType, IntegerType, ArrayType, type EastType } from "../../types.js";
+import { MatrixType, FloatType, IntegerType, ArrayType, VectorType, type EastType } from "../../types.js";
 import { AstSymbol, Expr, TypeSymbol } from "../expr.js";
 import type { SubtypeExprOrValue, TypeOf } from "../types.js";
 import type { MatrixExpr } from "../matrix.js";
@@ -47,6 +47,19 @@ export default {
     }
     return Expr.fromAst({
       ast_type: "Builtin", type: MatrixType(elemType), builtin: "MatrixFromArray",
+      type_parameters: [elemType as EastType], arguments: [arrAst], location: arrAst.location,
+    }) as any;
+  },
+
+  fromRows<V extends Expr<ArrayType<VectorType<EastType>>>>(arr: V): MatrixExpr<TypeOf<V> extends ArrayType<VectorType<infer U>> ? U : EastType> {
+    const arrAst = Expr.ast(arr as any);
+    const vecType = (arrAst.type as ArrayType).value as VectorType;
+    const elemType = vecType.element;
+    if (elemType.type !== "Float" && elemType.type !== "Integer" && elemType.type !== "Boolean") {
+      throw new Error(`Matrix.fromRows requires Float, Integer, or Boolean element type, got ${elemType.type}`);
+    }
+    return Expr.fromAst({
+      ast_type: "Builtin", type: MatrixType(elemType), builtin: "MatrixFromRows",
       type_parameters: [elemType as EastType], arguments: [arrAst], location: arrAst.location,
     }) as any;
   },
