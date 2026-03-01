@@ -1389,6 +1389,7 @@ export type TypeIntersect<T1, T2> =
  * Error messages include the full type path for debugging.
  */
 export function TypeUnion<T1 extends EastType, T2 extends EastType>(t1: T1, t2: T2): TypeUnion<T1, T2> {
+  if ((t1 as unknown) === (t2 as unknown)) return t1 as TypeUnion<T1, T2>;
   // TODO this is broken for recursive types (need to do cycle tracking in tandem with TypeEqual/TypeIntersect)
   try {
     if (t1.type === "Never") {
@@ -1545,6 +1546,7 @@ export function TypeUnion<T1 extends EastType, T2 extends EastType>(t1: T1, t2: 
  * For {@link VariantType}, returns {@link NeverType} if no common cases exist.
  */
 export function TypeIntersect<T1 extends EastType, T2 extends EastType>(t1: T1, t2: T2): TypeIntersect<T1, T2> {
+  if ((t1 as unknown) === (t2 as unknown)) return t1 as TypeIntersect<T1, T2>;
   // TODO this is broken for recursive types (need to do cycle tracking in tandem with TypeEqual/TypeUnion)
   try {
     if (t1.type === "Never") {
@@ -1700,6 +1702,7 @@ export function TypeIntersect<T1 extends EastType, T2 extends EastType>(t1: T1, 
  * Unlike {@link isTypeEqual}, this throws rather than returning a boolean.
  */
 export function TypeEqual<T1 extends EastType, T2 extends EastType>(t1: T1, t2: T2, r1: any = t1, r2: any = t2): T1 {
+  if ((t1 as unknown) === (t2 as unknown)) return t1;
   // TODO this is broken for recursive types (need to do cycle tracking in tandem with TypeUnion/TypeIntersect)
   try {
     if (t1.type === "Ref") {
