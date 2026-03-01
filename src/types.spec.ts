@@ -34,6 +34,7 @@ import {
     TypeIntersect,
     TypeEqual,
     EastTypeOf,
+    RecursiveType,
 } from "./types.js";
 import { variant } from "./containers/variant.js";
 
@@ -548,6 +549,36 @@ describe("TypeUnion", () => {
         const result = TypeUnion(t1, t2);
         assert.strictEqual(result.type, "AsyncFunction");
     });
+
+    test("should union identical struct types containing RecursiveType fields", () => {
+        const RecType = RecursiveType(self => VariantType({ leaf: NullType, node: StructType({ child: self }) }));
+        const T = StructType({ label: StringType, value: RecType });
+        // This should not throw — both args are the same object
+        const result = TypeUnion(T, T);
+        assert.strictEqual(result.type, "Struct");
+    });
+
+    test("should union identical RecursiveType values", () => {
+        const RecType = RecursiveType(self => VariantType({ leaf: NullType, node: StructType({ child: self }) }));
+        const result = TypeUnion(RecType, RecType);
+        assert.strictEqual(result.type, "Recursive");
+    });
+
+    test("should union 3+ structurally-equal structs with shared RecursiveType (pairwise fold)", () => {
+        // Reproduces the real bug: East.value([item1, item2, item3]) folds TypeUnion
+        // pairwise. The first union creates a NEW RecursiveType wrapper. The second
+        // union then compares the new wrapper against the original — cycle detection
+        // in TypeEqual fails because the new wrapper has different identity.
+        const RecType = RecursiveType(self => VariantType({ leaf: NullType, node: StructType({ child: self }) }));
+        const S1 = StructType({ label: StringType, value: RecType });
+        const S2 = StructType({ label: StringType, value: RecType });
+        const S3 = StructType({ label: StringType, value: RecType });
+        // First union succeeds but returns a new struct with a new RecursiveType inside
+        const u1 = TypeUnion(S1, S2);
+        // Second union fails: TypeEqual(NEW_RecType, ORIGINAL_RecType) breaks cycle detection
+        const u2 = TypeUnion(u1, S3);
+        assert.strictEqual(u2.type, "Struct");
+    });
 });
 
 describe("TypeIntersect", () => {
@@ -602,6 +633,22 @@ describe("TypeIntersect", () => {
         const result = TypeIntersect(t1, t2);
         assert.strictEqual(result.type, "AsyncFunction");
     });
+
+    test("should intersect identical RecursiveType values", () => {
+        const RecType = RecursiveType(self => VariantType({ leaf: NullType, node: StructType({ child: self }) }));
+        const result = TypeIntersect(RecType, RecType);
+        assert.strictEqual(result.type, "Recursive");
+    });
+
+    test("should intersect pairwise-equal structs with shared RecursiveType after prior intersect", () => {
+        const RecType = RecursiveType(self => VariantType({ leaf: NullType, node: StructType({ child: self }) }));
+        const S1 = StructType({ label: StringType, value: RecType });
+        const S2 = StructType({ label: StringType, value: RecType });
+        const S3 = StructType({ label: StringType, value: RecType });
+        const i1 = TypeIntersect(S1, S2);
+        const i2 = TypeIntersect(i1, S3);
+        assert.strictEqual(i2.type, "Struct");
+    });
 });
 
 describe("TypeEqual", () => {
@@ -647,6 +694,24 @@ describe("TypeEqual", () => {
         const t2 = AsyncFunctionType([IntegerType, StringType], FloatType);
         const result = TypeEqual(t1, t2);
         assert.strictEqual(result.type, "AsyncFunction");
+    });
+
+    test("should accept identical RecursiveType values", () => {
+        const RecType = RecursiveType(self => VariantType({ leaf: NullType, node: StructType({ child: self }) }));
+        const result = TypeEqual(RecType, RecType);
+        assert.strictEqual(result.type, "Recursive");
+    });
+
+    test("should accept pairwise-equal structs with shared RecursiveType after prior TypeEqual", () => {
+        // TypeEqual(S1, S2) creates a new RecursiveType wrapper inside the result struct.
+        // TypeEqual(result, S3) then compares new wrapper vs original — cycle detection breaks.
+        const RecType = RecursiveType(self => VariantType({ leaf: NullType, node: StructType({ child: self }) }));
+        const S1 = StructType({ label: StringType, value: RecType });
+        const S2 = StructType({ label: StringType, value: RecType });
+        const S3 = StructType({ label: StringType, value: RecType });
+        const eq1 = TypeEqual(S1, S2);
+        const eq2 = TypeEqual(eq1, S3);
+        assert.strictEqual(eq2.type, "Struct");
     });
 });
 
