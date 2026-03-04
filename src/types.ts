@@ -15,10 +15,26 @@ import { isMatrix, type matrix } from "./containers/matrix.js";
  * Used by type union, intersection, and equality operations when types
  * cannot be combined or compared as requested.
  */
-class TypeMismatchError extends Error {
-  constructor(message: string, options?: ErrorOptions) {
-    super(message, options);
+export class TypeMismatchError extends Error {
+  path: string[];
+  readonly reason: string;
+  constructor(reason: string, options?: ErrorOptions) {
+    super(reason, options);
     this.name = "TypeMismatchError";
+    this.reason = reason;
+    this.path = [];
+  }
+  addPathSegment(segment: string): void {
+    this.path.unshift(segment);
+    this.message = `at ${this.path.join("")}: ${this.reason}`;
+  }
+}
+
+function withPathSegment<T>(segment: string, fn: () => T): T {
+  try { return fn(); }
+  catch (err) {
+    if (err instanceof TypeMismatchError) err.addPathSegment(segment);
+    throw err;
   }
 }
 
@@ -1130,6 +1146,112 @@ export function printType(type: EastType, stack: EastType[] = []): string {
 }
 
 /**
+ * Converts an East type to a truncated string representation for error messages.
+ *
+ * @param type - The {@link EastType} to print
+ * @param maxDepth - Maximum depth to recurse into compound types (default 1)
+ * @param maxFields - Maximum number of fields/cases to show before truncating (default 3)
+ * @param stack - Internal parameter for tracking recursive types
+ * @returns A human-readable, truncated string representation of the type
+ *
+ * @remarks
+ * Like {@link printType} but truncates large types for readable error messages.
+ * At depth 0, compound types show summary form (e.g., `.Struct [N fields]`).
+ * Shows first `maxFields` entries then `... and N more`.
+ */
+export function printTypeSummary(type: EastType, maxDepth = 1, maxFields = 3, stack: EastType[] = []): string {
+  if (type.type === "Never") {
+    return ".Never";
+  } else if (type.type === "Null") {
+    return ".Null";
+  } else if (type.type === "Boolean") {
+    return ".Boolean";
+  } else if (type.type === "Integer") {
+    return ".Integer";
+  } else if (type.type === "Float") {
+    return ".Float";
+  } else if (type.type === "String") {
+    return ".String";
+  } else if (type.type === "DateTime") {
+    return ".DateTime";
+  } else if (type.type === "Blob") {
+    return ".Blob";
+  } else if (type.type === "Ref") {
+    if (maxDepth <= 0) return ".Ref ...";
+    stack.push(type);
+    const ret = `.Ref ${printTypeSummary(type.value, maxDepth - 1, maxFields, stack)}`;
+    stack.pop();
+    return ret;
+  } else if (type.type === "Array") {
+    if (maxDepth <= 0) return ".Array ...";
+    stack.push(type);
+    const ret = `.Array ${printTypeSummary(type.value, maxDepth - 1, maxFields, stack)}`;
+    stack.pop();
+    return ret;
+  } else if (type.type === "Set") {
+    if (maxDepth <= 0) return ".Set ...";
+    stack.push(type);
+    const ret = `.Set ${printTypeSummary(type.key, maxDepth - 1, maxFields, stack)}`;
+    stack.pop();
+    return ret;
+  } else if (type.type === "Dict") {
+    if (maxDepth <= 0) return ".Dict ...";
+    stack.push(type);
+    const ret = `.Dict (key=${printTypeSummary(type.key, maxDepth - 1, maxFields, stack)}, value=${printTypeSummary(type.value, maxDepth - 1, maxFields, stack)})`;
+    stack.pop();
+    return ret;
+  } else if (type.type === "Struct") {
+    const entries = Object.entries(type.fields);
+    if (maxDepth <= 0) return `.Struct [${entries.length} fields]`;
+    stack.push(type);
+    const shown = entries.slice(0, maxFields).map(([k, t]) => `(name=${JSON.stringify(k)}, type=${printTypeSummary(t, maxDepth - 1, maxFields, stack)})`);
+    stack.pop();
+    const remaining = entries.length - maxFields;
+    if (remaining > 0) {
+      return `.Struct [${shown.join(", ")}, ... and ${remaining} more]`;
+    }
+    return `.Struct [${shown.join(", ")}]`;
+  } else if (type.type === "Variant") {
+    const entries = Object.entries(type.cases);
+    if (maxDepth <= 0) {
+      return `.Variant (${entries.map(([k]) => k).join(" | ")})`;
+    }
+    stack.push(type);
+    const shown = entries.slice(0, maxFields).map(([k, t]) => `(name=${JSON.stringify(k)}, type=${printTypeSummary(t, maxDepth - 1, maxFields, stack)})`);
+    stack.pop();
+    const remaining = entries.length - maxFields;
+    if (remaining > 0) {
+      return `.Variant [${shown.join(", ")}, ... and ${remaining} more]`;
+    }
+    return `.Variant [${shown.join(", ")}]`;
+  } else if (type.type === "Vector") {
+    return `.Vector ${printTypeSummary(type.element, maxDepth, maxFields, stack)}`;
+  } else if (type.type === "Matrix") {
+    return `.Matrix ${printTypeSummary(type.element, maxDepth, maxFields, stack)}`;
+  } else if (type.type === "Recursive") {
+    const idx = stack.indexOf(type.node);
+    if (idx !== -1) {
+      return `.Recursive ${stack.length - idx}`;
+    }
+    return printTypeSummary(type.node, maxDepth, maxFields, stack);
+  } else if (type.type === "Function") {
+    if (maxDepth <= 0) return `.Function ...`;
+    stack.push(type);
+    const ret = `.Function (inputs=[${type.inputs.map(t => printTypeSummary(t, maxDepth - 1, maxFields, stack)).join(", ")}], output=${printTypeSummary(type.output, maxDepth - 1, maxFields, stack)})`;
+    stack.pop();
+    return ret;
+  } else if (type.type === "AsyncFunction") {
+    if (maxDepth <= 0) return `.AsyncFunction ...`;
+    stack.push(type);
+    const ret = `.AsyncFunction (inputs=[${type.inputs.map(t => printTypeSummary(t, maxDepth - 1, maxFields, stack)).join(", ")}], output=${printTypeSummary(type.output, maxDepth - 1, maxFields, stack)})`;
+    stack.pop();
+    return ret;
+  } else {
+    throw new Error(`Unknown type encountered during type printing: ${(type satisfies never as any).type}`);
+  }
+}
+
+/**
  * Expands a {@link RecursiveType} one level deeper, replacing {@link RecursiveTypeMarker} with the node type.
  *
  * @typeParam T - The type to expand
@@ -1406,66 +1528,69 @@ export function TypeUnion<T1 extends EastType, T2 extends EastType>(t1: T1, t2: 
         if (isSubtype(t2, t1.node)) {
           return t1 as TypeUnion<T1, T2>;
         }
-        throw new TypeMismatchError(`Cannot union ${printType(t1)} with ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else if (t2.type === "Recursive") {
       // NonRec ∪ Rec(B): If NonRec <: B, union is Rec(B) (symmetric case)
       if (isSubtype(t1, t2.node)) {
         return t2 as TypeUnion<T1, T2>;
       }
-      throw new TypeMismatchError(`Cannot union ${printType(t1)} with ${printType(t2)}: incompatible types`)
+      throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
     } else if (t1.type === "Ref") {
       if (t2.type === "Ref") {
-        return RefType(TypeEqual(t1.value, t2.value)) as TypeUnion<T1, T2>;
+        return RefType(withPathSegment("[ref]", () => TypeEqual(t1.value, t2.value))) as TypeUnion<T1, T2>;
       } else {
-        throw new TypeMismatchError(`Cannot union ${printType(t1)} with ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else if (t1.type === "Array") {
       if (t2.type === "Array") {
-        return ArrayType(TypeEqual(t1.value, t2.value)) as TypeUnion<T1, T2>;
+        return ArrayType(withPathSegment("[element]", () => TypeEqual(t1.value, t2.value))) as TypeUnion<T1, T2>;
       } else {
-        throw new TypeMismatchError(`Cannot union ${printType(t1)} with ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else if (t1.type === "Vector") {
       if (t2.type === "Vector") {
-        return VectorType(TypeEqual(t1.element, t2.element)) as TypeUnion<T1, T2>;
+        return VectorType(withPathSegment("[element]", () => TypeEqual(t1.element, t2.element))) as TypeUnion<T1, T2>;
       } else {
-        throw new TypeMismatchError(`Cannot union ${printType(t1)} with ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else if (t1.type === "Matrix") {
       if (t2.type === "Matrix") {
-        return MatrixType(TypeEqual(t1.element, t2.element)) as TypeUnion<T1, T2>;
+        return MatrixType(withPathSegment("[element]", () => TypeEqual(t1.element, t2.element))) as TypeUnion<T1, T2>;
       } else {
-        throw new TypeMismatchError(`Cannot union ${printType(t1)} with ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else if (t1.type === "Set") {
       if (t2.type === "Set") {
-        return SetType(TypeEqual(t1.key, t2.key)) as TypeUnion<T1, T2>;
+        return SetType(withPathSegment("[key]", () => TypeEqual(t1.key, t2.key))) as TypeUnion<T1, T2>;
       } else {
-        throw new TypeMismatchError(`Cannot union ${printType(t1)} with ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else if (t1.type === "Dict") {
       if (t2.type === "Dict") {
-        return DictType(TypeEqual(t1.key, t2.key), TypeEqual(t1.value, t2.value)) as TypeUnion<T1, T2>;
+        return DictType(
+          withPathSegment("[key]", () => TypeEqual(t1.key, t2.key)),
+          withPathSegment("[value]", () => TypeEqual(t1.value, t2.value))
+        ) as TypeUnion<T1, T2>;
       } else {
-        throw new TypeMismatchError(`Cannot union ${printType(t1)} with ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else if (t1.type === "Struct") {
       if (t2.type === "Struct") {
         const e1 = Object.entries(t1.fields as Record<string, EastType>);
         const e2 = Object.entries(t2.fields as Record<string, EastType>);
-        if (e1.length !== e2.length) throw new TypeMismatchError(`Cannot union ${printType(t1)} with ${printType(t2)}: structs contain different number of fields`);
+        if (e1.length !== e2.length) throw new TypeMismatchError(`structs contain different number of fields (${e1.length} vs ${e2.length})`);
         let i = 0;
         const e: Record<string, EastType> = {};
         for (const [k1, f1] of e1) {
           const [k2, f2] = e2[i]!;
-          if (k1 !== k2) throw new TypeMismatchError(`Cannot union ${printType(t1)} with ${printType(t2)}: struct field ${i} has mismatched names ${printIdentifier(k1)} and ${printIdentifier(k2)}`);
-          e[k1] = TypeUnion(f1, f2);
+          if (k1 !== k2) throw new TypeMismatchError(`struct field ${i} has mismatched names ${printIdentifier(k1)} and ${printIdentifier(k2)}`);
+          e[k1] = withPathSegment(`.${k1}`, () => TypeUnion(f1, f2));
           i += 1;
         }
         return StructType(e) as TypeUnion<T1, T2>;
       } else {
-        throw new TypeMismatchError(`Cannot union ${printType(t1)} with ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else if (t1.type === "Variant") {
       if (t2.type === "Variant") {
@@ -1475,7 +1600,7 @@ export function TypeUnion<T1 extends EastType, T2 extends EastType>(t1: T1, t2: 
           if (f2 === undefined) {
             cases[k1] = f1;
           } else {
-            cases[k1] = TypeUnion(f1, f2);
+            cases[k1] = withPathSegment(`.${k1}`, () => TypeUnion(f1, f2));
           }
         }
         for (const [k2, f2] of Object.entries(t2.cases as Record<string, EastType>)) {
@@ -1486,48 +1611,60 @@ export function TypeUnion<T1 extends EastType, T2 extends EastType>(t1: T1, t2: 
         }
         return VariantType(cases) as TypeUnion<T1, T2>;
       } else {
-        throw new TypeMismatchError(`Cannot union ${printType(t1)} with ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else if (t1.type === "Function") {
       if (t2.type === "Function") {
         if (t1.inputs.length !== t2.inputs.length) {
-          throw new TypeMismatchError(`Cannot union ${printType(t1)} with ${printType(t2)}: functions take different number of arguments`)
+          throw new TypeMismatchError(`functions take different number of arguments (${t1.inputs.length} vs ${t2.inputs.length})`)
         }
-        return FunctionType(t1.inputs.map((t, i) => TypeIntersect(t, t2.inputs[i])), TypeUnion(t1.output, t2.output)) as TypeUnion<T1, T2>;
+        return FunctionType(
+          t1.inputs.map((t, i) => withPathSegment(`[input ${i}]`, () => TypeIntersect(t, t2.inputs[i]))),
+          withPathSegment("[output]", () => TypeUnion(t1.output, t2.output))
+        ) as TypeUnion<T1, T2>;
       } else if (t2.type === "AsyncFunction") {
         if (t1.inputs.length !== t2.inputs.length) {
-          throw new TypeMismatchError(`Cannot union ${printType(t1)} with ${printType(t2)}: functions take different number of arguments`)
+          throw new TypeMismatchError(`functions take different number of arguments (${t1.inputs.length} vs ${t2.inputs.length})`)
         }
-        return AsyncFunctionType(t1.inputs.map((t, i) => TypeIntersect(t, t2.inputs[i])), TypeUnion(t1.output, t2.output)) as TypeUnion<T1, T2>;
+        return AsyncFunctionType(
+          t1.inputs.map((t, i) => withPathSegment(`[input ${i}]`, () => TypeIntersect(t, t2.inputs[i]))),
+          withPathSegment("[output]", () => TypeUnion(t1.output, t2.output))
+        ) as TypeUnion<T1, T2>;
       } else {
-        throw new TypeMismatchError(`Cannot union ${printType(t1)} with ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else if (t1.type === "AsyncFunction") {
       if (t2.type === "Function") {
         if (t1.inputs.length !== t2.inputs.length) {
-          throw new TypeMismatchError(`Cannot union ${printType(t1)} with ${printType(t2)}: functions take different number of arguments`)
+          throw new TypeMismatchError(`functions take different number of arguments (${t1.inputs.length} vs ${t2.inputs.length})`)
         }
-        return AsyncFunctionType(t1.inputs.map((t, i) => TypeIntersect(t, t2.inputs[i])), TypeUnion(t1.output, t2.output)) as TypeUnion<T1, T2>;
+        return AsyncFunctionType(
+          t1.inputs.map((t, i) => withPathSegment(`[input ${i}]`, () => TypeIntersect(t, t2.inputs[i]))),
+          withPathSegment("[output]", () => TypeUnion(t1.output, t2.output))
+        ) as TypeUnion<T1, T2>;
       } else if (t2.type === "AsyncFunction") {
         if (t1.inputs.length !== t2.inputs.length) {
-          throw new TypeMismatchError(`Cannot union ${printType(t1)} with ${printType(t2)}: functions take different number of arguments`)
+          throw new TypeMismatchError(`functions take different number of arguments (${t1.inputs.length} vs ${t2.inputs.length})`)
         }
-        return AsyncFunctionType(t1.inputs.map((t, i) => TypeIntersect(t, t2.inputs[i])), TypeUnion(t1.output, t2.output)) as TypeUnion<T1, T2>;
+        return AsyncFunctionType(
+          t1.inputs.map((t, i) => withPathSegment(`[input ${i}]`, () => TypeIntersect(t, t2.inputs[i]))),
+          withPathSegment("[output]", () => TypeUnion(t1.output, t2.output))
+        ) as TypeUnion<T1, T2>;
       } else {
-        throw new TypeMismatchError(`Cannot union ${printType(t1)} with ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else {
       if (t1.type === t2.type) {
         return t1 as TypeUnion<T1, T2>;
       } else {
-        throw new TypeMismatchError(`Cannot union ${printType(t1)} with ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     }
   } catch (cause: unknown) {
     if (cause instanceof TypeMismatchError) {
       throw cause; // Don't wrap our own errors - they already have the full path
     }
-    throw new TypeMismatchError(`Cannot union ${printType(t1)} with ${printType(t2)}`, { cause });
+    throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}`, { cause });
   }
 }
 
@@ -1562,66 +1699,69 @@ export function TypeIntersect<T1 extends EastType, T2 extends EastType>(t1: T1, 
         if (isSubtype(t2, t1.node)) {
           return t2 as TypeIntersect<T1, T2>;
         }
-        throw new TypeMismatchError(`Cannot intersect ${printType(t1)} with ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else if (t2.type === "Recursive") {
       // NonRec ∩ Rec(B): If NonRec <: B, intersection is NonRec (symmetric case)
       if (isSubtype(t1, t2.node)) {
         return t1 as TypeIntersect<T1, T2>;
       }
-      throw new TypeMismatchError(`Cannot intersect ${printType(t1)} with ${printType(t2)}: incompatible types`)
+      throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
     } else if (t1.type === "Ref") {
       if (t2.type === "Ref") {
-        return RefType(TypeEqual(t1.value, t2.value)) as TypeIntersect<T1, T2>;
+        return RefType(withPathSegment("[ref]", () => TypeEqual(t1.value, t2.value))) as TypeIntersect<T1, T2>;
       } else {
-        throw new TypeMismatchError(`Cannot intersect ${printType(t1)} with ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else if (t1.type === "Array") {
       if (t2.type === "Array") {
-        return ArrayType(TypeEqual(t1.value, t2.value)) as TypeIntersect<T1, T2>;
+        return ArrayType(withPathSegment("[element]", () => TypeEqual(t1.value, t2.value))) as TypeIntersect<T1, T2>;
       } else {
-        throw new TypeMismatchError(`Cannot intersect ${printType(t1)} with ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else if (t1.type === "Vector") {
       if (t2.type === "Vector") {
-        return VectorType(TypeEqual(t1.element, t2.element)) as TypeIntersect<T1, T2>;
+        return VectorType(withPathSegment("[element]", () => TypeEqual(t1.element, t2.element))) as TypeIntersect<T1, T2>;
       } else {
-        throw new TypeMismatchError(`Cannot intersect ${printType(t1)} with ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else if (t1.type === "Matrix") {
       if (t2.type === "Matrix") {
-        return MatrixType(TypeEqual(t1.element, t2.element)) as TypeIntersect<T1, T2>;
+        return MatrixType(withPathSegment("[element]", () => TypeEqual(t1.element, t2.element))) as TypeIntersect<T1, T2>;
       } else {
-        throw new TypeMismatchError(`Cannot intersect ${printType(t1)} with ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else if (t1.type === "Set") {
       if (t2.type === "Set") {
-        return SetType(TypeEqual(t1.key, t2.key)) as TypeIntersect<T1, T2>;
+        return SetType(withPathSegment("[key]", () => TypeEqual(t1.key, t2.key))) as TypeIntersect<T1, T2>;
       } else {
-        throw new TypeMismatchError(`Cannot intersect ${printType(t1)} with ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else if (t1.type === "Dict") {
       if (t2.type === "Dict") {
-        return DictType(TypeEqual(t1.key, t2.key), TypeEqual(t1.value, t2.value)) as TypeIntersect<T1, T2>;
+        return DictType(
+          withPathSegment("[key]", () => TypeEqual(t1.key, t2.key)),
+          withPathSegment("[value]", () => TypeEqual(t1.value, t2.value))
+        ) as TypeIntersect<T1, T2>;
       } else {
-        throw new TypeMismatchError(`Cannot intersect ${printType(t1)} with ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else if (t1.type === "Struct") {
       if (t2.type === "Struct") {
         const e1 = Object.entries(t1.fields as Record<string, EastType>);
         const e2 = Object.entries(t2.fields as Record<string, EastType>);
-        if (e1.length !== e2.length) throw new TypeMismatchError(`Cannot intersect ${printType(t1)} with ${printType(t2)}: structs contain different number of fields`);
+        if (e1.length !== e2.length) throw new TypeMismatchError(`structs contain different number of fields (${e1.length} vs ${e2.length})`);
         let i = 0;
         const e: Record<string, EastType> = {};
         for (const [k1, f1] of e1) {
           const [k2, f2] = e2[i]!;
-          if (k1 !== k2) throw new TypeMismatchError(`Cannot intersect ${printType(t1)} with ${printType(t2)}: struct field ${i} has mismatched names ${printIdentifier(k1)} and ${printIdentifier(k2)}`);
-          e[k1] = TypeIntersect(f1, f2);
+          if (k1 !== k2) throw new TypeMismatchError(`struct field ${i} has mismatched names ${printIdentifier(k1)} and ${printIdentifier(k2)}`);
+          e[k1] = withPathSegment(`.${k1}`, () => TypeIntersect(f1, f2));
           i += 1;
         }
         return StructType(e) as TypeIntersect<T1, T2>;
       } else {
-        throw new TypeMismatchError(`Cannot intersect ${printType(t1)} with ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else if (t1.type === "Variant") {
       if (t2.type === "Variant") {
@@ -1630,57 +1770,69 @@ export function TypeIntersect<T1 extends EastType, T2 extends EastType>(t1: T1, 
         for (const [k1, f1] of Object.entries(t1.cases as Record<string, EastType>)) {
           const f2 = t2.cases[k1];
           if (f2 !== undefined) {
-            cases[k1] = TypeIntersect(f1, f2);
+            cases[k1] = withPathSegment(`.${k1}`, () => TypeIntersect(f1, f2));
             empty = false;
           }
         }
         if (empty) {
-          throw new TypeMismatchError(`Cannot intersect ${printType(t1)} with ${printType(t2)}: variants have no overlapping cases`)
+          throw new TypeMismatchError(`variants have no overlapping cases`)
         }
         return VariantType(cases) as TypeIntersect<T1, T2>;
       } else {
-        throw new TypeMismatchError(`Cannot intersect ${printType(t1)} with ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else if (t1.type === "Function") {
       if (t2.type === "Function") {
         if (t1.inputs.length !== t2.inputs.length) {
-          throw new TypeMismatchError(`Cannot intersect ${printType(t1)} with ${printType(t2)}: functions take different number of arguments`)
+          throw new TypeMismatchError(`functions take different number of arguments (${t1.inputs.length} vs ${t2.inputs.length})`)
         }
-        return FunctionType(t1.inputs.map((t, i) => TypeUnion(t, t2.inputs[i])), TypeIntersect(t1.output, t2.output)) as TypeIntersect<T1, T2>;
+        return FunctionType(
+          t1.inputs.map((t, i) => withPathSegment(`[input ${i}]`, () => TypeUnion(t, t2.inputs[i]))),
+          withPathSegment("[output]", () => TypeIntersect(t1.output, t2.output))
+        ) as TypeIntersect<T1, T2>;
       } else if (t2.type === "AsyncFunction") {
         if (t1.inputs.length !== t2.inputs.length) {
-          throw new TypeMismatchError(`Cannot intersect ${printType(t1)} with ${printType(t2)}: functions take different number of arguments`)
+          throw new TypeMismatchError(`functions take different number of arguments (${t1.inputs.length} vs ${t2.inputs.length})`)
         }
-        return FunctionType(t1.inputs.map((t, i) => TypeUnion(t, t2.inputs[i])), TypeIntersect(t1.output, t2.output)) as TypeIntersect<T1, T2>;
+        return FunctionType(
+          t1.inputs.map((t, i) => withPathSegment(`[input ${i}]`, () => TypeUnion(t, t2.inputs[i]))),
+          withPathSegment("[output]", () => TypeIntersect(t1.output, t2.output))
+        ) as TypeIntersect<T1, T2>;
       } else {
-        throw new TypeMismatchError(`Cannot intersect ${printType(t1)} with ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else if (t1.type === "AsyncFunction") {
       if (t2.type === "Function") {
         if (t1.inputs.length !== t2.inputs.length) {
-          throw new TypeMismatchError(`Cannot intersect ${printType(t1)} with ${printType(t2)}: functions take different number of arguments`)
+          throw new TypeMismatchError(`functions take different number of arguments (${t1.inputs.length} vs ${t2.inputs.length})`)
         }
-        return FunctionType(t1.inputs.map((t, i) => TypeUnion(t, t2.inputs[i])), TypeIntersect(t1.output, t2.output)) as TypeIntersect<T1, T2>;
+        return FunctionType(
+          t1.inputs.map((t, i) => withPathSegment(`[input ${i}]`, () => TypeUnion(t, t2.inputs[i]))),
+          withPathSegment("[output]", () => TypeIntersect(t1.output, t2.output))
+        ) as TypeIntersect<T1, T2>;
       } else if (t2.type === "AsyncFunction") {
         if (t1.inputs.length !== t2.inputs.length) {
-          throw new TypeMismatchError(`Cannot intersect ${printType(t1)} with ${printType(t2)}: functions take different number of arguments`)
+          throw new TypeMismatchError(`functions take different number of arguments (${t1.inputs.length} vs ${t2.inputs.length})`)
         }
-        return AsyncFunctionType(t1.inputs.map((t, i) => TypeUnion(t, t2.inputs[i])), TypeIntersect(t1.output, t2.output)) as TypeIntersect<T1, T2>;
+        return AsyncFunctionType(
+          t1.inputs.map((t, i) => withPathSegment(`[input ${i}]`, () => TypeUnion(t, t2.inputs[i]))),
+          withPathSegment("[output]", () => TypeIntersect(t1.output, t2.output))
+        ) as TypeIntersect<T1, T2>;
       } else {
-        throw new TypeMismatchError(`Cannot intersect ${printType(t1)} with ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else {
       if (t1.type === t2.type) {
         return t1 as TypeIntersect<T1, T2>;
       } else {
-        throw new TypeMismatchError(`Cannot intersect ${printType(t1)} with ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     }
   } catch (cause: unknown) {
     if (cause instanceof TypeMismatchError) {
       throw cause; // Don't wrap our own errors - they already have the full path
     }
-    throw new TypeMismatchError(`Cannot intersect ${printType(t1)} with ${printType(t2)}`, { cause });
+    throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}`, { cause });
   }
 }
 
@@ -1707,80 +1859,92 @@ export function TypeEqual<T1 extends EastType, T2 extends EastType>(t1: T1, t2: 
   try {
     if (t1.type === "Ref") {
       if (t2.type === "Ref") {
-        return RefType(TypeEqual(t1.value, t2.value, r1, r2)) as T1;
+        return RefType(withPathSegment("[ref]", () => TypeEqual(t1.value, t2.value, r1, r2))) as T1;
       } else {
-        throw new TypeMismatchError(`${printType(t1)} is not equal to ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else if (t1.type === "Array") {
       if (t2.type === "Array") {
-        return ArrayType(TypeEqual(t1.value, t2.value, r1, r2)) as T1;
+        return ArrayType(withPathSegment("[element]", () => TypeEqual(t1.value, t2.value, r1, r2))) as T1;
       } else {
-        throw new TypeMismatchError(`${printType(t1)} is not equal to ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else if (t1.type === "Vector") {
       if (t2.type === "Vector") {
-        return VectorType(TypeEqual(t1.element, t2.element, r1, r2)) as T1;
+        return VectorType(withPathSegment("[element]", () => TypeEqual(t1.element, t2.element, r1, r2))) as T1;
       } else {
-        throw new TypeMismatchError(`${printType(t1)} is not equal to ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else if (t1.type === "Matrix") {
       if (t2.type === "Matrix") {
-        return MatrixType(TypeEqual(t1.element, t2.element, r1, r2)) as T1;
+        return MatrixType(withPathSegment("[element]", () => TypeEqual(t1.element, t2.element, r1, r2))) as T1;
       } else {
-        throw new TypeMismatchError(`${printType(t1)} is not equal to ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else if (t1.type === "Set") {
       if (t2.type === "Set") {
-        return SetType(TypeEqual(t1.key, t2.key, r1, r2)) as T1;
+        return SetType(withPathSegment("[key]", () => TypeEqual(t1.key, t2.key, r1, r2))) as T1;
       } else {
-        throw new TypeMismatchError(`${printType(t1)} is not equal to ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else if (t1.type === "Dict") {
       if (t2.type === "Dict") {
-        return DictType(TypeEqual(t1.key, t2.key, r1, r2), TypeEqual(t1.value, t2.value, r1, r2)) as T1;
+        return DictType(
+          withPathSegment("[key]", () => TypeEqual(t1.key, t2.key, r1, r2)),
+          withPathSegment("[value]", () => TypeEqual(t1.value, t2.value, r1, r2))
+        ) as T1;
       } else {
-        throw new TypeMismatchError(`${printType(t1)} is not equal to ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else if (t1.type === "Struct") {
       if (t2.type === "Struct") {
         const e1 = Object.entries(t1.fields as Record<string, EastType>);
         const e2 = Object.entries(t2.fields as Record<string, EastType>);
-        if (e1.length !== e2.length) throw new TypeMismatchError(`${printType(t1)} is not equal to ${printType(t2)}: structs contain different number of fields`);
+        if (e1.length !== e2.length) throw new TypeMismatchError(`structs contain different number of fields (${e1.length} vs ${e2.length})`);
         let i = 0;
         const e: Record<string, EastType> = {};
         for (const [k1, f1] of e1) {
           const [k2, f2] = e2[i]!;
-          if (k1 !== k2) throw new TypeMismatchError(`${printType(t1)} is not equal to ${printType(t2)}: struct field ${i} has mismatched names ${printIdentifier(k1)} and ${printIdentifier(k2)}`);
-          e[k1] = TypeEqual(f1, f2, r1, r2);
+          if (k1 !== k2) throw new TypeMismatchError(`struct field ${i} has mismatched names ${printIdentifier(k1)} and ${printIdentifier(k2)}`);
+          e[k1] = withPathSegment(`.${k1}`, () => TypeEqual(f1, f2, r1, r2));
           i += 1;
         }
         return StructType(e) as T1;
       } else {
-        throw new TypeMismatchError(`${printType(t1)} is not equal to ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else if (t1.type === "Variant") {
       // We can reuse the logic for structs here, taking advantage of the ordering guarantees
       if (t2.type === "Variant") {
         const e1 = Object.entries(t1.cases as Record<string, EastType>);
         const e2 = Object.entries(t2.cases as Record<string, EastType>);
-        if (e1.length !== e2.length) throw new TypeMismatchError(`${printType(t1)} is not equal to ${printType(t2)}: variants contain different number of cases`);
+        if (e1.length !== e2.length) {
+          let msg = `variants contain different number of cases (${e1.length} vs ${e2.length})`;
+          const names1 = new Set(e1.map(([k]) => k));
+          const names2 = new Set(e2.map(([k]) => k));
+          const onlyIn1 = e1.map(([k]) => k).filter(k => !names2.has(k));
+          const onlyIn2 = e2.map(([k]) => k).filter(k => !names1.has(k));
+          if (onlyIn1.length > 0) msg += `; only in expected: ${onlyIn1.join(", ")}`;
+          if (onlyIn2.length > 0) msg += `; only in actual: ${onlyIn2.join(", ")}`;
+          throw new TypeMismatchError(msg);
+        }
         let i = 0;
         const e: Record<string, EastType> = {};
         for (const [k1, f1] of e1) {
           const [k2, f2] = e2[i]!;
           if (k1 !== k2) {
             if (k1 < k2) {
-              throw new TypeMismatchError(`${printType(t1)} is not equal to ${printType(t2)}: variant case ${k1} is not present in both variants`);
+              throw new TypeMismatchError(`variant case ${k1} is not present in both variants`);
             } else {
-              throw new TypeMismatchError(`${printType(t1)} is not equal to ${printType(t2)}: variant case ${k2} is not present in both variants`);
+              throw new TypeMismatchError(`variant case ${k2} is not present in both variants`);
             }
           }
-          e[k1] = TypeEqual(f1, f2, r1, r2);
+          e[k1] = withPathSegment(`.${k1}`, () => TypeEqual(f1, f2, r1, r2));
           i += 1;
         }
         return VariantType(e) as T1;
       } else {
-        throw new TypeMismatchError(`${printType(t1)} is not equal to ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else if (t1.type === "Recursive") {
       if (t2.type === "Recursive") {
@@ -1788,46 +1952,52 @@ export function TypeEqual<T1 extends EastType, T2 extends EastType>(t1: T1, t2: 
           if (t2.node === r2) {
             return t1 as T1; // both are references to the same recursive type
           } else {
-            throw new TypeMismatchError(`${printType(t1)} is not equal to ${printType(t2)}: recursive types do not match`);
+            throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: recursive types do not match`);
           }
         } else if (t2.node === r2) {
-          throw new TypeMismatchError(`${printType(t1)} is not equal to ${printType(t2)}: recursive types do not match`);
+          throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: recursive types do not match`);
         }
         // this is the root of a new recursive type - assert the node types are equal
         return RecursiveType(() => TypeEqual(t1.node, t2.node, t1.node, t2.node)) as T1;
       } else {
-        throw new TypeMismatchError(`${printType(t1)} is not equal to ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else if (t1.type === "Function") {
       if (t2.type === "Function") {
         if (t1.inputs.length !== t2.inputs.length) {
-          throw new TypeMismatchError(`${printType(t1)} is not equal to ${printType(t2)}: functions take different number of arguments`)
+          throw new TypeMismatchError(`functions take different number of arguments (${t1.inputs.length} vs ${t2.inputs.length})`)
         }
-        return FunctionType(t1.inputs.map((t, i) => TypeEqual(t, t2.inputs[i], r1, r2)), TypeEqual(t1.output, t2.output, r1, r2)) as T1;
+        return FunctionType(
+          t1.inputs.map((t, i) => withPathSegment(`[input ${i}]`, () => TypeEqual(t, t2.inputs[i], r1, r2))),
+          withPathSegment("[output]", () => TypeEqual(t1.output, t2.output, r1, r2))
+        ) as T1;
       } else {
-        throw new TypeMismatchError(`${printType(t1)} is not equal to ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else if (t1.type === "AsyncFunction") {
       if (t2.type === "AsyncFunction") {
         if (t1.inputs.length !== t2.inputs.length) {
-          throw new TypeMismatchError(`${printType(t1)} is not equal to ${printType(t2)}: functions take different number of arguments`)
+          throw new TypeMismatchError(`functions take different number of arguments (${t1.inputs.length} vs ${t2.inputs.length})`)
         }
-        return AsyncFunctionType(t1.inputs.map((t, i) => TypeEqual(t, t2.inputs[i], r1, r2)), TypeEqual(t1.output, t2.output, r1, r2)) as T1;
+        return AsyncFunctionType(
+          t1.inputs.map((t, i) => withPathSegment(`[input ${i}]`, () => TypeEqual(t, t2.inputs[i], r1, r2))),
+          withPathSegment("[output]", () => TypeEqual(t1.output, t2.output, r1, r2))
+        ) as T1;
       } else {
-        throw new TypeMismatchError(`${printType(t1)} is not equal to ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else {
       if (t1.type === t2.type) {
         return t1;
       } else {
-        throw new TypeMismatchError(`${printType(t1)} is not equal to ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     }
   } catch (cause: unknown) {
     if (cause instanceof TypeMismatchError) {
       throw cause; // Don't wrap our own errors - they already have the full path
     }
-    throw new TypeMismatchError(`${printType(t1)} is not equal to ${printType(t2)}`, { cause });
+    throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}`, { cause });
   }
 }
 
@@ -1851,61 +2021,64 @@ export function TypeWiden(t1: EastType, t2: EastType): EastType {
     } else if (t2.type === "Never") {
       return t1;
     } else if (t1.type === "Recursive") {
-      throw new TypeMismatchError(`Cannot widen ${printType(t1)} with ${printType(t2)}: recursive types not supported`)
+      throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: recursive types not supported`)
     } else if (t2.type === "Recursive") {
-      throw new TypeMismatchError(`Cannot widen ${printType(t1)} with ${printType(t2)}: recursive types not supported`)
+      throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: recursive types not supported`)
     } else if (t1.type === "Ref") {
       if (t2.type === "Ref") {
-        return RefType(TypeWiden(t1.value, t2.value));
+        return RefType(withPathSegment("[ref]", () => TypeWiden(t1.value, t2.value)));
       } else {
-        throw new TypeMismatchError(`Cannot widen ${printType(t1)} with ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else if (t1.type === "Array") {
       if (t2.type === "Array") {
-        return ArrayType(TypeWiden(t1.value, t2.value));
+        return ArrayType(withPathSegment("[element]", () => TypeWiden(t1.value, t2.value)));
       } else {
-        throw new TypeMismatchError(`Cannot widen ${printType(t1)} with ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else if (t1.type === "Vector") {
       if (t2.type === "Vector") {
-        return VectorType(TypeEqual(t1.element, t2.element));
+        return VectorType(withPathSegment("[element]", () => TypeEqual(t1.element, t2.element)));
       } else {
-        throw new TypeMismatchError(`Cannot widen ${printType(t1)} with ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else if (t1.type === "Matrix") {
       if (t2.type === "Matrix") {
-        return MatrixType(TypeEqual(t1.element, t2.element));
+        return MatrixType(withPathSegment("[element]", () => TypeEqual(t1.element, t2.element)));
       } else {
-        throw new TypeMismatchError(`Cannot widen ${printType(t1)} with ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else if (t1.type === "Set") {
       if (t2.type === "Set") {
-        return SetType(TypeWiden(t1.key, t2.key));
+        return SetType(withPathSegment("[key]", () => TypeWiden(t1.key, t2.key)));
       } else {
-        throw new TypeMismatchError(`Cannot widen ${printType(t1)} with ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else if (t1.type === "Dict") {
       if (t2.type === "Dict") {
-        return DictType(TypeWiden(t1.key, t2.key), TypeWiden(t1.value, t2.value));
+        return DictType(
+          withPathSegment("[key]", () => TypeWiden(t1.key, t2.key)),
+          withPathSegment("[value]", () => TypeWiden(t1.value, t2.value))
+        );
       } else {
-        throw new TypeMismatchError(`Cannot widen ${printType(t1)} with ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else if (t1.type === "Struct") {
       if (t2.type === "Struct") {
         const e1 = Object.entries(t1.fields as Record<string, EastType>);
         const e2 = Object.entries(t2.fields as Record<string, EastType>);
-        if (e1.length !== e2.length) throw new TypeMismatchError(`Cannot widen ${printType(t1)} with ${printType(t2)}: structs contain different number of fields`);
+        if (e1.length !== e2.length) throw new TypeMismatchError(`structs contain different number of fields (${e1.length} vs ${e2.length})`);
         let i = 0;
         const e: Record<string, EastType> = {};
         for (const [k1, f1] of e1) {
           const [k2, f2] = e2[i]!;
-          if (k1 !== k2) throw new TypeMismatchError(`Cannot widen ${printType(t1)} with ${printType(t2)}: struct field ${i} has mismatched names ${printIdentifier(k1)} and ${printIdentifier(k2)}`);
-          e[k1] = TypeWiden(f1, f2);
+          if (k1 !== k2) throw new TypeMismatchError(`struct field ${i} has mismatched names ${printIdentifier(k1)} and ${printIdentifier(k2)}`);
+          e[k1] = withPathSegment(`.${k1}`, () => TypeWiden(f1, f2));
           i += 1;
         }
         return StructType(e);
       } else {
-        throw new TypeMismatchError(`Cannot widen ${printType(t1)} with ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else if (t1.type === "Variant") {
       if (t2.type === "Variant") {
@@ -1915,7 +2088,7 @@ export function TypeWiden(t1: EastType, t2: EastType): EastType {
           if (f2 === undefined) {
             cases[k1] = f1;
           } else {
-            cases[k1] = TypeWiden(f1, f2);
+            cases[k1] = withPathSegment(`.${k1}`, () => TypeWiden(f1, f2));
           }
         }
         for (const [k2, f2] of Object.entries(t2.cases as Record<string, EastType>)) {
@@ -1926,24 +2099,24 @@ export function TypeWiden(t1: EastType, t2: EastType): EastType {
         }
         return VariantType(cases);
       } else {
-        throw new TypeMismatchError(`Cannot widen ${printType(t1)} with ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     } else if (t1.type === "Function") {
-      throw new TypeMismatchError(`Cannot widen ${printType(t1)} with ${printType(t2)}: functions not supported`)
+      throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: functions not supported`)
     } else if (t1.type === "AsyncFunction") {
-      throw new TypeMismatchError(`Cannot widen ${printType(t1)} with ${printType(t2)}: functions not supported`)
+      throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: functions not supported`)
     } else {
       if (t1.type === t2.type) {
         return t1;
       } else {
-        throw new TypeMismatchError(`Cannot widen ${printType(t1)} with ${printType(t2)}: incompatible types`)
+        throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}: incompatible types`)
       }
     }
   } catch (cause: unknown) {
     if (cause instanceof TypeMismatchError) {
       throw cause; // Don't wrap our own errors - they already have the full path
     }
-    throw new TypeMismatchError(`Cannot widen ${printType(t1)} with ${printType(t2)}`, { cause });
+    throw new TypeMismatchError(`expected ${printTypeSummary(t1)} but got ${printTypeSummary(t2)}`, { cause });
   }
 }
 

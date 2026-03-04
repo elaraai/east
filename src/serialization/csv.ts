@@ -320,23 +320,22 @@ function parseValue(value: string, type: EastTypeValue, location: CsvLocation): 
       throw new CsvError(`expected 'true' or 'false', got '${value}'`, location);
 
     case "Integer": {
-      // Handle bigint
-      const trimmed = value.trim();
-      if (!/^-?\d+$/.test(trimmed)) {
+      if (!/^-?\d+$/.test(value)) {
         throw new CsvError(`expected integer, got '${value}'`, location);
       }
-      return BigInt(trimmed);
+      return BigInt(value);
     }
 
     case "Float": {
-      // Handle special values
       if (value === "NaN") return NaN;
       if (value === "Infinity") return Infinity;
       if (value === "-Infinity") return -Infinity;
       if (value === "-0" || value === "-0.0") return -0;
-
-      const num = parseFloat(value);
-      if (isNaN(num) && value !== "NaN") {
+      if (value !== value.trim()) {
+        throw new CsvError(`expected float, got '${value}'`, location);
+      }
+      const num = Number(value);
+      if (isNaN(num) || value === '') {
         throw new CsvError(`expected float, got '${value}'`, location);
       }
       return num;
@@ -346,7 +345,9 @@ function parseValue(value: string, type: EastTypeValue, location: CsvLocation): 
       return value;
 
     case "DateTime": {
-      // Parse ISO 8601 format
+      if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(value)) {
+        throw new CsvError(`expected ISO 8601 date, got '${value}'`, location);
+      }
       const date = new Date(value);
       if (isNaN(date.getTime())) {
         throw new CsvError(`expected ISO 8601 date, got '${value}'`, location);
