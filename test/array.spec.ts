@@ -1180,6 +1180,26 @@ await describe("Array", (test) => {
         $(assert.equal(decoded, original));
     });
 
+    test("CSV decode with columnMapping", $ => {
+        const T = StructType({ id: IntegerType, name: StringType, active: BooleanType });
+        const csv = $.let(East.value(
+            new TextEncoder().encode("ID,Full Name,Is Active\n1,Alice,true\n2,Bob,false"),
+            BlobType
+        ));
+
+        const decoded = $.let(csv.decodeCsv(T, {
+            columnMapping: new Map([["ID", "id"], ["Full Name", "name"], ["Is Active", "active"]]),
+        }));
+
+        $(assert.equal(decoded.size(), 2n));
+        $(assert.equal(decoded.get(0n).id, 1n));
+        $(assert.equal(decoded.get(0n).name, "Alice"));
+        $(assert.equal(decoded.get(0n).active, true));
+        $(assert.equal(decoded.get(1n).id, 2n));
+        $(assert.equal(decoded.get(1n).name, "Bob"));
+        $(assert.equal(decoded.get(1n).active, false));
+    });
+
     // =========================================================================
     // Nested closure capture tests - these test that closures inside .some(),
     // .filter(), etc. can correctly capture variables from outer scopes

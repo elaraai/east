@@ -472,7 +472,7 @@ describe("TypeUnion", () => {
     });
 
     test("should throw for different primitive types", () => {
-        assert.throws(() => TypeUnion(IntegerType, FloatType), /Cannot union \.Integer with \.Float: incompatible types/);
+        assert.throws(() => TypeUnion(IntegerType, FloatType), /expected \.Integer but got \.Float: incompatible types/);
     });
 
     test("should union array types with same element type", () => {
@@ -481,7 +481,7 @@ describe("TypeUnion", () => {
     });
 
     test("should throw for array types with different element types", () => {
-        assert.throws(() => TypeUnion(ArrayType(IntegerType), ArrayType(FloatType)), /\.Integer is not equal to \.Float: incompatible types/);
+        assert.throws(() => TypeUnion(ArrayType(IntegerType), ArrayType(FloatType)), /expected \.Integer but got \.Float: incompatible types/);
     });
 
     test("should union variant types", () => {
@@ -526,7 +526,7 @@ describe("TypeUnion", () => {
     test("should union function types", () => {
         const t1 = FunctionType([IntegerType], IntegerType);
         const t2 = FunctionType([IntegerType], FloatType);
-        assert.throws(() => TypeUnion(t1, t2), /TypeMismatchError.*Cannot union \.Integer with \.Float: incompatible types/);
+        assert.throws(() => TypeUnion(t1, t2), /TypeMismatchError.*expected \.Integer but got \.Float: incompatible types/);
     });
 
     test("should union sync and async function types - result is async", () => {
@@ -592,7 +592,7 @@ describe("TypeIntersect", () => {
     });
 
     test("should throw for different primitive types", () => {
-        assert.throws(() => TypeIntersect(IntegerType, FloatType), /Cannot intersect \.Integer with \.Float: incompatible types/);
+        assert.throws(() => TypeIntersect(IntegerType, FloatType), /expected \.Integer but got \.Float: incompatible types/);
     });
 
     test("should intersect variant types", () => {
@@ -657,7 +657,7 @@ describe("TypeEqual", () => {
     });
 
     test("should throw for unequal primitive types", () => {
-        assert.throws(() => TypeEqual(IntegerType, FloatType), /\.Integer is not equal to \.Float: incompatible types/);
+        assert.throws(() => TypeEqual(IntegerType, FloatType), /expected \.Integer but got \.Float: incompatible types/);
     });
 
     test("should accept equal array types", () => {
@@ -668,25 +668,25 @@ describe("TypeEqual", () => {
     test("should throw for unequal variant case names", () => {
         const t1 = VariantType({ a: IntegerType, c: StringType });
         const t2 = VariantType({ a: IntegerType, b: StringType });
-        assert.throws(() => TypeEqual(t1, t2), /\.Variant.*is not equal to.*variant case .* is not present in both variants/);
+        assert.throws(() => TypeEqual(t1, t2), /variant case .* is not present in both variants/);
     });
 
     test("should throw for variants with different case count", () => {
         const t1 = VariantType({ a: IntegerType });
         const t2 = VariantType({ a: IntegerType, b: StringType });
-        assert.throws(() => TypeEqual(t1, t2), /\.Variant.*is not equal to.*variants contain different number of cases/);
+        assert.throws(() => TypeEqual(t1, t2), /variants contain different number of cases/);
     });
 
     test("should throw for functions with different argument count", () => {
         const t1 = FunctionType([IntegerType], NullType);
         const t2 = FunctionType([IntegerType, StringType], NullType);
-        assert.throws(() => TypeEqual(t1, t2), /\.Function.*is not equal to.*functions take different number of arguments/);
+        assert.throws(() => TypeEqual(t1, t2), /functions take different number of arguments/);
     });
 
     test("should throw for sync vs async function types", () => {
         const syncFn = FunctionType([IntegerType], StringType);
         const asyncFn = AsyncFunctionType([IntegerType], StringType);
-        assert.throws(() => TypeEqual(syncFn, asyncFn), /\.Function.*is not equal to.*incompatible types/);
+        assert.throws(() => TypeEqual(syncFn, asyncFn), /expected.*\.Function.*but got.*\.AsyncFunction.*incompatible types/);
     });
 
     test("should accept equal async function types", () => {
@@ -870,13 +870,13 @@ describe("Additional coverage tests", () => {
     test("TypeEqual should throw when comparing Variant with non-Variant", () => {
         const t1 = VariantType({ a: IntegerType });
         const t2 = IntegerType;
-        assert.throws(() => TypeEqual(t1, t2), /TypeMismatchError.*is not equal to.*incompatible types/);
+        assert.throws(() => TypeEqual(t1, t2), /TypeMismatchError.*expected.*but got.*incompatible types/);
     });
 
     test("TypeEqual should throw when comparing Function with non-Function", () => {
         const t1 = FunctionType([IntegerType], NullType);
         const t2 = IntegerType;
-        assert.throws(() => TypeEqual(t1, t2), /TypeMismatchError.*is not equal to.*incompatible types/);
+        assert.throws(() => TypeEqual(t1, t2), /TypeMismatchError.*expected.*but got.*incompatible types/);
     });
 
     test("TypeEqual should succeed for equal Dict types", () => {
@@ -889,7 +889,7 @@ describe("Additional coverage tests", () => {
     test("TypeEqual should throw when comparing Dict with non-Dict", () => {
         const t1 = DictType(StringType, IntegerType);
         const t2 = IntegerType;
-        assert.throws(() => TypeEqual(t1, t2), /TypeMismatchError.*is not equal to.*incompatible types/);
+        assert.throws(() => TypeEqual(t1, t2), /TypeMismatchError.*expected.*but got.*incompatible types/);
     });
 
     test("TypeEqual should succeed for equal Struct types", () => {
@@ -902,13 +902,13 @@ describe("Additional coverage tests", () => {
     test("TypeEqual should throw when comparing Struct with non-Struct", () => {
         const t1 = StructType({ x: IntegerType });
         const t2 = IntegerType;
-        assert.throws(() => TypeEqual(t1, t2), /TypeMismatchError.*is not equal to.*incompatible types/);
+        assert.throws(() => TypeEqual(t1, t2), /TypeMismatchError.*expected.*but got.*incompatible types/);
     });
 
     test("TypeEqual should throw when comparing Array with non-Array", () => {
         const t1 = ArrayType(IntegerType);
         const t2 = IntegerType;
-        assert.throws(() => TypeEqual(t1, t2), /TypeMismatchError.*is not equal to.*incompatible types/);
+        assert.throws(() => TypeEqual(t1, t2), /TypeMismatchError.*expected.*but got.*incompatible types/);
     });
 
     test("TypeEqual should succeed for equal Set types", () => {
@@ -921,7 +921,7 @@ describe("Additional coverage tests", () => {
     test("TypeEqual should throw when comparing Set with non-Set", () => {
         const t1 = SetType(StringType);
         const t2 = IntegerType;
-        assert.throws(() => TypeEqual(t1, t2), /TypeMismatchError.*is not equal to.*incompatible types/);
+        assert.throws(() => TypeEqual(t1, t2), /TypeMismatchError.*expected.*but got.*incompatible types/);
     });
 
     test("TypeIntersect should succeed for compatible function types", () => {
@@ -941,13 +941,13 @@ describe("Additional coverage tests", () => {
     test("TypeIntersect should throw when intersecting Function with non-Function", () => {
         const t1 = FunctionType([IntegerType], NullType);
         const t2 = IntegerType;
-        assert.throws(() => TypeIntersect(t1, t2), /TypeMismatchError.*Cannot intersect.*incompatible types/);
+        assert.throws(() => TypeIntersect(t1, t2), /TypeMismatchError.*expected.*but got.*incompatible types/);
     });
 
     test("TypeIntersect should throw when intersecting AsyncFunction with non-Function", () => {
         const t1 = AsyncFunctionType([IntegerType], NullType);
         const t2 = IntegerType;
-        assert.throws(() => TypeIntersect(t1, t2), /TypeMismatchError.*Cannot intersect.*incompatible types/);
+        assert.throws(() => TypeIntersect(t1, t2), /TypeMismatchError.*expected.*but got.*incompatible types/);
     });
 
     test("TypeIntersect catch block with nested type error", () => {
@@ -965,7 +965,7 @@ describe("Additional coverage tests", () => {
     test("TypeIntersect should throw when intersecting Variant with non-Variant", () => {
         const t1 = VariantType({ a: IntegerType });
         const t2 = IntegerType;
-        assert.throws(() => TypeIntersect(t1, t2), /TypeMismatchError.*Cannot intersect.*incompatible types/);
+        assert.throws(() => TypeIntersect(t1, t2), /TypeMismatchError.*expected.*but got.*incompatible types/);
     });
 
     test("TypeIntersect should succeed for compatible struct types", () => {
@@ -978,7 +978,7 @@ describe("Additional coverage tests", () => {
     test("TypeIntersect should throw when intersecting Struct with non-Struct", () => {
         const t1 = StructType({ x: IntegerType });
         const t2 = IntegerType;
-        assert.throws(() => TypeIntersect(t1, t2), /TypeMismatchError.*Cannot intersect.*incompatible types/);
+        assert.throws(() => TypeIntersect(t1, t2), /TypeMismatchError.*expected.*but got.*incompatible types/);
     });
 
     test("TypeIntersect should succeed for compatible dict types", () => {
@@ -991,7 +991,7 @@ describe("Additional coverage tests", () => {
     test("TypeIntersect should throw when intersecting Dict with non-Dict", () => {
         const t1 = DictType(StringType, IntegerType);
         const t2 = IntegerType;
-        assert.throws(() => TypeIntersect(t1, t2), /TypeMismatchError.*Cannot intersect.*incompatible types/);
+        assert.throws(() => TypeIntersect(t1, t2), /TypeMismatchError.*expected.*but got.*incompatible types/);
     });
 
     test("TypeIntersect should succeed for compatible set types", () => {
@@ -1004,7 +1004,7 @@ describe("Additional coverage tests", () => {
     test("TypeIntersect should throw when intersecting Set with non-Set", () => {
         const t1 = SetType(StringType);
         const t2 = IntegerType;
-        assert.throws(() => TypeIntersect(t1, t2), /TypeMismatchError.*Cannot intersect.*incompatible types/);
+        assert.throws(() => TypeIntersect(t1, t2), /TypeMismatchError.*expected.*but got.*incompatible types/);
     });
 
     test("TypeIntersect should succeed for compatible array types", () => {
@@ -1017,7 +1017,7 @@ describe("Additional coverage tests", () => {
     test("TypeIntersect should throw when intersecting Array with non-Array", () => {
         const t1 = ArrayType(IntegerType);
         const t2 = IntegerType;
-        assert.throws(() => TypeIntersect(t1, t2), /TypeMismatchError.*Cannot intersect.*incompatible types/);
+        assert.throws(() => TypeIntersect(t1, t2), /TypeMismatchError.*expected.*but got.*incompatible types/);
     });
 
     test("TypeIntersect should handle malformed types and wrap errors", () => {
@@ -1039,13 +1039,13 @@ describe("Additional coverage tests", () => {
     test("TypeUnion should throw when unioning Function with non-Function", () => {
         const t1 = FunctionType([IntegerType], NullType);
         const t2 = IntegerType;
-        assert.throws(() => TypeUnion(t1, t2), /TypeMismatchError.*Cannot union.*incompatible types/);
+        assert.throws(() => TypeUnion(t1, t2), /TypeMismatchError.*expected.*but got.*incompatible types/);
     });
 
     test("TypeUnion should throw when unioning AsyncFunction with non-Function", () => {
         const t1 = AsyncFunctionType([IntegerType], NullType);
         const t2 = IntegerType;
-        assert.throws(() => TypeUnion(t1, t2), /TypeMismatchError.*Cannot union.*incompatible types/);
+        assert.throws(() => TypeUnion(t1, t2), /TypeMismatchError.*expected.*but got.*incompatible types/);
     });
 
     test("TypeUnion should handle malformed types and wrap errors", () => {
@@ -1056,25 +1056,25 @@ describe("Additional coverage tests", () => {
     test("TypeUnion should throw when unioning Dict with non-Dict", () => {
         const t1 = DictType(StringType, IntegerType);
         const t2 = IntegerType;
-        assert.throws(() => TypeUnion(t1, t2), /TypeMismatchError.*Cannot union.*incompatible types/);
+        assert.throws(() => TypeUnion(t1, t2), /TypeMismatchError.*expected.*but got.*incompatible types/);
     });
 
     test("TypeUnion should throw when unioning Struct with non-Struct", () => {
         const t1 = StructType({ x: IntegerType });
         const t2 = IntegerType;
-        assert.throws(() => TypeUnion(t1, t2), /TypeMismatchError.*Cannot union.*incompatible types/);
+        assert.throws(() => TypeUnion(t1, t2), /TypeMismatchError.*expected.*but got.*incompatible types/);
     });
 
     test("TypeUnion should throw when unioning Variant with non-Variant", () => {
         const t1 = VariantType({ a: IntegerType });
         const t2 = IntegerType;
-        assert.throws(() => TypeUnion(t1, t2), /TypeMismatchError.*Cannot union.*incompatible types/);
+        assert.throws(() => TypeUnion(t1, t2), /TypeMismatchError.*expected.*but got.*incompatible types/);
     });
 
     test("TypeUnion should throw when unioning Set with non-Set", () => {
         const t1 = SetType(StringType);
         const t2 = IntegerType;
-        assert.throws(() => TypeUnion(t1, t2), /TypeMismatchError.*Cannot union.*incompatible types/);
+        assert.throws(() => TypeUnion(t1, t2), /TypeMismatchError.*expected.*but got.*incompatible types/);
     });
 
     test("isSubtype should return false for incompatible variant types", () => {

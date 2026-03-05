@@ -440,6 +440,27 @@ function createCsvEncodeTest(size: number) {
     });
 }
 
+/** Large output: build and return a large Array<Struct> (exercises beast2 output encoding) */
+function createLargeOutputTest(size: number) {
+    const RecordType = StructType({
+        id: IntegerType,
+        name: StringType,
+        values: ArrayType(FloatType),
+        active: BooleanType,
+    });
+
+    return East.function([], ArrayType(RecordType), $ => {
+        return East.Array.generate(BigInt(size), RecordType, ($, i) =>
+            $.let({
+                id: i,
+                name: East.str`record_${i}`,
+                values: [i.toFloat(), i.toFloat().multiply(1.5), i.toFloat().multiply(2.0)],
+                active: i.remainder(2n).equals(0n),
+            }, RecordType)
+        );
+    });
+}
+
 // =============================================================================
 // Main
 // =============================================================================
@@ -465,6 +486,7 @@ function generateProfileIR(config: ProfileConfig): IR[] {
         { name: "string_stress", fn: createStringStressTest(sizeConfig.collectionSize) },
         { name: "csv_decode", fn: createCsvDecodeTest(sizeConfig.collectionSize) },
         { name: "csv_encode", fn: createCsvEncodeTest(sizeConfig.collectionSize) },
+        { name: "large_output", fn: createLargeOutputTest(sizeConfig.collectionSize) },
     ];
 
     return tests.map(t => {
@@ -507,7 +529,7 @@ async function main() {
         "array_operations", "dict_struct_keys", "nested_loops", "while_loop",
         "variant_matching", "set_operations", "deep_struct", "string_operations",
         "mixed_operations", "arithmetic_operations", "complex_sort", "dict_lookup_stress",
-        "deep_variant", "string_stress", "csv_decode", "csv_encode"
+        "deep_variant", "string_stress", "csv_decode", "csv_encode", "large_output"
     ];
 
     for (let i = 0; i < irList.length; i++) {

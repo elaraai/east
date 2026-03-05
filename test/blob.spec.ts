@@ -2386,56 +2386,227 @@ await describe("Blob", (test) => {
     $(assert.equal(result.get(0n).value, "hello"));
   });
 
-  test("decodeCsv - error on missing required column", $ => {
-    const T = StructType({ name: StringType, age: IntegerType });
-    const csv = $.let(East.value(
-      new TextEncoder().encode("name\nAlice"),
-      BlobType
-    ));
-
-    $(assert.throws(csv.decodeCsv(T)));
-  });
-
-  test("decodeCsv - error on null for required field", $ => {
-    const T = StructType({ name: StringType });
-    // Empty string after header creates one data row with empty value (null for required field)
-    // Use skipEmptyLines: false to include the empty row
-    const csv = $.let(East.value(
-      new TextEncoder().encode("name\n\n"),
-      BlobType
-    ));
-
-    $(assert.throws(csv.decodeCsv(T, { skipEmptyLines: false })));
-  });
-
-  test("decodeCsv - error on invalid integer", $ => {
+  // T1: error message for invalid integer
+  test("decodeCsv - error message for invalid integer", $ => {
     const T = StructType({ value: IntegerType });
     const csv = $.let(East.value(
       new TextEncoder().encode("value\nabc"),
       BlobType
     ));
-
-    $(assert.throws(csv.decodeCsv(T)));
+    $(assert.throws(csv.decodeCsv(T), /expected integer, got 'abc'/));
   });
 
-  test("decodeCsv - error on unclosed quote", $ => {
-    const T = StructType({ value: StringType });
+  // T2: error message for invalid boolean
+  test("decodeCsv - error message for invalid boolean", $ => {
+    const T = StructType({ value: BooleanType });
     const csv = $.let(East.value(
-      new TextEncoder().encode('value\n"unclosed'),
+      new TextEncoder().encode("value\nyes"),
       BlobType
     ));
-
-    $(assert.throws(csv.decodeCsv(T)));
+    $(assert.throws(csv.decodeCsv(T), /expected 'true' or 'false', got 'yes'/));
   });
 
-  test("decodeCsv - strict mode errors on extra columns", $ => {
+  // T3: error message for missing required column
+  test("decodeCsv - error message for missing required column", $ => {
+    const T = StructType({ name: StringType, age: IntegerType });
+    const csv = $.let(East.value(
+      new TextEncoder().encode("name\nAlice"),
+      BlobType
+    ));
+    $(assert.throws(csv.decodeCsv(T), /missing required column 'age'/));
+  });
+
+  // T4: error message for null required field
+  test("decodeCsv - error message for null required field", $ => {
+    const T = StructType({ name: StringType });
+    const csv = $.let(East.value(
+      new TextEncoder().encode("name\n\n"),
+      BlobType
+    ));
+    $(assert.throws(csv.decodeCsv(T, { skipEmptyLines: false }), /null value for required field/));
+  });
+
+  // T5: error message for strict extra column
+  test("decodeCsv - error message for strict extra column", $ => {
     const T = StructType({ name: StringType });
     const csv = $.let(East.value(
       new TextEncoder().encode("name,extra\nAlice,foo"),
       BlobType
     ));
+    $(assert.throws(csv.decodeCsv(T, { strict: true }), /unexpected column 'extra' in strict mode/));
+  });
 
-    $(assert.throws(csv.decodeCsv(T, { strict: true })));
+  // T6: error on invalid datetime string
+  test("decodeCsv - error on invalid datetime string", $ => {
+    const T = StructType({ ts: DateTimeType });
+    const csv = $.let(East.value(
+      new TextEncoder().encode("ts\nhello"),
+      BlobType
+    ));
+    $(assert.throws(csv.decodeCsv(T), /expected ISO 8601 date, got 'hello'/));
+  });
+
+  // T7: valid datetime parses correctly (regression)
+  test("decodeCsv - valid datetime parses correctly", $ => {
+    const T = StructType({ ts: DateTimeType });
+    const csv = $.let(East.value(
+      new TextEncoder().encode("ts\n2024-01-15T10:30:00.000"),
+      BlobType
+    ));
+    const result = $.let(csv.decodeCsv(T));
+    $(assert.equal(result.size(), 1n));
+  });
+
+  // T8: error on invalid null value
+  test("decodeCsv - error on invalid null value", $ => {
+    const T = StructType({ value: NullType });
+    const csv = $.let(East.value(
+      new TextEncoder().encode("value\nhello"),
+      BlobType
+    ));
+    $(assert.throws(csv.decodeCsv(T), /expected null, got 'hello'/));
+  });
+
+  // T9: null type accepts 'null' string (regression)
+  test("decodeCsv - null type accepts null string", $ => {
+    const T = StructType({ value: NullType });
+    const csv = $.let(East.value(
+      new TextEncoder().encode("value\nnull"),
+      BlobType
+    ));
+    const result = $.let(csv.decodeCsv(T));
+    $(assert.equal(result.size(), 1n));
+  });
+
+  // T10: error on blob invalid hex chars
+  test("decodeCsv - error on blob invalid hex chars", $ => {
+    const T = StructType({ data: BlobType });
+    const csv = $.let(East.value(
+      new TextEncoder().encode("data\n0xGGHH"),
+      BlobType
+    ));
+    $(assert.throws(csv.decodeCsv(T), /invalid hex string/));
+  });
+
+  // T11: error on blob missing 0x prefix
+  test("decodeCsv - error on blob missing 0x prefix", $ => {
+    const T = StructType({ data: BlobType });
+    const csv = $.let(East.value(
+      new TextEncoder().encode("data\nabcd"),
+      BlobType
+    ));
+    $(assert.throws(csv.decodeCsv(T), /expected hex string starting with '0x'/));
+  });
+
+  // T12: error on too few fields for required column
+  test("decodeCsv - error on too few fields for required column", $ => {
+    const T = StructType({ name: StringType, age: IntegerType });
+    const csv = $.let(East.value(
+      new TextEncoder().encode("name,age\nAlice"),
+      BlobType
+    ));
+    $(assert.throws(csv.decodeCsv(T), /row has 1 fields, expected at least 2/));
+  });
+
+  // T13: unclosed quote error message
+  test("decodeCsv - unclosed quote error message", $ => {
+    const T = StructType({ value: StringType });
+    const csv = $.let(East.value(
+      new TextEncoder().encode('value\n"unclosed'),
+      BlobType
+    ));
+    $(assert.throws(csv.decodeCsv(T), /unclosed quote/));
+  });
+
+  // T14: integer with leading whitespace rejects
+  test("decodeCsv - integer with leading whitespace rejects", $ => {
+    const T = StructType({ value: IntegerType });
+    const csv = $.let(East.value(
+      new TextEncoder().encode("value\n 42"),
+      BlobType
+    ));
+    $(assert.throws(csv.decodeCsv(T), /expected integer/));
+  });
+
+  // T15: integer with trailing whitespace rejects
+  test("decodeCsv - integer with trailing whitespace rejects", $ => {
+    const T = StructType({ value: IntegerType });
+    const csv = $.let(East.value(
+      new TextEncoder().encode("value\n42 "),
+      BlobType
+    ));
+    $(assert.throws(csv.decodeCsv(T), /expected integer/));
+  });
+
+  // T16: float partial parse rejects
+  test("decodeCsv - float partial parse rejects", $ => {
+    const T = StructType({ value: FloatType });
+    const csv = $.let(East.value(
+      new TextEncoder().encode("value\n1.5abc"),
+      BlobType
+    ));
+    $(assert.throws(csv.decodeCsv(T), /expected float/));
+  });
+
+  // T17: non-ISO datetime rejects
+  test("decodeCsv - non-ISO datetime rejects", $ => {
+    const T = StructType({ ts: DateTimeType });
+    const csv = $.let(East.value(
+      new TextEncoder().encode("ts\nJan 15 2024"),
+      BlobType
+    ));
+    $(assert.throws(csv.decodeCsv(T), /expected ISO 8601 date/));
+  });
+
+  // T18: float with leading whitespace rejects
+  test("decodeCsv - float with leading whitespace rejects", $ => {
+    const T = StructType({ value: FloatType });
+    const csv = $.let(East.value(
+      new TextEncoder().encode("value\n 1.5"),
+      BlobType
+    ));
+    $(assert.throws(csv.decodeCsv(T), /expected float/));
+  });
+
+  // T19: float with trailing whitespace rejects
+  test("decodeCsv - float with trailing whitespace rejects", $ => {
+    const T = StructType({ value: FloatType });
+    const csv = $.let(East.value(
+      new TextEncoder().encode("value\n1.5 "),
+      BlobType
+    ));
+    $(assert.throws(csv.decodeCsv(T), /expected float/));
+  });
+
+  // T20: error includes row number
+  test("decodeCsv - error includes row number", $ => {
+    const T = StructType({ name: StringType, age: IntegerType });
+    const csv = $.let(East.value(
+      new TextEncoder().encode("name,age\nAlice,25\nBob,abc"),
+      BlobType
+    ));
+    $(assert.throws(csv.decodeCsv(T), /at row 2/));
+  });
+
+  // T21: error includes column name
+  test("decodeCsv - error includes column name", $ => {
+    const T = StructType({ name: StringType, age: IntegerType });
+    const csv = $.let(East.value(
+      new TextEncoder().encode("name,age\nAlice,abc"),
+      BlobType
+    ));
+    $(assert.throws(csv.decodeCsv(T), /\(age\)/));
+  });
+
+  // T22: float NaN parses correctly (regression)
+  test("decodeCsv - float NaN parses correctly", $ => {
+    const T = StructType({ value: FloatType });
+    const csv = $.let(East.value(
+      new TextEncoder().encode("value\nNaN"),
+      BlobType
+    ));
+    const result = $.let(csv.decodeCsv(T));
+    $(assert.equal(result.size(), 1n));
   });
 
   test("Equality method aliases", $ => {
