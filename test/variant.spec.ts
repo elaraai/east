@@ -4,11 +4,20 @@
  */
 import { East, Expr, IntegerType, NullType, OptionType, variant, VariantType } from "../src/index.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
+import * as ex from "./variant.examples.js";
 
 await describe("Variant", (test) => {
+    assert.examples(test, {
+        variantCreate: ex.variantCreate,
+    });
+
     test("Variant equality and type merging", $ => {
         $(assert.equal(East.value(true).ifElse(_$ => variant("some", 42n), _$ => variant("none", null)), variant("some", 42n)));
         $(assert.equal(East.value(false).ifElse(_$ => variant("some", 42n), _$ => variant("none", null)), variant("none", null)));
+    });
+
+    assert.examples(test, {
+        variantMatchStatement: ex.variantMatchStatement,
     });
 
     test("Match statement", $ => {
@@ -24,6 +33,10 @@ await describe("Variant", (test) => {
         $(assert.equal(f(variant("none", null)), 0n));
     });
 
+    assert.examples(test, {
+        variantMatchTagStatement: ex.variantMatchTagStatement,
+    });
+
     test("matchTag statement", $ => {
         const f = $.const(East.function([VariantType({ none: NullType, some: IntegerType })], IntegerType, ($, x) => {
             let ret = $.let(0n);
@@ -33,6 +46,18 @@ await describe("Variant", (test) => {
 
         $(assert.equal(f(variant("some", 42n)), 42n));
         $(assert.equal(f(variant("none", null)), 0n));
+    });
+
+    assert.examples(test, {
+        variantExprMatch: ex.variantExprMatch,
+        variantMatchTagExpr: ex.variantMatchTagExpr,
+        variantMatchPartial: ex.variantMatchPartial,
+        variantMatchExhaustive: ex.variantMatchExhaustive,
+        variantGetTag: ex.variantGetTag,
+        variantHasTag: ex.variantHasTag,
+        variantUnwrapWithDefault: ex.variantUnwrapWithDefault,
+        variantUnwrap: ex.variantUnwrap,
+        variantUnwrapAuto: ex.variantUnwrapAuto,
     });
 
     test("Expressions", $ => {
@@ -94,6 +119,11 @@ await describe("Variant", (test) => {
         $(assert.equal(r1.match({ ok: (_$, val) => val, error: (_$, val) => val, pending: _$ => 0n }), 100n));
         $(assert.equal(r2.match({ ok: (_$, val) => val, error: (_$, val) => val, pending: _$ => 0n }), -1n));
         $(assert.equal(r3.match({ ok: (_$, val) => val, error: (_$, val) => val, pending: _$ => 0n }), 0n));
+    });
+
+    assert.examples(test, {
+        variantEquals: ex.variantEquals,
+        variantNotEquals: ex.variantNotEquals,
     });
 
     test("Comparisons", $ => {

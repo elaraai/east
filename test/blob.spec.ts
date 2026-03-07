@@ -15,13 +15,18 @@ import {
   MatrixType,
 } from "../src/index.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
+import * as ex from "./blob.examples.js";
 
 await describe("Blob", (test) => {
+  assert.examples(test, { blobSize: ex.blobSize, blobGetUint8: ex.blobGetUint8 });
+
   test("Array ops", $ => {
     $(assert.equal(East.value(Uint8Array.from([]), BlobType).size(), 0n));
     $(assert.equal(East.value(Uint8Array.from([1, 2, 3])).size(), 3n));
     $(assert.equal(East.value(Uint8Array.from([1, 2, 3])).getUint8(0n), 1n));
   });
+
+  assert.examples(test, { blobEncodeUtf8: ex.blobEncodeUtf8, blobDecodeUtf8: ex.blobDecodeUtf8 });
 
   test("UTF-8 decoding/encoding", $ => {
     const hello_str = $.let(East.value("Hello", StringType));
@@ -34,6 +39,8 @@ await describe("Blob", (test) => {
 
     $(assert.throws(invalid_utf8_blob.decodeUtf8()));
   });
+
+  assert.examples(test, { blobEncodeUtf16: ex.blobEncodeUtf16, blobDecodeUtf16: ex.blobDecodeUtf16 });
 
   test("UTF-16 decoding/encoding", $ => {
     // Basic round-trip
@@ -102,6 +109,8 @@ await describe("Blob", (test) => {
   // =========================================================================
   // Beast v1 - Primitive Types
   // =========================================================================
+
+  assert.examples(test, { blobEncodeBeastV1: ex.blobEncodeBeastV1, blobDecodeBeastV1: ex.blobDecodeBeastV1 });
 
   test("Beast v1 - Null type", $ => {
     const value = $.let(East.value(null, NullType));
@@ -894,6 +903,8 @@ await describe("Blob", (test) => {
   // =========================================================================
   // Beast v2 - Primitive Types
   // =========================================================================
+
+  assert.examples(test, { blobEncodeBeastV2: ex.blobEncodeBeastV2, blobDecodeBeastV2: ex.blobDecodeBeastV2 });
 
   test("Beast v2 - Magic bytes verification", $ => {
     const value = $.let(East.value(42n, IntegerType));
@@ -2127,6 +2138,8 @@ await describe("Blob", (test) => {
   // ===========================================================================
   // CSV Decoding
   // ===========================================================================
+
+  assert.examples(test, { blobDecodeCsv: ex.blobDecodeCsv });
 
   test("decodeCsv - simple struct with header", $ => {
     const PersonType = StructType({ name: StringType, age: IntegerType });

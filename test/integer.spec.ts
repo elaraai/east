@@ -4,8 +4,19 @@
  */
 import { East, IntegerType } from "../src/index.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
+import * as ex from "./integer.examples.js";
 
 await describe("Integer", (test) => {
+    assert.examples(test, {
+        integerNegate: ex.integerNegate,
+        integerAdd: ex.integerAdd,
+        integerSubtract: ex.integerSubtract,
+        integerMultiply: ex.integerMultiply,
+        integerDivide: ex.integerDivide,
+        integerRemainder: ex.integerRemainder,
+        integerPow: ex.integerPow,
+    });
+
     test("Arithmetic", $ => {
         $(assert.equal(East.value(10n).negate(), -10n));
         $(assert.equal(East.value(10n).add(5n), 15n));
@@ -14,6 +25,14 @@ await describe("Integer", (test) => {
         $(assert.equal(East.value(10n).divide(5n), 2n));
         $(assert.equal(East.value(10n).remainder(5n), 0n));
         $(assert.equal(East.value(10n).pow(5n), 100_000n));
+    });
+
+    assert.examples(test, {
+        integerPrint: ex.integerPrint,
+        integerPrintCommaSeperated: ex.integerPrintCommaSeperated,
+        integerPrintCompact: ex.integerPrintCompact,
+        integerPrintCompactSI: ex.integerPrintCompactSI,
+        integerPrintCompactComputing: ex.integerPrintCompactComputing,
     });
 
     test("Printing", $ => {
@@ -190,6 +209,15 @@ await describe("Integer", (test) => {
 
     });
 
+    assert.examples(test, {
+        integerEquals: ex.integerEquals,
+        integerNotEquals: ex.integerNotEquals,
+        integerLessThan: ex.integerLessThan,
+        integerLessThanOrEqual: ex.integerLessThanOrEqual,
+        integerGreaterThan: ex.integerGreaterThan,
+        integerGreaterThanOrEqual: ex.integerGreaterThanOrEqual,
+    });
+
     test("Comparisons", $ => {
         $(assert.equal(East.equal(East.value(10n), 10n), true));
         $(assert.equal(East.equal(East.value(10n), 5n), false));
@@ -228,6 +256,10 @@ await describe("Integer", (test) => {
         $(assert.equal(East.value(10n).greaterThanOrEqual(10n), true));
     });
 
+    assert.examples(test, {
+        integerParse: ex.integerParse,
+    });
+
     test("Parsing", $ => {
         $(assert.equal(East.value("0").parse(IntegerType), 0n));
         $(assert.equal(East.value("123").parse(IntegerType), 123n));
@@ -238,6 +270,12 @@ await describe("Integer", (test) => {
         $(assert.throws(East.value("12.34").parse(IntegerType)));
         $(assert.throws(East.value("").parse(IntegerType)));
         $(assert.throws(East.value("123abc").parse(IntegerType)));
+    });
+
+    assert.examples(test, {
+        integerAbs: ex.integerAbs,
+        integerSign: ex.integerSign,
+        integerLog: ex.integerLog,
     });
 
     test("Mathematical functions", $ => {
@@ -260,6 +298,17 @@ await describe("Integer", (test) => {
         $(assert.equal(East.value(16n).log(2n), 4n));
         $(assert.equal(East.value(0n).log(10n), 0n)); // Special case: log(0) = 0
         $(assert.equal(East.value(10n).log(1n), 0n)); // Invalid base
+    });
+
+    assert.examples(test, {
+        integerRoundNearest: ex.integerRoundNearest,
+        integerRoundUp: ex.integerRoundUp,
+        integerRoundDown: ex.integerRoundDown,
+        integerRoundTruncate: ex.integerRoundTruncate,
+        integerDigitCount: ex.integerDigitCount,
+        integerPrintOrdinal: ex.integerPrintOrdinal,
+        integerPrintPercentage: ex.integerPrintPercentage,
+        integerPrintCurrency: ex.integerPrintCurrency,
     });
 
     test("Stdlib functions", $ => {
@@ -332,6 +381,12 @@ await describe("Integer", (test) => {
         $(assert.equal(East.Integer.printCurrency(1234n), "$1,234"));
         $(assert.equal(East.Integer.printCurrency(-12345n), "-$12,345"));
         $(assert.equal(East.Integer.printCurrency(0n), "$0"));
+    });
+
+    assert.examples(test, {
+        integerMin: ex.integerMin,
+        integerMax: ex.integerMax,
+        integerClamp: ex.integerClamp,
     });
 
     test("Min, Max, and Clamp functions", $ => {
@@ -432,6 +487,10 @@ await describe("Integer", (test) => {
         $(assert.equal(East.greaterThanOrEqual(East.value(10n), 10n), true));
         $(assert.equal(East.gte(East.value(10n), 10n), true));
         $(assert.equal(East.ge(East.value(10n), 10n), true));
+    });
+
+    assert.examples(test, {
+        integerToFloat: ex.integerToFloat,
     });
 
     test("Integer to Float conversion", $ => {

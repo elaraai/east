@@ -4,8 +4,19 @@
  */
 import { East, FloatType } from "../src/index.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
+import * as ex from "./float.examples.js";
 
 await describe("Float", (test) => {
+    assert.examples(test, {
+        floatNegate: ex.floatNegate,
+        floatAdd: ex.floatAdd,
+        floatSubtract: ex.floatSubtract,
+        floatMultiply: ex.floatMultiply,
+        floatDivide: ex.floatDivide,
+        floatRemainder: ex.floatRemainder,
+        floatPow: ex.floatPow,
+    });
+
     test("Arithmetic", $ => {
         $(assert.equal(East.value(10).negate(), -10));
         $(assert.equal(East.value(10).add(5), 15));
@@ -26,6 +37,10 @@ await describe("Float", (test) => {
         $(assert.between(East.value(-10.3).remainder(5.0), -0.3000001, -0.2999999));
         $(assert.equal(East.value(7.5).remainder(2.5), 0.0));
         $(assert.equal(East.value(-7.5).remainder(2.5), -0.0));
+    });
+
+    assert.examples(test, {
+        floatMixedAdd: ex.floatMixedAdd,
     });
 
     test("Mixed Integer/Float Arithmetic", $ => {
@@ -76,6 +91,10 @@ await describe("Float", (test) => {
         $(assert.equal(East.value(-10n).multiply(East.value(-5.0)), 50.0));
     });
 
+    assert.examples(test, {
+        floatPrint: ex.floatPrint,
+    });
+
     test("Printing", $ => {
         $(assert.equal(East.print(East.value(0)), "0.0"));
         $(assert.equal(East.print(East.value(1)), "1.0"));
@@ -85,6 +104,15 @@ await describe("Float", (test) => {
         $(assert.equal(East.print(East.value(-1)), "-1.0"));
         $(assert.equal(East.print(East.value(-1234)), "-1234.0"));
         $(assert.equal(East.print(East.value(-Infinity)), "-Infinity"));
+    });
+
+    assert.examples(test, {
+        floatEquals: ex.floatEquals,
+        floatNotEquals: ex.floatNotEquals,
+        floatLessThan: ex.floatLessThan,
+        floatLessThanOrEqual: ex.floatLessThanOrEqual,
+        floatGreaterThan: ex.floatGreaterThan,
+        floatGreaterThanOrEqual: ex.floatGreaterThanOrEqual,
     });
 
     test("Comparisons", $ => {
@@ -125,6 +153,10 @@ await describe("Float", (test) => {
         $(assert.equal(East.value(10.0).greaterThanOrEqual(10.0), true));
     });
 
+    assert.examples(test, {
+        floatParse: ex.floatParse,
+    });
+
     test("Parsing", $ => {
         $(assert.equal(East.value("0.0").parse(FloatType), 0));
         $(assert.equal(East.value("123.0").parse(FloatType), 123));
@@ -148,6 +180,17 @@ await describe("Float", (test) => {
         $(assert.throws(East.value("e10").parse(FloatType)));
     });
 
+    assert.examples(test, {
+        floatAbs: ex.floatAbs,
+        floatSign: ex.floatSign,
+        floatSqrt: ex.floatSqrt,
+        floatLog: ex.floatLog,
+        floatExp: ex.floatExp,
+        floatSin: ex.floatSin,
+        floatCos: ex.floatCos,
+        floatTan: ex.floatTan,
+    });
+
     test("Mathematical functions", $ => {
         // abs() tests
         $(assert.equal(East.value(5).abs(), 5));
@@ -165,6 +208,10 @@ await describe("Float", (test) => {
         $(assert.between(East.value(Math.PI / 2).sin(), 1 - 1e-10, 1 + 1e-10));
         $(assert.between(East.value(0).cos(), 1 - 1e-10, 1 + 1e-10));
         $(assert.between(East.value(Math.PI / 4).tan(), 1 - 1e-10, 1 + 1e-10));
+    });
+
+    assert.examples(test, {
+        floatToInteger: ex.floatToInteger,
     });
 
     test("Float to Integer conversion", $ => {
@@ -190,6 +237,10 @@ await describe("Float", (test) => {
         $(assert.throws(East.value(NaN).toInteger()));
     });
 
+    assert.examples(test, {
+        floatApproxEqual: ex.floatApproxEqual,
+    });
+
     test("approxEqual", $ => {
         $(assert.equal(East.Float.approxEqual(1.0, 1.0, 0.001), true));
         $(assert.equal(East.Float.approxEqual(1.0, 1.0001, 0.001), true));
@@ -202,6 +253,10 @@ await describe("Float", (test) => {
         $(assert.equal(East.Float.approxEqual(-Infinity, -Infinity, 0.001), false));
         $(assert.equal(East.Float.approxEqual(NaN, NaN, 0.001), false));
         $(assert.equal(East.Float.approxEqual(1.0, Infinity, 1000.0), false));
+    });
+
+    assert.examples(test, {
+        floatRoundFloor: ex.floatRoundFloor,
     });
 
     test("roundFloor", $ => {
@@ -219,6 +274,10 @@ await describe("Float", (test) => {
         $(assert.throws(East.Float.roundFloor(NaN)));
     });
 
+    assert.examples(test, {
+        floatRoundCeil: ex.floatRoundCeil,
+    });
+
     test("roundCeil", $ => {
         $(assert.equal(East.Float.roundCeil(3.7), 4n));
         $(assert.equal(East.Float.roundCeil(3.0), 3n));
@@ -232,6 +291,10 @@ await describe("Float", (test) => {
         $(assert.throws(East.Float.roundCeil(Infinity)));
         $(assert.throws(East.Float.roundCeil(-Infinity)));
         $(assert.throws(East.Float.roundCeil(NaN)));
+    });
+
+    assert.examples(test, {
+        floatRoundHalf: ex.floatRoundHalf,
     });
 
     test("roundHalf", $ => {
@@ -250,6 +313,10 @@ await describe("Float", (test) => {
         $(assert.throws(East.Float.roundHalf(NaN)));
     });
 
+    assert.examples(test, {
+        floatRoundTrunc: ex.floatRoundTrunc,
+    });
+
     test("roundTrunc", $ => {
         $(assert.equal(East.Float.roundTrunc(3.7), 3n));
         $(assert.equal(East.Float.roundTrunc(3.0), 3n));
@@ -263,6 +330,10 @@ await describe("Float", (test) => {
         $(assert.throws(East.Float.roundTrunc(NaN)));
     });
 
+    assert.examples(test, {
+        floatRoundNearest: ex.floatRoundNearest,
+    });
+
     test("roundNearest", $ => {
         $(assert.equal(East.Float.roundNearest(10.0, 5.0), 10.0));
         $(assert.equal(East.Float.roundNearest(12.0, 5.0), 10.0));
@@ -271,6 +342,10 @@ await describe("Float", (test) => {
         $(assert.equal(East.Float.roundNearest(-13.0, 5.0), -15.0));
         $(assert.equal(East.Float.roundNearest(7.5, 5.0), 10.0));
         $(assert.equal(East.Float.roundNearest(0.0, 5.0), 0.0));
+    });
+
+    assert.examples(test, {
+        floatRoundUp: ex.floatRoundUp,
     });
 
     test("roundUp", $ => {
@@ -282,6 +357,10 @@ await describe("Float", (test) => {
         $(assert.equal(East.Float.roundUp(0.0, 5.0), 0.0));
     });
 
+    assert.examples(test, {
+        floatRoundDown: ex.floatRoundDown,
+    });
+
     test("roundDown", $ => {
         $(assert.equal(East.Float.roundDown(10.0, 5.0), 10.0));
         $(assert.equal(East.Float.roundDown(12.0, 5.0), 10.0));
@@ -289,6 +368,10 @@ await describe("Float", (test) => {
         $(assert.equal(East.Float.roundDown(-12.0, 5.0), -15.0));
         $(assert.equal(East.Float.roundDown(-10.0, 5.0), -10.0));
         $(assert.equal(East.Float.roundDown(0.0, 5.0), 0.0));
+    });
+
+    assert.examples(test, {
+        floatRoundTruncate: ex.floatRoundTruncate,
     });
 
     test("roundTruncate", $ => {
@@ -300,6 +383,10 @@ await describe("Float", (test) => {
         $(assert.equal(East.Float.roundTruncate(0.0, 5.0), 0.0));
     });
 
+    assert.examples(test, {
+        floatRoundToDecimals: ex.floatRoundToDecimals,
+    });
+
     test("roundToDecimals", $ => {
         $(assert.equal(East.Float.roundToDecimals(3.14159, 2n), 3.14));
         $(assert.equal(East.Float.roundToDecimals(3.14159, 0n), 3.0));
@@ -308,12 +395,20 @@ await describe("Float", (test) => {
         $(assert.equal(East.Float.roundToDecimals(1.5, 0n), 2.0));
     });
 
+    assert.examples(test, {
+        floatPrintCommaSeperated: ex.floatPrintCommaSeperated,
+    });
+
     test("printCommaSeperated", $ => {
         $(assert.equal(East.Float.printCommaSeperated(1234.56, 2n), "1,234.56"));
         $(assert.equal(East.Float.printCommaSeperated(1234.5, 2n), "1,234.50"));
         $(assert.equal(East.Float.printCommaSeperated(-1234.56, 2n), "-1,234.56"));
         $(assert.equal(East.Float.printCommaSeperated(0.0, 2n), "0.00"));
         $(assert.equal(East.Float.printCommaSeperated(42.0, 0n), "42"));
+    });
+
+    assert.examples(test, {
+        floatPrintCurrency: ex.floatPrintCurrency,
     });
 
     test("printCurrency", $ => {
@@ -325,6 +420,10 @@ await describe("Float", (test) => {
         $(assert.equal(East.Float.printCurrency(0.09), "$0.09"));
     });
 
+    assert.examples(test, {
+        floatPrintFixed: ex.floatPrintFixed,
+    });
+
     test("printFixed", $ => {
         $(assert.equal(East.Float.printFixed(3.14159, 2n), "3.14"));
         $(assert.equal(East.Float.printFixed(3.14159, 0n), "3"));
@@ -334,6 +433,10 @@ await describe("Float", (test) => {
         $(assert.equal(East.Float.printFixed(0.009, 2n), "0.01"));
     });
 
+    assert.examples(test, {
+        floatPrintCompact: ex.floatPrintCompact,
+    });
+
     test("printCompact", $ => {
         $(assert.equal(East.Float.printCompact(500.0), "5.0"));
         $(assert.equal(East.Float.printCompact(1500.0), "1.5K"));
@@ -341,6 +444,10 @@ await describe("Float", (test) => {
         $(assert.equal(East.Float.printCompact(1500000000.0), "1.5B"));
         $(assert.equal(East.Float.printCompact(-1500.0), "-1.5K"));
         $(assert.equal(East.Float.printCompact(0.0), "0.0"));
+    });
+
+    assert.examples(test, {
+        floatPrintPercentage: ex.floatPrintPercentage,
     });
 
     test("printPercentage", $ => {

@@ -4,8 +4,16 @@
  */
 import { East, ArrayType, FloatType } from "../src/index.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
+import * as ex from "./vector.examples.js";
 
 await describe("Vector", (test) => {
+    assert.examples(test, {
+        vectorZeros: ex.vectorZeros,
+        vectorOnes: ex.vectorOnes,
+        vectorFill: ex.vectorFill,
+        vectorFromArray: ex.vectorFromArray,
+    });
+
     test("Vector creation zeros", $ => {
         const v = $.let(East.Vector.zeros(3n));
         $(assert.equal(v.length(), 3n))
@@ -62,6 +70,12 @@ await describe("Vector", (test) => {
         $(assert.equal(v.get(2n), 30n))
     });
 
+    assert.examples(test, {
+        vectorLength: ex.vectorLength,
+        vectorGet: ex.vectorGet,
+        vectorSet: ex.vectorSet,
+    });
+
     test("Vector get and set", $ => {
         const v = $.let(East.Vector.zeros(3n));
         $(v.set(0n, 10.0))
@@ -78,6 +92,11 @@ await describe("Vector", (test) => {
         $(assert.throws(v.get(3n)))
         $(assert.throws(v.set(-1n, 0.0)))
         $(assert.throws(v.set(3n, 0.0)))
+    });
+
+    assert.examples(test, {
+        vectorSlice: ex.vectorSlice,
+        vectorConcat: ex.vectorConcat,
     });
 
     test("Vector slice", $ => {
@@ -105,6 +124,11 @@ await describe("Vector", (test) => {
         $(assert.equal(c.get(4n), 2.0))
     });
 
+    assert.examples(test, {
+        vectorToArray: ex.vectorToArray,
+        vectorToMatrix: ex.vectorToMatrix,
+    });
+
     test("Vector to array", $ => {
         const arr = $.let([1.0, 2.0, 3.0]);
         const v = $.let(East.Vector.fromArray(arr));
@@ -130,6 +154,11 @@ await describe("Vector", (test) => {
         $(assert.equal(m.get(0n, 2n), 3.0))
         $(assert.equal(m.get(1n, 0n), 4.0))
         $(assert.equal(m.get(1n, 2n), 6.0))
+    });
+
+    assert.examples(test, {
+        vectorMap: ex.vectorMap,
+        vectorReduce: ex.vectorReduce,
     });
 
     test("Vector map", $ => {

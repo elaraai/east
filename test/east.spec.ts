@@ -28,6 +28,7 @@ import {
 } from "../src/index.js";
 import { EastTypeType, toEastTypeValue } from "../src/type_of_type.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
+import * as ex from "./east.examples.js";
 
 // Define a simple binary tree type
 const TreeType = RecursiveType(self => VariantType({
@@ -49,6 +50,11 @@ const LinkedListType = RecursiveType(self => VariantType({
 }));
 
 await describe("East", (test) => {
+    assert.examples(test, {
+        eastValue: ex.eastValue,
+        eastValueWithType: ex.eastValueWithType,
+    });
+
     test("value() with null", $ => {
         $(assert.equal(East.value(null), null));
     });
@@ -168,6 +174,10 @@ await describe("East", (test) => {
         $(assert.equal(y, 42n));
     });
 
+    assert.examples(test, {
+        eastFunction: ex.eastFunction,
+    });
+
     test("func() with explicit output type", $ => {
         const add = East.function([IntegerType, IntegerType], IntegerType, ($, x, y) => {
             return x.add(y);
@@ -190,6 +200,11 @@ await describe("East", (test) => {
         $(addToArr(1n));
         $(addToArr(2n));
         $(assert.equal(arr, [1n, 2n]));
+    });
+
+    assert.examples(test, {
+        eastStr: ex.eastStr,
+        eastStrMultiple: ex.eastStrMultiple,
     });
 
     test("str() with simple string", $ => {
@@ -255,6 +270,10 @@ await describe("East", (test) => {
         const x = East.value(5n);
         const y = East.value(10n);
         $(assert.equal(East.str`${x} + ${y} = ${x.add(y)}`, "5 + 10 = 15"));
+    });
+
+    assert.examples(test, {
+        eastIsIdentity: ex.eastIsIdentity,
     });
 
     test("equal() with null", $ => {
@@ -1384,6 +1403,10 @@ await describe("East", (test) => {
         $(assert.equal(East.clamp(East.value(some(15n), OptionType(IntegerType)), none, some(10n)), some(10n)));
     });
 
+    assert.examples(test, {
+        eastPrintVariant: ex.eastPrintVariant,
+    });
+
     test("print() with null", $ => {
         $(assert.equal(East.print(East.value(null)), "null"));
     });
@@ -1456,6 +1479,10 @@ await describe("East", (test) => {
         $(assert.equal(East.print(East.value(none, OptionType(IntegerType))), ".none"));
         $(assert.equal(East.print(East.value(some(42n), OptionType(IntegerType))), ".some 42"));
         $(assert.equal(East.print(East.value(variant("success", "ok"), VariantType({ success: StringType, failure: StringType }))), ".success \"ok\""));
+    });
+
+    assert.examples(test, {
+        eastPrintAlias: ex.eastPrintAlias,
     });
 
     test("Array aliases in struct", $ => {

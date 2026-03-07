@@ -4,10 +4,17 @@
  */
 import { ArrayType, BooleanType, DictType, East, Expr, IntegerType, none, SetType, some, StringType } from "../src/index.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
+import * as ex from "./dict.examples.js";
 
 const { str } = East;
 
 await describe("Dict", (test) => {
+    assert.examples(test, {
+        dictSize: ex.dictSize,
+        dictHas: ex.dictHas,
+        dictGenerate: ex.dictGenerate,
+    });
+
     test("Dict ops", $ => {
 
         $(assert.equal(East.value(new Map(), DictType(IntegerType, StringType)).size(), 0n))
@@ -35,6 +42,10 @@ await describe("Dict", (test) => {
 
     });
 
+    assert.examples(test, {
+        dictPrint: ex.dictPrint,
+    });
+
     test("Printing", $ => {
 
         $(assert.equal(East.print(East.value(new Map<bigint, string>(), DictType(IntegerType, StringType))), "{:}"))
@@ -43,6 +54,10 @@ await describe("Dict", (test) => {
         $(assert.equal(East.print(East.value(new Map([[3n, "c"], [1n, "a"], [2n, "b"]]))), "{1:\"a\",2:\"b\",3:\"c\"}"))
         $(assert.equal(East.print(East.value(new Map([["x", 1n], ["y", 2n], ["z", 3n]]))), "{\"x\":1,\"y\":2,\"z\":3}"))
 
+    });
+
+    assert.examples(test, {
+        dictParse: ex.dictParse,
     });
 
     test("Parsing", $ => {
@@ -60,6 +75,10 @@ await describe("Dict", (test) => {
 
     });
 
+    assert.examples(test, {
+        dictInsert: ex.dictInsert,
+    });
+
     test("Dict insert", $ => {
 
         const d = $.let(new Map([[1n, "a"], [2n, "b"]]), DictType(IntegerType, StringType))
@@ -68,6 +87,11 @@ await describe("Dict", (test) => {
         $(assert.equal(d.has(3n), true)) // Confirm new value was added
         $(assert.equal(d.get(3n), "c"))  // Get new value
 
+    });
+
+    assert.examples(test, {
+        dictDelete: ex.dictDelete,
+        dictPop: ex.dictPop,
     });
 
     test("Dict delete", $ => {
@@ -85,6 +109,11 @@ await describe("Dict", (test) => {
 
     });
 
+    assert.examples(test, {
+        dictGet: ex.dictGet,
+        dictGetDefault: ex.dictGetDefault,
+    });
+
     test("Dict get", $ => {
         const d = $.let(new Map([[1n, "a"], [2n, "b"], [3n, "c"]]), DictType(IntegerType, StringType))
         $(assert.equal(d.get(1n, East.function([IntegerType], StringType, (_$, _key) => East.value("missing"))), "a"))                  // Get existing value
@@ -94,6 +123,11 @@ await describe("Dict", (test) => {
         // Test with custom missing handler
         $(assert.equal(d.get(4n, East.function([IntegerType], StringType, (_$, _key) => East.value("default"))), "default"))
 
+    });
+
+    assert.examples(test, {
+        dictInsertOrUpdate: ex.dictInsertOrUpdate,
+        dictInsertOrUpdateConflict: ex.dictInsertOrUpdateConflict,
     });
 
     test("Dict insertOrUpdate", $ => {
@@ -126,6 +160,12 @@ await describe("Dict", (test) => {
 
     });
 
+    assert.examples(test, {
+        dictUpdate: ex.dictUpdate,
+        dictMerge: ex.dictMerge,
+        dictSwap: ex.dictSwap,
+    });
+
     test("Dict update", $ => {
         const d = $.let(new Map([[1n, "a"], [2n, "b"]]), DictType(IntegerType, StringType))
 
@@ -155,6 +195,11 @@ await describe("Dict", (test) => {
         $(assert.equal(d2.get(4n, () => "missing"), "missing"))
     });
 
+    assert.examples(test, {
+        dictUnionInPlace: ex.dictUnionInPlace,
+        dictMergeAll: ex.dictMergeAll,
+    });
+
     test("Merge, union, etc", $ => {
         const d1 = $.let(new Map([[1n, "a"], [2n, "b"]]), DictType(IntegerType, StringType))
         const d2 = $.let(new Map([[2n, "B"], [3n, "C"]]), DictType(IntegerType, StringType))
@@ -173,6 +218,11 @@ await describe("Dict", (test) => {
         $(assert.equal(d3, new Map([[1n, "a"], [2n, "b+B"]]))); // note that it won't realize the problem until it's edited key 2
         $(d3.mergeAll(d4, ($, v1, v2) => v1.concat("+").concat(v2), () => "default"))
         $(assert.equal(d3, new Map([[1n, "a"], [2n, "b+B+B"], [3n, "default+C"]])));
+    });
+
+    assert.examples(test, {
+        dictEquals: ex.dictEquals,
+        dictNotEquals: ex.dictNotEquals,
     });
 
     test("Comparisons", $ => {
@@ -206,6 +256,20 @@ await describe("Dict", (test) => {
         $(assert.equal(East.value(new Map([[1n, "a"], [2n, "b"]])).equals(new Map([[1n, "a"]])), false))
         $(assert.equal(East.value(new Map([[1n, "a"], [2n, "b"]])).notEquals(new Map([[1n, "a"]])), true))
         $(assert.equal(East.value(new Map([[1n, "a"], [2n, "b"]])).notEquals(new Map([[1n, "a"], [2n, "b"]])), false))
+    });
+
+    assert.examples(test, {
+        dictKeys: ex.dictKeys,
+        dictGetKeys: ex.dictGetKeys,
+        dictForEach: ex.dictForEach,
+        dictCopy: ex.dictCopy,
+        dictMap: ex.dictMap,
+        dictFilter: ex.dictFilter,
+        dictFilterMap: ex.dictFilterMap,
+        dictReduce: ex.dictReduce,
+        dictSum: ex.dictSum,
+        dictEvery: ex.dictEvery,
+        dictSome: ex.dictSome,
     });
 
     test("Dict keys/copy/filter/map/reduce/etc", $ => {
@@ -286,6 +350,12 @@ await describe("Dict", (test) => {
         })));
     });
 
+    assert.examples(test, {
+        dictToArray: ex.dictToArray,
+        dictToSet: ex.dictToSet,
+        dictToDict: ex.dictToDict,
+    });
+
     test("Dict toArray/toDict/toSet", $ => {
         const d1 = $.let(new Map([[1n, "a"], [2n, "b"], [3n, "c"]]), DictType(IntegerType, StringType))
 
@@ -302,6 +372,10 @@ await describe("Dict", (test) => {
         $(assert.equal(d1.toDict((_$, _x, k) => East.print(k)), new Map([["1", "a"], ["2", "b"], ["3", "c"]])))
         $(assert.throws(d1.toDict((_$, _x, _k) => 1n))) // key function not unique
         $(assert.equal(d1.toDict((_$, _x, _k) => 1n, (_$, _x, k) => k, (_$, acc, v) => acc.add(v)), new Map([[1n, 6n]]))) // key function not unique, but conflict handler provided
+    });
+
+    assert.examples(test, {
+        dictFlattenToArray: ex.dictFlattenToArray,
     });
 
     test("flattenToArray", $ => {
@@ -321,6 +395,10 @@ await describe("Dict", (test) => {
 
         const a5 = East.value(new Map([["a", [1n, 2n]], ["b", [3n]], ["c", []]]), DictType(StringType, ArrayType(IntegerType)));
         $(assert.equal(a5.flattenToArray(), [1n, 2n, 3n]))
+    });
+
+    assert.examples(test, {
+        dictFlattenToSet: ex.dictFlattenToSet,
     });
 
     test("flattenToSet", $ => {
@@ -343,6 +421,10 @@ await describe("Dict", (test) => {
 
         const a6 = East.value(new Map([["a", new Set([1n, 2n])], ["b", new Set([2n, 3n])]]), DictType(StringType, SetType(IntegerType)));
         $(assert.equal(a6.flattenToSet(), new Set([1n, 2n, 3n])))
+    });
+
+    assert.examples(test, {
+        dictFlattenToDict: ex.dictFlattenToDict,
     });
 
     test("flattenToDict", $ => {
@@ -370,6 +452,10 @@ await describe("Dict", (test) => {
         $(assert.equal(a7.flattenToDict((_$, x) => x, (_$, x1, x2) => x1.add(x2)), new Map([["1", 1n], ["2", 22n], ["3", 3n]])))
     });
 
+    assert.examples(test, {
+        dictGroupSize: ex.dictGroupSize,
+    });
+
     test("groupSize", $ => {
         const d1 = East.value(new Map(), DictType(StringType, IntegerType));
         const d2 = East.value(new Map([["a", 1n], ["b", 2n], ["c", 3n], ["d", 1n], ["e", 2n]]), DictType(StringType, IntegerType));
@@ -388,6 +474,10 @@ await describe("Dict", (test) => {
         const d3 = East.value(new Map([["apple", 1n], ["apricot", 2n], ["banana", 3n], ["berry", 4n], ["cherry", 5n]]), DictType(StringType, IntegerType));
         $(assert.equal(d3.groupSize((_$, _v, k) => k.substring(0n, 1n)), new Map([["a", 2n], ["b", 2n], ["c", 1n]])))
     })
+
+    assert.examples(test, {
+        dictGroupEvery: ex.dictGroupEvery,
+    });
 
     test("groupEvery", $ => {
         const d1 = East.value(new Map(), DictType(StringType, IntegerType));
@@ -416,6 +506,10 @@ await describe("Dict", (test) => {
         ))
     })
 
+    assert.examples(test, {
+        dictGroupSome: ex.dictGroupSome,
+    });
+
     test("groupSome", $ => {
         const d1 = East.value(new Map(), DictType(StringType, IntegerType));
         const d2 = East.value(new Map([["a", 1n], ["b", 2n], ["c", 3n], ["d", 4n], ["e", 5n], ["f", 6n]]), DictType(StringType, IntegerType));
@@ -442,6 +536,10 @@ await describe("Dict", (test) => {
             new Map([[0n, true], [1n, false]])
         ))
     })
+
+    assert.examples(test, {
+        dictGroupSum: ex.dictGroupSum,
+    });
 
     test("groupSum", $ => {
         const d1 = East.value(new Map(), DictType(StringType, IntegerType));
@@ -470,6 +568,10 @@ await describe("Dict", (test) => {
         ))
     })
 
+    assert.examples(test, {
+        dictGroupMean: ex.dictGroupMean,
+    });
+
     test("groupMean", $ => {
         const d1 = East.value(new Map(), DictType(StringType, IntegerType));
         const d2 = East.value(new Map([["a", 1n], ["b", 2n], ["c", 3n], ["d", 4n], ["e", 5n], ["f", 6n]]), DictType(StringType, IntegerType));
@@ -489,6 +591,10 @@ await describe("Dict", (test) => {
             new Map([[0n, 8.0], [1n, 6.0]])
         ))
     })
+
+    assert.examples(test, {
+        dictGroupReduce: ex.dictGroupReduce,
+    });
 
     test("groupReduce", $ => {
         const d1 = East.value(new Map(), DictType(StringType, IntegerType));

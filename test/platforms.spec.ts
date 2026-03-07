@@ -11,6 +11,7 @@ import { AsyncFunctionType, East, Expr, get_location, printLocations, IRType, Nu
 import { valueOrExprToAstTyped } from "../src/expr/ast.js";
 import type { TypeSymbol } from "../src/expr/expr.js";
 import type { BlockBuilder } from "../src/expr/block.js";
+import type { ExampleDef } from "../src/example.js";
 
 const { str } = East;
 
@@ -382,5 +383,29 @@ export const assertEast = {
                 }
             }
         );
+    },
+
+    /**
+     * Runs all examples as tests, calling each with its inputs and asserting the result equals returns.
+     *
+     * @param test - The test function from describeEast's builder
+     * @param examples - A module of named ExampleDef exports (e.g. `import * as examples from "./array.examples.js"`)
+     */
+    examples(
+        test: (name: string, body: ($: BlockBuilder<NullType>) => void) => void,
+        examples: Record<string, ExampleDef>,
+    ): void {
+        for (const ex of Object.values(examples)) {
+            if (ex.returns !== undefined) {
+                test(ex.description, $ => {
+                    const result = $.let(ex.fn(...ex.inputs));
+                    $(assertEast.equal(result, ex.returns));
+                });
+            } else {
+                test(ex.description, $ => {
+                    $(ex.fn(...ex.inputs));
+                });
+            }
+        }
     },
 };

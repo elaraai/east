@@ -19,8 +19,11 @@ import {
     variant,
 } from "../src/index.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
+import * as ex from "./block.examples.js";
 
 await describe("Block", (test) => {
+    assert.examples(test, { blockConst: ex.blockConst, blockLet: ex.blockLet, blockAssign: ex.blockAssign });
+
     test("const() with null", $ => {
         const x = $.const(null);
         $(assert.equal(x, null));
@@ -397,6 +400,8 @@ await describe("Block", (test) => {
         $(assert.equal(x, 15n));
     });
 
+    assert.examples(test, { blockIf: ex.blockIf, blockIfElse: ex.blockIfElse, blockIfElseIf: ex.blockIfElseIf });
+
     test("if() with true condition", $ => {
         const result = $.let(0n);
         $.if(true, $ => {
@@ -436,6 +441,8 @@ await describe("Block", (test) => {
         $(assert.equal(result, 2n));
     });
 
+    assert.examples(test, { blockWhile: ex.blockWhile, blockWhileBreak: ex.blockWhileBreak, blockWhileContinue: ex.blockWhileContinue });
+
     test("while() loop", $ => {
         const i = $.let(0n);
         $.while(East.less(i, 5n), ($) => {
@@ -467,6 +474,8 @@ await describe("Block", (test) => {
         });
         $(assert.equal(sum, 12n)); // 1 + 2 + 4 + 5 = 12
     });
+
+    assert.examples(test, { blockForArray: ex.blockForArray, blockForSet: ex.blockForSet, blockForDict: ex.blockForDict, blockForBreak: ex.blockForBreak, blockForContinue: ex.blockForContinue });
 
     test("for() over array", $ => {
         const arr = $.const([1n, 2n, 3n]);
@@ -588,6 +597,8 @@ await describe("Block", (test) => {
         $(assert.equal(sum, 12n)); // 1 + 2 + 4 + 5 = 12
     });
 
+    assert.examples(test, { blockReturn: ex.blockReturn });
+
     test("return() from function", $ => {
         const fn = East.function([IntegerType], IntegerType, ($, x) => {
             $.if(East.equal(x, 0n), $ => {
@@ -598,6 +609,8 @@ await describe("Block", (test) => {
         $(assert.equal(fn(0n), 1n));
         $(assert.equal(fn(5n), 10n));
     });
+
+    assert.examples(test, { blockTryCatch: ex.blockTryCatch, blockTryFinally: ex.blockTryFinally, blockTryCatchFinally: ex.blockTryCatchFinally });
 
     test("try-catch with no error", $ => {
         const result = $.let(0n);
