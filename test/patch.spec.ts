@@ -6,12 +6,18 @@ import { East, ArrayType, IntegerType, StringType, NullType, SetType, DictType, 
 import type { ValueTypeOf } from "../src/index.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
 import { generateFuzzTestCases } from "../src/patch/fuzz.js";
+import * as ex from "./patch.examples.js";
 
 // =============================================================================
 // Primitive Type Tests
 // =============================================================================
 
 await describe("Patch - Primitives", (test) => {
+    assert.examples(test, {
+        patchDiffUnchanged: ex.patchDiffUnchanged,
+        patchDiffReplace: ex.patchDiffReplace,
+    });
+
     // Null
     test("Null: identical", $ => {
         const before = $.const(null, NullType);
@@ -128,6 +134,12 @@ await describe("Patch - Primitives", (test) => {
 // =============================================================================
 
 await describe("Patch - Round-trips", (test) => {
+    assert.examples(test, {
+        patchApplyReplace: ex.patchApplyReplace,
+        patchInvert: ex.patchInvert,
+        patchStringRoundTrip: ex.patchStringRoundTrip,
+    });
+
     test("Integer: apply unchanged preserves value", $ => {
         const value = $.const(42n);
         const patch = $.const(East.diff(value, value));
@@ -181,6 +193,12 @@ await describe("Patch - Round-trips", (test) => {
 // =============================================================================
 
 await describe("Patch - Arrays", (test) => {
+    assert.examples(test, {
+        patchDiffArrayInsert: ex.patchDiffArrayInsert,
+        patchApplyArray: ex.patchApplyArray,
+        patchInvertArray: ex.patchInvertArray,
+    });
+
     test("Array: identical empty is unchanged", $ => {
         const arr = $.const([], ArrayType(IntegerType));
         const patch = $.const(East.diff(arr, arr));
@@ -491,6 +509,11 @@ await describe("Patch - Arrays", (test) => {
 // =============================================================================
 
 await describe("Patch - Sets", (test) => {
+    assert.examples(test, {
+        patchDiffSet: ex.patchDiffSet,
+        patchApplySet: ex.patchApplySet,
+    });
+
     test("Set: identical is unchanged", $ => {
         const s = $.const(new Set([1n, 2n, 3n]), SetType(IntegerType));
         const patch = $.const(East.diff(s, s));
@@ -565,6 +588,11 @@ await describe("Patch - Sets", (test) => {
 // =============================================================================
 
 await describe("Patch - Dicts", (test) => {
+    assert.examples(test, {
+        patchDiffDict: ex.patchDiffDict,
+        patchApplyDict: ex.patchApplyDict,
+    });
+
     test("Dict: identical is unchanged", $ => {
         const d = $.const(new Map([["a", 1n], ["b", 2n]]), DictType(StringType, IntegerType));
         const patch = $.const(East.diff(d, d));
@@ -640,6 +668,11 @@ await describe("Patch - Dicts", (test) => {
 // =============================================================================
 
 await describe("Patch - Structs", (test) => {
+    assert.examples(test, {
+        patchDiffStruct: ex.patchDiffStruct,
+        patchApplyStruct: ex.patchApplyStruct,
+    });
+
     const PersonType = StructType({ name: StringType, age: IntegerType });
 
     test("Struct: identical is unchanged", $ => {
@@ -700,6 +733,12 @@ await describe("Patch - Structs", (test) => {
 // =============================================================================
 
 await describe("Patch - Variants", (test) => {
+    assert.examples(test, {
+        patchDiffVariantSameCase: ex.patchDiffVariantSameCase,
+        patchDiffVariantDifferentCase: ex.patchDiffVariantDifferentCase,
+        patchApplyVariant: ex.patchApplyVariant,
+    });
+
     const ResultType = VariantType({ ok: IntegerType, error: StringType });
 
     test("Variant: identical is unchanged", $ => {
@@ -767,6 +806,11 @@ await describe("Patch - Variants", (test) => {
 // =============================================================================
 
 await describe("Patch - Compose", (test) => {
+    assert.examples(test, {
+        patchCompose: ex.patchCompose,
+        patchComposeUnchanged: ex.patchComposeUnchanged,
+    });
+
     test("Compose: unchanged + unchanged = unchanged", $ => {
         const v = $.const(42n);
         const p1 = $.const(East.diff(v, v));
@@ -826,6 +870,10 @@ await describe("Patch - Compose", (test) => {
 // =============================================================================
 
 await describe("Patch - Algebraic Properties", (test) => {
+    assert.examples(test, {
+        patchDoubleInvert: ex.patchDoubleInvert,
+    });
+
     test("Self-diff always returns unchanged", $ => {
         const arr = $.const([1n, 2n, 3n]);
         const patch = $.const(East.diff(arr, arr));
@@ -875,6 +923,10 @@ await describe("Patch - Algebraic Properties", (test) => {
 // =============================================================================
 
 await describe("Patch - Nested Types", (test) => {
+    assert.examples(test, {
+        patchNestedStruct: ex.patchNestedStruct,
+    });
+
     test("Array<Struct>: update nested field", $ => {
         const ItemType = StructType({ id: IntegerType, name: StringType });
         const before = $.const([{ id: 1n, name: "a" }, { id: 2n, name: "b" }], ArrayType(ItemType));
@@ -924,6 +976,10 @@ await describe("Patch - Nested Types", (test) => {
 // =============================================================================
 
 await describe("Patch - E2E All Types", (test) => {
+    assert.examples(test, {
+        patchE2ERoundTrip: ex.patchE2ERoundTrip,
+    });
+
     // =========================================================================
     // Primitives
     // =========================================================================

@@ -4,8 +4,11 @@
  */
 import { East, BooleanType } from "../src/index.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
+import * as ex from "./boolean.examples.js";
 
 await describe("Boolean", (test) => {
+    assert.examples(test, { booleanNot: ex.booleanNot, booleanBitAnd: ex.booleanBitAnd, booleanBitOr: ex.booleanBitOr, booleanBitXor: ex.booleanBitXor });
+
     test("Boolean operations", $ => {
         $(assert.equal(East.value(true).not(), false));
         $(assert.equal(East.value(false).not(), true));
@@ -26,10 +29,14 @@ await describe("Boolean", (test) => {
         $(assert.equal(East.value(false).bitXor(false), false));
     });
 
+    assert.examples(test, { booleanPrint: ex.booleanPrint });
+
     test("Printing", $ => {
         $(assert.equal(East.print(East.value(true)), "true"));
         $(assert.equal(East.print(East.value(false)), "false"));
     });
+
+    assert.examples(test, { booleanEquals: ex.booleanEquals, booleanNotEquals: ex.booleanNotEquals });
 
     test("Comparisons", $ => {
         // Equality tests
@@ -69,11 +76,15 @@ await describe("Boolean", (test) => {
         $(assert.equal(East.value(true).notEquals(true), false));
     });
 
+    assert.examples(test, { booleanParse: ex.booleanParse });
+
     test("Parsing", $ => {
         $(assert.equal(East.value("true").parse(BooleanType), true));
         $(assert.equal(East.value("false").parse(BooleanType), false));
         $(assert.throws(East.value("maybe").parse(BooleanType)));
     });
+
+    assert.examples(test, { booleanAnd: ex.booleanAnd, booleanOr: ex.booleanOr, booleanAndCapture: ex.booleanAndCapture });
 
     test("Short-circuit .and() basic", $ => {
         // Basic short-circuit and

@@ -4,6 +4,7 @@
  */
 import { East, BooleanType, VariantType, NullType, RecursiveType, variant, StructType, Expr, isTypeEqual, StringType, ArrayType, DictType } from "../src/index.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
+import * as ex from "./recursive.examples.js";
 
 await describe("Recursive", (test) => {
     const LinkedListType = RecursiveType(self => VariantType({
@@ -22,6 +23,15 @@ await describe("Recursive", (test) => {
     const list2 = East.value(variant("cons", { head: false, tail: list1 }), LinkedListType);
     const list2b = East.value(variant("cons", { head: false, tail: variant("cons", { head: true, tail: list0 }) }), LinkedListType);
     const list2c = East.value(variant("cons", { head: false, tail: variant("cons", { head: true, tail: variant("nil") }) }), LinkedListType);
+
+    assert.examples(test, {
+        recursiveEqual: ex.recursiveEqual,
+        recursiveNotEqual: ex.recursiveNotEqual,
+        recursiveLess: ex.recursiveLess,
+        recursiveGreater: ex.recursiveGreater,
+        recursiveLessEqual: ex.recursiveLessEqual,
+        recursiveGreaterEqual: ex.recursiveGreaterEqual,
+    });
 
     test("Comparisons", $ => {
         // Equality tests
@@ -54,6 +64,10 @@ await describe("Recursive", (test) => {
         $(assert.greaterEqual(list2, list2));
     });
 
+    assert.examples(test, {
+        recursiveUnwrap: ex.recursiveUnwrap,
+    });
+
     test("Unwrapping", $ => {
         // Unwrap list2
         const unwrapped2 = list2.unwrap().unwrap("cons").tail;
@@ -64,10 +78,18 @@ await describe("Recursive", (test) => {
         $(assert.equal(East.value(isTypeEqual(t1, t2)), true));
     });
 
+    assert.examples(test, {
+        recursivePrint: ex.recursivePrint,
+    });
+
     test("Printing", $ => {
         $(assert.equal(East.print(list0), ".nil"));
         $(assert.equal(East.print(list1), ".cons (head=true, tail=.nil)"));
         $(assert.equal(East.print(list2), ".cons (head=false, tail=.cons (head=true, tail=.nil))"));
+    });
+
+    assert.examples(test, {
+        recursiveParse: ex.recursiveParse,
     });
 
     test("Parsing", $ => {
@@ -88,6 +110,10 @@ await describe("Recursive", (test) => {
             ELEMENT: self
         }))
     }));
+
+    assert.examples(test, {
+        recursiveStructBased: ex.recursiveStructBased,
+    });
 
     test("Struct-based recursive type", $ => {
         // Create an XML node with struct literal syntax

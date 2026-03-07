@@ -4,8 +4,15 @@
  */
 import { East, Expr, IntegerType, SetType, StringType, some, none, DictType, BooleanType, StructType } from "../src/index.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
+import * as ex from "./set.examples.js";
 
 await describe("Set", (test) => {
+    assert.examples(test, {
+        setSize: ex.setSize,
+        setHas: ex.setHas,
+        setGenerate: ex.setGenerate,
+    });
+
     test("Set ops", $ => {
         $(assert.equal(East.value(new Set([]), SetType(IntegerType)).size(), 0n))
         $(assert.equal(East.value(new Set([1n, 2n, 3n])).size(), 3n))
@@ -20,12 +27,21 @@ await describe("Set", (test) => {
         $(assert.throws(East.Set.generate(6n, IntegerType, (_$, _i) => 0n)));
     });
 
+    assert.examples(test, {
+        setTryInsert: ex.setTryInsert,
+        setInsert: ex.setInsert,
+    });
+
     test("Set insert", $ => {
         const s = $.let(new Set([1n, 2n]), SetType(IntegerType))
         $(assert.equal(s.tryInsert(3n), true))       // Try insert new value
         $(assert.equal(s.tryInsert(1n), false))      // Try insert existing value
         $(assert.throws(s.insert(1n)))                // Insert existing value, error
         $(assert.equal(s.size(), 3n))                // Set should now have 3 elements
+    });
+
+    assert.examples(test, {
+        setTryDelete: ex.setTryDelete,
     });
 
     test("Set delete", $ => {
@@ -35,6 +51,11 @@ await describe("Set", (test) => {
         $(assert.equal(s.size(), 2n))                // Set should now have 2 elements
         $(assert.equal(s.has(2n), false))            // Confirm value was deleted
         $(assert.equal(s.has(1n), true))             // Confirm other values remain
+    });
+
+    assert.examples(test, {
+        setUnion: ex.setUnion,
+        setUnionInPlace: ex.setUnionInPlace,
     });
 
     test("Set union", $ => {
@@ -68,6 +89,10 @@ await describe("Set", (test) => {
         $(assert.equal(empty.has(2n), true))
     });
 
+    assert.examples(test, {
+        setIntersection: ex.setIntersection,
+    });
+
     test("Set intersection", $ => {
         const s1 = $.let(new Set([1n, 2n, 3n]), SetType(IntegerType))
         const s2 = $.let(new Set([2n, 3n, 4n]), SetType(IntegerType))
@@ -92,6 +117,10 @@ await describe("Set", (test) => {
         $(assert.equal(self_intersection.has(3n), true))
     });
 
+    assert.examples(test, {
+        setDifference: ex.setDifference,
+    });
+
     test("Set difference", $ => {
         const s1 = $.let(new Set([1n, 2n, 3n]), SetType(IntegerType))
         const s2 = $.let(new Set([2n, 3n, 4n]), SetType(IntegerType))
@@ -114,6 +143,10 @@ await describe("Set", (test) => {
         // Test difference with self
         const self_difference = s1.difference(s1)
         $(assert.equal(self_difference.size(), 0n))       // Difference with self should be empty
+    });
+
+    assert.examples(test, {
+        setSymmetricDifference: ex.setSymmetricDifference,
     });
 
     test("Set symmetric difference", $ => {
@@ -141,6 +174,11 @@ await describe("Set", (test) => {
         $(assert.equal(self_symdiff.size(), 0n))          // Symmetric difference with self should be empty
     });
 
+    assert.examples(test, {
+        setIsSubsetOf: ex.setIsSubsetOf,
+        setIsSupersetOf: ex.setIsSupersetOf,
+    });
+
     test("Set subset predicates", $ => {
         const s1 = $.let(new Set([1n, 2n]), SetType(IntegerType))          // {1, 2}
         const s2 = $.let(new Set([1n, 2n, 3n]), SetType(IntegerType))      // {1, 2, 3}
@@ -164,6 +202,10 @@ await describe("Set", (test) => {
         $(assert.equal(empty.isSupersetOf(s1), false))    // {} ⊅ {1, 2}
     });
 
+    assert.examples(test, {
+        setIsDisjointFrom: ex.setIsDisjointFrom,
+    });
+
     test("Set disjoint predicates", $ => {
         const s1 = $.let(new Set([1n, 2n]), SetType(IntegerType))          // {1, 2}
         const s2 = $.let(new Set([3n, 4n]), SetType(IntegerType))          // {3, 4}
@@ -181,12 +223,20 @@ await describe("Set", (test) => {
         $(assert.equal(empty.isDisjointFrom(empty), true)) // Empty set is disjoint from itself
     });
 
+    assert.examples(test, {
+        setPrint: ex.setPrint,
+    });
+
     test("Printing", $ => {
         $(assert.equal(East.print(East.value(new Set<bigint>(), SetType(IntegerType))), "{}"))
         $(assert.equal(East.print(East.value(new Set([1n]), SetType(IntegerType))), "{1}"))
         $(assert.equal(East.print(East.value(new Set([1n, 2n, 3n]), SetType(IntegerType))), "{1,2,3}"))
         $(assert.equal(East.print(East.value(new Set([3n, 1n, 2n]), SetType(IntegerType))), "{1,2,3}"))
         $(assert.equal(East.print(East.value(new Set(["a", "c", "b"]), SetType(StringType))), "{\"a\",\"b\",\"c\"}"))
+    });
+
+    assert.examples(test, {
+        setParse: ex.setParse,
     });
 
     test("Parsing", $ => {
@@ -198,6 +248,11 @@ await describe("Set", (test) => {
         $(assert.throws(East.value("{1,2,}").parse(SetType(IntegerType))))
         $(assert.throws(East.value("{1,,2}").parse(SetType(IntegerType))))
         $(assert.throws(East.value("[1,2,3]").parse(SetType(IntegerType))))
+    });
+
+    assert.examples(test, {
+        setEquals: ex.setEquals,
+        setNotEquals: ex.setNotEquals,
     });
 
     test("Comparisons", $ => {
@@ -231,6 +286,17 @@ await describe("Set", (test) => {
         $(assert.equal(East.value(new Set([1n, 2n, 3n])).equals(new Set([1n, 2n])), false))
         $(assert.equal(East.value(new Set([1n, 2n, 3n])).notEquals(new Set([1n, 2n])), true))
         $(assert.equal(East.value(new Set([1n, 2n, 3n])).notEquals(new Set([1n, 2n, 3n])), false))
+    });
+
+    assert.examples(test, {
+        setCopy: ex.setCopy,
+        setFilter: ex.setFilter,
+        setForEach: ex.setForEach,
+        setMap: ex.setMap,
+        setReduce: ex.setReduce,
+        setSum: ex.setSum,
+        setEvery: ex.setEvery,
+        setSome: ex.setSome,
     });
 
     test("Set map/filter/reduce/etc", $ => {
@@ -269,6 +335,10 @@ await describe("Set", (test) => {
         $(assert.equal(East.value(new Set([true, false])).some(), true))
     });
 
+    assert.examples(test, {
+        setFilterMap: ex.setFilterMap,
+    });
+
     test("Set filterMap", $ => {
         const s1 = $.let(new Set([1n, 2n, 3n, 4n, 5n]), SetType(IntegerType))
 
@@ -304,6 +374,10 @@ await describe("Set", (test) => {
         $(assert.equal(result4, new Map([[1n, 11n], [2n, 12n], [3n, 13n], [4n, 14n], [5n, 15n]])))
     });
 
+    assert.examples(test, {
+        setFirstMap: ex.setFirstMap,
+    });
+
     test("Set firstMap", $ => {
         // Empty set returns none
         $(assert.equal(East.value(new Set<bigint>(), SetType(IntegerType)).firstMap(($, x) => East.equal(x.remainder(2n), 1n).ifElse(() => some(East.print(x)), () => none)), none))
@@ -319,6 +393,10 @@ await describe("Set", (test) => {
 
         // Type conversion case
         $(assert.equal(East.value(new Set([10n, 20n, 30n])).firstMap(($, x) => East.greater(x, 15n).ifElse(() => some(East.print(x)), () => none)), some("20")))
+    });
+
+    assert.examples(test, {
+        setMapReduce: ex.setMapReduce,
     });
 
     test("Set mapReduce", $ => {
@@ -374,6 +452,12 @@ await describe("Set", (test) => {
         })));
     });
 
+    assert.examples(test, {
+        setToArray: ex.setToArray,
+        setToDict: ex.setToDict,
+        setToSet: ex.setToSet,
+    });
+
     test("Set toArray/toDict/toSet", $ => {
         const s1 = $.let(new Set([1n, 2n, 3n]), SetType(IntegerType))
 
@@ -412,6 +496,12 @@ await describe("Set", (test) => {
         $(assert.equal(nums.toSet(($, n) => East.print(n)), new Set(["1", "2", "3"])));
     });
 
+    assert.examples(test, {
+        setFlattenToArray: ex.setFlattenToArray,
+        setFlattenToSet: ex.setFlattenToSet,
+        setFlattenToDict: ex.setFlattenToDict,
+    });
+
     test("Set flattenToArray/flattenToDict/flatenToSet", $ => {
         const s1 = $.let(new Set([1n, 2n, 3n]), SetType(IntegerType))
 
@@ -425,6 +515,10 @@ await describe("Set", (test) => {
         $(assert.throws(s1.flattenToDict((_$, x) => East.Array.range(0n, x).toDict(($, y) => East.print(y), (_$, y) => y.add(10n)))))
         $(assert.equal(s1.flattenToDict((_$, x) => East.Array.range(0n, x).toDict(($, y) => East.str`${x}:${y}`, (_$, _y) => x.add(10n))), new Map([["1:0", 11n], ["2:0", 12n], ["2:1", 12n], ["3:0", 13n], ["3:1", 13n], ["3:2", 13n]])))
         $(assert.equal(s1.flattenToDict((_$, x) => East.Array.range(0n, x).toDict(($, y) => East.print(y), (_$, _y) => x.add(10n)), (_$, y1, y2) => y1.add(y2)), new Map([["0", 36n], ["1", 25n], ["2", 13n]])))
+    });
+
+    assert.examples(test, {
+        setGroupReduce: ex.setGroupReduce,
     });
 
     test("groupReduce", $ => {
@@ -469,6 +563,10 @@ await describe("Set", (test) => {
         ))
     })
 
+    assert.examples(test, {
+        setGroupSize: ex.setGroupSize,
+    });
+
     test("groupSize", $ => {
         const s1 = East.value(new Set<bigint>(), SetType(IntegerType));
         const s2 = East.value(new Set([1n, 2n, 3n, 1n, 2n]), SetType(IntegerType)); // Duplicates ignored in sets
@@ -487,6 +585,10 @@ await describe("Set", (test) => {
         const s3 = East.value(new Set(["apple", "apricot", "banana", "berry", "cherry"]), SetType(StringType));
         $(assert.equal(s3.groupSize((_$, w) => w.substring(0n, 1n)), new Map([["a", 2n], ["b", 2n], ["c", 1n]])))
     })
+
+    assert.examples(test, {
+        setGroupEvery: ex.setGroupEvery,
+    });
 
     test("groupEvery", $ => {
         const s1 = East.value(new Set<bigint>(), SetType(IntegerType));
@@ -515,6 +617,10 @@ await describe("Set", (test) => {
         ))
     })
 
+    assert.examples(test, {
+        setGroupSome: ex.setGroupSome,
+    });
+
     test("groupSome", $ => {
         const s1 = East.value(new Set<bigint>(), SetType(IntegerType));
         const s2 = East.value(new Set([1n, 2n, 3n, 4n, 5n, 6n]), SetType(IntegerType));
@@ -542,6 +648,10 @@ await describe("Set", (test) => {
         ))
     })
 
+    assert.examples(test, {
+        setGroupSum: ex.setGroupSum,
+    });
+
     test("groupSum", $ => {
         const s1 = East.value(new Set<bigint>(), SetType(IntegerType));
         const s2 = East.value(new Set([1n, 2n, 3n, 4n, 5n, 6n]), SetType(IntegerType));
@@ -568,6 +678,10 @@ await describe("Set", (test) => {
             new Map([[0n, 3.0], [1n, 7.0]])
         ))
     })
+
+    assert.examples(test, {
+        setGroupMean: ex.setGroupMean,
+    });
 
     test("groupMean", $ => {
         const s1 = East.value(new Set<bigint>(), SetType(IntegerType));

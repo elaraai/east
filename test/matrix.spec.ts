@@ -4,8 +4,16 @@
  */
 import { East, ArrayType, FloatType, VectorType, IntegerType } from "../src/index.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
+import * as ex from "./matrix.examples.js";
 
 await describe("Matrix", (test) => {
+    assert.examples(test, {
+        matrixZeros: ex.matrixZeros,
+        matrixOnes: ex.matrixOnes,
+        matrixFill: ex.matrixFill,
+        matrixFromArray: ex.matrixFromArray,
+    });
+
     test("Matrix creation zeros", $ => {
         const m = $.let(East.Matrix.zeros(2n, 3n));
         $(assert.equal(m.rows(), 2n))
@@ -54,6 +62,13 @@ await describe("Matrix", (test) => {
         $(assert.equal(m.get(1n, 2n), 6.0))
     });
 
+    assert.examples(test, {
+        matrixRows: ex.matrixRows,
+        matrixCols: ex.matrixCols,
+        matrixGet: ex.matrixGet,
+        matrixSet: ex.matrixSet,
+    });
+
     test("Matrix get and set", $ => {
         const m = $.let(East.Matrix.zeros(2n, 2n));
         $(m.set(0n, 0n, 1.0))
@@ -74,6 +89,11 @@ await describe("Matrix", (test) => {
         $(assert.throws(m.get(0n, 3n)))
         $(assert.throws(m.set(-1n, 0n, 0.0)))
         $(assert.throws(m.set(0n, 3n, 0.0)))
+    });
+
+    assert.examples(test, {
+        matrixGetRow: ex.matrixGetRow,
+        matrixGetCol: ex.matrixGetCol,
     });
 
     test("Matrix get row", $ => {
@@ -102,6 +122,12 @@ await describe("Matrix", (test) => {
         const col2 = $.let(m.getCol(2n));
         $(assert.equal(col2.get(0n), 3.0))
         $(assert.equal(col2.get(1n), 6.0))
+    });
+
+    assert.examples(test, {
+        matrixTranspose: ex.matrixTranspose,
+        matrixToVector: ex.matrixToVector,
+        matrixToArray: ex.matrixToArray,
     });
 
     test("Matrix transpose", $ => {
@@ -345,6 +371,10 @@ await describe("Matrix", (test) => {
     // mapRows tests
     // ================================================================
 
+    assert.examples(test, {
+        matrixMapRows: ex.matrixMapRows,
+    });
+
     test("Matrix mapRows identity", $ => {
         const m = $.let(East.Matrix.fromArray([[1.0, 2.0], [3.0, 4.0]]));
         const result = $.let(m.mapRows(($, row) => row));
@@ -408,6 +438,10 @@ await describe("Matrix", (test) => {
     // toRows tests
     // ================================================================
 
+    assert.examples(test, {
+        matrixToRows: ex.matrixToRows,
+    });
+
     test("Matrix toRows float", $ => {
         const m = $.let(East.Matrix.fromArray([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]));
         const rows = $.let(m.toRows());
@@ -452,6 +486,10 @@ await describe("Matrix", (test) => {
     // ================================================================
     // fromRows tests
     // ================================================================
+
+    assert.examples(test, {
+        matrixFromRows: ex.matrixFromRows,
+    });
 
     test("Matrix fromRows float", $ => {
         const rows = $.let([], ArrayType(VectorType(FloatType)));

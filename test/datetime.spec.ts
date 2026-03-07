@@ -4,8 +4,20 @@
  */
 import { East, DateTimeType } from "../src/index.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
+import * as ex from "./datetime.examples.js";
 
 await describe("DateTime", (test) => {
+    assert.examples(test, {
+        datetimeGetYear: ex.datetimeGetYear,
+        datetimeGetMonth: ex.datetimeGetMonth,
+        datetimeGetDayOfMonth: ex.datetimeGetDayOfMonth,
+        datetimeGetHour: ex.datetimeGetHour,
+        datetimeGetMinute: ex.datetimeGetMinute,
+        datetimeGetSecond: ex.datetimeGetSecond,
+        datetimeGetDayOfWeek: ex.datetimeGetDayOfWeek,
+        datetimeGetMillisecond: ex.datetimeGetMillisecond,
+    });
+
     test("Component extraction", $ => {
         // Create DateTimeExpr directly using const variables
         const date1 = $.const(new Date("2024-03-15T10:30:45.123Z"), DateTimeType);
@@ -66,6 +78,15 @@ await describe("DateTime", (test) => {
         $(assert.equal(date4.getMillisecond(), 0n))
     });
 
+    assert.examples(test, {
+        datetimeAddMilliseconds: ex.datetimeAddMilliseconds,
+        datetimeAddSeconds: ex.datetimeAddSeconds,
+        datetimeAddMinutes: ex.datetimeAddMinutes,
+        datetimeAddHours: ex.datetimeAddHours,
+        datetimeAddDays: ex.datetimeAddDays,
+        datetimeAddWeeks: ex.datetimeAddWeeks,
+    });
+
     test("Duration arithmetic", $ => {
         // Test basic millisecond addition with integers
         const baseDate = $.const(new Date("2024-01-01T12:00:00.000Z"), DateTimeType);
@@ -109,6 +130,14 @@ await describe("DateTime", (test) => {
         $(assert.equal(minus1sec.getSecond(), 59n)) // Should wrap to previous minute
         $(assert.equal(minus1sec.getMinute(), 59n))
         $(assert.equal(minus1sec.getHour(), 11n))
+    });
+
+    assert.examples(test, {
+        datetimeSubtractSeconds: ex.datetimeSubtractSeconds,
+        datetimeSubtractMinutes: ex.datetimeSubtractMinutes,
+        datetimeSubtractHours: ex.datetimeSubtractHours,
+        datetimeSubtractDays: ex.datetimeSubtractDays,
+        datetimeSubtractWeeks: ex.datetimeSubtractWeeks,
     });
 
     test("Duration methods", $ => {
@@ -190,6 +219,15 @@ await describe("DateTime", (test) => {
         $(assert.equal(minus2point5weeks.getDayOfMonth(), 15n)) // Jan 1 - 17.5 days ≈ Dec 15
     });
 
+    assert.examples(test, {
+        datetimeDurationMilliseconds: ex.datetimeDurationMilliseconds,
+        datetimeDurationSeconds: ex.datetimeDurationSeconds,
+        datetimeDurationMinutes: ex.datetimeDurationMinutes,
+        datetimeDurationHours: ex.datetimeDurationHours,
+        datetimeDurationDays: ex.datetimeDurationDays,
+        datetimeDurationWeeks: ex.datetimeDurationWeeks,
+    });
+
     test("Duration calculations", $ => {
         const baseDate = $.const(new Date("2024-01-01T12:00:00.000Z"), DateTimeType);
         const laterDate = $.const(new Date("2024-01-01T12:01:30.500Z"), DateTimeType); // 90.5 seconds later
@@ -257,6 +295,12 @@ await describe("DateTime", (test) => {
         $(assert.equal(baseDate.durationWeeks(baseDate), 0.0))
     });
 
+    assert.examples(test, {
+        datetimeToEpochMilliseconds: ex.datetimeToEpochMilliseconds,
+        datetimeFromEpochMilliseconds: ex.datetimeFromEpochMilliseconds,
+        datetimeFromComponents: ex.datetimeFromComponents,
+    });
+
     test("Epoch conversion and component construction", $ => {
         const testDate = $.const(new Date("2024-03-15T10:30:45.123Z"), DateTimeType);
         const testEpoch = 1710498645123n; // 2024-03-15T10:30:45.123Z
@@ -273,6 +317,27 @@ await describe("DateTime", (test) => {
         $(assert.equal(constructedDate.getSecond(), 45n))
         $(assert.equal(constructedDate.getMillisecond(), 123n))
         $(assert.equal(constructedDate, testDate));
+    });
+
+    assert.examples(test, {
+        datetimeRoundDownMillisecond: ex.datetimeRoundDownMillisecond,
+        datetimeRoundDownSecond: ex.datetimeRoundDownSecond,
+        datetimeRoundDownMinute: ex.datetimeRoundDownMinute,
+        datetimeRoundDownHour: ex.datetimeRoundDownHour,
+        datetimeRoundDownDay: ex.datetimeRoundDownDay,
+        datetimeRoundDownWeek: ex.datetimeRoundDownWeek,
+        datetimeRoundUpMillisecond: ex.datetimeRoundUpMillisecond,
+        datetimeRoundUpSecond: ex.datetimeRoundUpSecond,
+        datetimeRoundUpMinute: ex.datetimeRoundUpMinute,
+        datetimeRoundUpHour: ex.datetimeRoundUpHour,
+        datetimeRoundUpDay: ex.datetimeRoundUpDay,
+        datetimeRoundUpWeek: ex.datetimeRoundUpWeek,
+        datetimeRoundNearestMillisecond: ex.datetimeRoundNearestMillisecond,
+        datetimeRoundNearestSecond: ex.datetimeRoundNearestSecond,
+        datetimeRoundNearestMinute: ex.datetimeRoundNearestMinute,
+        datetimeRoundNearestHour: ex.datetimeRoundNearestHour,
+        datetimeRoundNearestDay: ex.datetimeRoundNearestDay,
+        datetimeRoundNearestWeek: ex.datetimeRoundNearestWeek,
     });
 
     test("DateTime rounding", $ => {
@@ -470,6 +535,11 @@ await describe("DateTime", (test) => {
         $(assert.equal(biweeklyDown.getDayOfWeek(), 1n)) // Should still be Monday
     });
 
+    assert.examples(test, {
+        datetimeRoundDownMonth: ex.datetimeRoundDownMonth,
+        datetimeRoundDownYear: ex.datetimeRoundDownYear,
+    });
+
     test("Month and year rounding", $ => {
         const roundDownMonth = $.let(East.DateTime.roundDownMonth);
         const roundDownYear = $.let(East.DateTime.roundDownYear);
@@ -516,6 +586,15 @@ await describe("DateTime", (test) => {
         $(assert.equal(decDownMonth.getYear(), 2024n))
         $(assert.equal(decDownMonth.getMonth(), 12n)) // December
         $(assert.equal(decDownMonth.getDayOfMonth(), 1n)) // 1st of December
+    });
+
+    assert.examples(test, {
+        datetimeEquals: ex.datetimeEquals,
+        datetimeNotEquals: ex.datetimeNotEquals,
+        datetimeLessThan: ex.datetimeLessThan,
+        datetimeLessThanOrEqual: ex.datetimeLessThanOrEqual,
+        datetimeGreaterThan: ex.datetimeGreaterThan,
+        datetimeGreaterThanOrEqual: ex.datetimeGreaterThanOrEqual,
     });
 
     test("Comparisons", $ => {
@@ -572,6 +651,10 @@ await describe("DateTime", (test) => {
         $(assert.equal(date1.greaterThan(date3), false))
         $(assert.equal(date3.greaterThanOrEqual(date1), true))
         $(assert.equal(date1.greaterThanOrEqual(date2), true))
+    });
+
+    assert.examples(test, {
+        datetimePrintFormatted: ex.datetimePrintFormatted,
     });
 
     test("Formatted printing", $ => {
@@ -670,6 +753,10 @@ await describe("DateTime", (test) => {
         const constructed = $.let(East.DateTime.fromComponents(2025n, 3n, 15n, 10n, 30n, 45n, 678n));
 
         $(assert.equal(constructed.printFormatted("YYYY-MM-DD HH:mm:ss.SSS"), "2025-03-15 10:30:45.678"));
+    });
+
+    assert.examples(test, {
+        datetimeParseFormatted: ex.datetimeParseFormatted,
     });
 
     test("Formatted parsing", $ => {

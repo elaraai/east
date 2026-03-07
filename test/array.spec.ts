@@ -5,8 +5,11 @@
 import { East, Expr, ArrayType, IntegerType, FloatType, StringType, BooleanType, BlobType, some, none, SetType, DictType, StructType, VariantType, NullType, variant, RecursiveType } from "../src/index.js";
 import type { ExprType, option, SubtypeExprOrValue } from "../src/index.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
+import * as ex from "./array.examples.js";
 
 await describe("Array", (test) => {
+    assert.examples(test, { arraySize: ex.arraySize, arrayGet: ex.arrayGet, arrayGetWithDefault: ex.arrayGetWithDefault, arrayTryGet: ex.arrayTryGet, arrayHas: ex.arrayHas });
+
     test("Array ops", $ => {
         $(assert.equal(East.value([], ArrayType(IntegerType)).size(), 0n))
         $(assert.equal(East.value([1n, 2n, 3n]).size(), 3n))
@@ -31,6 +34,8 @@ await describe("Array", (test) => {
         $(assert.equal(East.value([10n, 20n, 30n]).tryGet(2n), some(30n)))
         $(assert.equal(East.value([10n, 20n, 30n]).tryGet(3n), none))
     });
+
+    assert.examples(test, { arrayPushLast: ex.arrayPushLast, arrayPushFirst: ex.arrayPushFirst, arrayPopLast: ex.arrayPopLast, arrayPopFirst: ex.arrayPopFirst, arrayMerge: ex.arrayMerge, arrayMergeAll: ex.arrayMergeAll, arrayAppend: ex.arrayAppend, arrayPrepend: ex.arrayPrepend });
 
     test("Mutation", $ => {
         const a = $.let([], ArrayType(IntegerType))
@@ -60,6 +65,8 @@ await describe("Array", (test) => {
 
 
     });
+
+    assert.examples(test, { arraySort: ex.arraySort, arraySortByKey: ex.arraySortByKey, arraySortInPlace: ex.arraySortInPlace, arrayReverse: ex.arrayReverse, arrayReverseInPlace: ex.arrayReverseInPlace, arrayIsSorted: ex.arrayIsSorted, arrayFindSortedFirst: ex.arrayFindSortedFirst, arrayFindSortedRange: ex.arrayFindSortedRange });
 
     test("Sorting", $ => {
         const a = $.let([2n, 3n, 1n]);
@@ -104,6 +111,8 @@ await describe("Array", (test) => {
         $(assert.equal(a2.findSortedLast(5n), 5n))
         $(assert.equal(a2.findSortedRange(5n), { start: 5n, end: 5n }))
     });
+
+    assert.examples(test, { arrayGenerate: ex.arrayGenerate, arrayRange: ex.arrayRange, arrayRangeWithStep: ex.arrayRangeWithStep, arrayLinspace: ex.arrayLinspace, arraySlice: ex.arraySlice, arrayGetKeys: ex.arrayGetKeys, arrayConcat: ex.arrayConcat, arraySum: ex.arraySum, arraySumWithProjection: ex.arraySumWithProjection, arrayMean: ex.arrayMean, arrayMaximum: ex.arrayMaximum, arrayMinimum: ex.arrayMinimum, arrayFindMaximum: ex.arrayFindMaximum, arrayFindMinimum: ex.arrayFindMinimum, arrayEvery: ex.arrayEvery, arraySome: ex.arraySome });
 
     test("Bulk ops", $ => {
         $(assert.equal(East.Array.generate(6n, IntegerType, ($, i) => i.add(1n)), [1n, 2n, 3n, 4n, 5n, 6n]));
@@ -215,12 +224,16 @@ await describe("Array", (test) => {
         $(assert.equal(East.value([true, false]).some(), true))
     });
 
+    assert.examples(test, { arrayStringJoin: ex.arrayStringJoin, arrayStringJoinObject: ex.arrayStringJoinObject });
+
     test("String join", $ => {
         $(assert.equal(East.value([], ArrayType(StringType)).stringJoin(", "), ""))
         $(assert.equal(East.value(["a"]).stringJoin(", "), "a"))
         $(assert.equal(East.value(["a", "b"]).stringJoin(", "), "a, b"))
         $(assert.equal(East.value(["a", "b", "c"]).stringJoin(", "), "a, b, c"))
     });
+
+    assert.examples(test, { arrayForEach: ex.arrayForEach });
 
     test("forEach", $ => {
         const from_array = $.let([], ArrayType(StringType));
@@ -261,6 +274,8 @@ await describe("Array", (test) => {
         })));
     });
 
+    assert.examples(test, { arrayMap: ex.arrayMap, arrayMapWithIndex: ex.arrayMapWithIndex });
+
     test("Map", $ => {
         $(assert.equal(East.value([], ArrayType(IntegerType)).map(($, x) => x.multiply(2n)), []))
         $(assert.equal(East.value([10n, 20n, 30n]).map(($, x) => x.multiply(2n)), [20n, 40n, 60n]))
@@ -268,6 +283,8 @@ await describe("Array", (test) => {
         $(assert.equal(East.value([], ArrayType(IntegerType)).map(($, x, i) => x.multiply(i)), []))
         $(assert.equal(East.value([10n, 20n, 30n]).map(($, x, i) => x.multiply(i)), [0n, 20n, 60n]))
     });
+
+    assert.examples(test, { arrayFilter: ex.arrayFilter, arrayFilterMap: ex.arrayFilterMap });
 
     test("Filter", $ => {
         $(assert.equal(East.value([], ArrayType(IntegerType)).filter(($, x) => East.equal(x.remainder(20n), 0n)), []))
@@ -280,6 +297,8 @@ await describe("Array", (test) => {
 
         $(assert.equal(East.value([1n, 2n, 3n, 4n, 5n, 6n]).filterMap(($, x) => East.equal(x.remainder(2n), 1n).ifElse(() => some(Expr.print(x)), () => none)), ["1", "3", "5"]))
     });
+
+    assert.examples(test, { arrayFirstMap: ex.arrayFirstMap });
 
     test("firstMap", $ => {
         // Empty array returns none
@@ -297,6 +316,8 @@ await describe("Array", (test) => {
         // Type conversion case
         $(assert.equal(East.value([10n, 20n, 30n]).firstMap(($, x) => East.greater(x, 15n).ifElse(() => some(Expr.print(x)), () => none)), some("20")))
     });
+
+    assert.examples(test, { arrayFindFirst: ex.arrayFindFirst, arrayFindFirstWithProjection: ex.arrayFindFirstWithProjection });
 
     test("findFirst", $ => {
         // Empty array returns none
@@ -322,6 +343,8 @@ await describe("Array", (test) => {
         // No match with projection
         $(assert.equal(East.value([10n, 20n, 30n]).findFirst(100n, ($, x) => x.divide(5n)), none))
     });
+
+    assert.examples(test, { arrayFindAll: ex.arrayFindAll });
 
     test("findAll", $ => {
         // Empty array returns empty array
@@ -349,6 +372,8 @@ await describe("Array", (test) => {
         $(assert.equal(East.value([10n, 20n, 30n]).findAll(100n, ($, x) => x.divide(5n)), []))
     });
 
+    assert.examples(test, { arrayReduce: ex.arrayReduce, arrayMapReduce: ex.arrayMapReduce });
+
     test("Reduce", $ => {
         $(assert.equal(East.value([], ArrayType(IntegerType)).reduce(($, a, b) => a.add(b), 10n), 10n))
 
@@ -358,6 +383,8 @@ await describe("Array", (test) => {
 
         $(assert.equal(East.value([1n, 2n, 3n]).mapReduce((_$, x, _i) => x.multiply(2n), ($, a, b) => a.add(b)), 12n))
     })
+
+    assert.examples(test, { arrayEquals: ex.arrayEquals, arrayNotEquals: ex.arrayNotEquals });
 
     test("Comparisons", $ => {
         $(assert.equal(East.value([], ArrayType(IntegerType)), []))
@@ -392,6 +419,8 @@ await describe("Array", (test) => {
         $(assert.equal(East.value([1n, 2n, 3n]).notEquals([1n, 2n, 3n]), false))
     });
 
+    assert.examples(test, { arrayToSet: ex.arrayToSet, arrayToSetWithProjection: ex.arrayToSetWithProjection });
+
     test("toSet", $ => {
         $(assert.equal(East.value([], ArrayType(IntegerType)).toSet(), new Set()))
         $(assert.equal(East.value([1n, 2n, 3n]).toSet(), new Set([1n, 2n, 3n])))
@@ -402,6 +431,8 @@ await describe("Array", (test) => {
         $(assert.equal(East.value([1n, 2n, 2n, 3n, 3n, 3n]).toSet(($, x) => x.negate()), new Set([-1n, -2n, -3n])))
 
     });
+
+    assert.examples(test, { arrayToDict: ex.arrayToDict, arrayToDictWithKeyFn: ex.arrayToDictWithKeyFn });
 
     test("toDict", $ => {
         $(assert.equal(East.value([], ArrayType(IntegerType)).toDict(), new Map()))
@@ -430,6 +461,8 @@ await describe("Array", (test) => {
 
     });
 
+    assert.examples(test, { arrayFlatMap: ex.arrayFlatMap, arrayFlatMapFlatten: ex.arrayFlatMapFlatten });
+
     test("flatMap", $ => {
         const a1 = East.value([], ArrayType(IntegerType));
         $(assert.equal(a1.flatMap((_$, x) => [x, x.add(10n)]), []))
@@ -448,6 +481,8 @@ await describe("Array", (test) => {
         const a5 = East.value([[1n, 2n], [3n], []], ArrayType(ArrayType(IntegerType)));
         $(assert.equal(a5.flatMap(), [1n, 2n, 3n]))
     });
+
+    assert.examples(test, { arrayFlattenToSet: ex.arrayFlattenToSet });
 
     test("flattenToSet", $ => {
         const a1 = East.value([], ArrayType(IntegerType));
@@ -470,6 +505,8 @@ await describe("Array", (test) => {
         const a6 = East.value([new Set([1n, 2n]), new Set([2n, 3n])], ArrayType(SetType(IntegerType)));
         $(assert.equal(a6.flattenToSet(), new Set([1n, 2n, 3n])))
     });
+
+    assert.examples(test, { arrayFlattenToDict: ex.arrayFlattenToDict });
 
     test("flattenToDict", $ => {
         const a1 = East.value([], ArrayType(IntegerType));
@@ -495,6 +532,8 @@ await describe("Array", (test) => {
         const a7 = East.value([new Map([["1", 1n], ["2", 2n]]), new Map([["2", 20n], ["3", 3n]])], ArrayType(DictType(StringType, IntegerType)));
         $(assert.equal(a7.flattenToDict(($, x) => x, ($, x1, x2) => x1.add(x2)), new Map([["1", 1n], ["2", 22n], ["3", 3n]])))
     });
+
+    assert.examples(test, { arrayGroupReduce: ex.arrayGroupReduce });
 
     test("groupReduce", $ => {
         const a1 = East.value([], ArrayType(IntegerType));
@@ -537,6 +576,8 @@ await describe("Array", (test) => {
             new Map([["a", "[a]: apple, apricot, "], ["b", "[b]: banana, berry, "]])
         ))
     })
+
+    assert.examples(test, { arrayToDictWithConflict: ex.arrayToDictWithConflict });
 
     test("toDict with conflict handler (groupMapReduce pattern)", $ => {
         const a1 = East.value([], ArrayType(IntegerType));
@@ -604,6 +645,8 @@ await describe("Array", (test) => {
         // Group 2: 2, 5 -> squares: 4, 25 -> sum: 4+25=29
     })
 
+    assert.examples(test, { arrayGroupSize: ex.arrayGroupSize, arrayGroupSizeByKey: ex.arrayGroupSizeByKey });
+
     test("groupSize", $ => {
         const a1 = East.value([], ArrayType(IntegerType));
         const a2 = East.value([1n, 2n, 3n, 1n, 2n], ArrayType(IntegerType));
@@ -622,6 +665,8 @@ await describe("Array", (test) => {
         const a3 = East.value(["apple", "apricot", "banana", "berry", "cherry"], ArrayType(StringType));
         $(assert.equal(a3.groupSize((_$, w) => w.substring(0n, 1n)), new Map([["a", 2n], ["b", 2n], ["c", 1n]])))
     })
+
+    assert.examples(test, { arrayGroupEvery: ex.arrayGroupEvery });
 
     test("groupEvery", $ => {
         const a1 = East.value([], ArrayType(IntegerType));
@@ -650,6 +695,8 @@ await describe("Array", (test) => {
         ))
     })
 
+    assert.examples(test, { arrayGroupSome: ex.arrayGroupSome });
+
     test("groupSome", $ => {
         const a1 = East.value([], ArrayType(IntegerType));
         const a2 = East.value([1n, 2n, 3n, 4n, 5n, 6n], ArrayType(IntegerType));
@@ -677,6 +724,8 @@ await describe("Array", (test) => {
         ))
     })
 
+    assert.examples(test, { arrayGroupFindAll: ex.arrayGroupFindAll });
+
     test("groupFindAll", $ => {
         const a1 = East.value([], ArrayType(IntegerType));
         const a2 = East.value([1n, 2n, 3n, 2n, 5n, 2n], ArrayType(IntegerType));
@@ -699,6 +748,8 @@ await describe("Array", (test) => {
         ))
     })
 
+    assert.examples(test, { arrayGroupFindFirst: ex.arrayGroupFindFirst });
+
     test("groupFindFirst", $ => {
         const a1 = East.value([], ArrayType(IntegerType));
         const a2 = East.value([1n, 2n, 3n, 4n, 5n, 6n], ArrayType(IntegerType));
@@ -720,6 +771,8 @@ await describe("Array", (test) => {
             new Map<bigint, option<bigint>>([[0n, none], [1n, some(2n)]])
         ))
     })
+
+    assert.examples(test, { arrayGroupFindMinimum: ex.arrayGroupFindMinimum, arrayGroupFindMaximum: ex.arrayGroupFindMaximum });
 
     test("groupFindMinimum and groupFindMaximum", $ => {
         const a1 = East.value([], ArrayType(IntegerType));
@@ -750,6 +803,8 @@ await describe("Array", (test) => {
         ))
     })
 
+    assert.examples(test, { arrayGroupSum: ex.arrayGroupSum });
+
     test("groupSum", $ => {
         const a1 = East.value([], ArrayType(IntegerType));
         const a2 = East.value([1n, 2n, 3n, 4n, 5n, 6n], ArrayType(IntegerType));
@@ -777,6 +832,8 @@ await describe("Array", (test) => {
         ))
     })
 
+    assert.examples(test, { arrayGroupMean: ex.arrayGroupMean });
+
     test("groupMean", $ => {
         const a1 = East.value([], ArrayType(IntegerType));
         const a2 = East.value([1n, 2n, 3n, 4n, 5n, 6n], ArrayType(IntegerType));
@@ -796,6 +853,8 @@ await describe("Array", (test) => {
             new Map([[0n, 8.0], [1n, 6.0]])
         ))
     })
+
+    assert.examples(test, { arrayGroupToArrays: ex.arrayGroupToArrays });
 
     test("groupToArrays", $ => {
         const a1 = East.value([], ArrayType(IntegerType));
@@ -817,6 +876,8 @@ await describe("Array", (test) => {
         ))
     })
 
+    assert.examples(test, { arrayGroupToSets: ex.arrayGroupToSets });
+
     test("groupToSets", $ => {
         const a1 = East.value([], ArrayType(IntegerType));
         const a2 = East.value([1n, 2n, 3n, 1n, 2n, 3n], ArrayType(IntegerType));
@@ -836,6 +897,8 @@ await describe("Array", (test) => {
             new Map([[0n, new Set([20n])], [1n, new Set([10n, 30n])]])
         ))
     })
+
+    assert.examples(test, { arrayGroupMinimum: ex.arrayGroupMinimum, arrayGroupMaximum: ex.arrayGroupMaximum });
 
     test("groupMinimum and groupMaximum", $ => {
         const a1 = East.value([], ArrayType(IntegerType));
@@ -876,6 +939,8 @@ await describe("Array", (test) => {
             new Map([["a", "apricot"], ["b", "berry"]])
         ))
     })
+
+    assert.examples(test, { arrayGroupToDicts: ex.arrayGroupToDicts });
 
     test("groupToDicts - without conflict handler", $ => {
         const a1 = East.value([], ArrayType(IntegerType));
@@ -941,6 +1006,8 @@ await describe("Array", (test) => {
     // =========================================================================
     // encodeCsv tests
     // =========================================================================
+
+    assert.examples(test, { arrayEncodeCsv: ex.arrayEncodeCsv });
 
     test("encodeCsv - basic encoding with header", $ => {
         const T = StructType({ name: StringType, age: IntegerType });

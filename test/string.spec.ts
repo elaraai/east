@@ -5,8 +5,14 @@
 import { East, ArrayType, BooleanType, IntegerType, NullType, StringType, StructType, variant, VariantType, FloatType, DateTimeType, BlobType, SetType, DictType, RecursiveType, ref, RefType } from "../src/index.js";
 import { EastTypeType, toEastTypeValue } from "../src/type_of_type.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
+import * as ex from "./string.examples.js";
 
 await describe("String", (test) => {
+    assert.examples(test, {
+        stringPrint: ex.stringPrint,
+        stringParse: ex.stringParse,
+    });
+
     test("Printing values", $ => {
         const MAX_INT64 = 9223372036854775807n;
         const MIN_INT64 = -9223372036854775808n;
@@ -324,6 +330,10 @@ await describe("String", (test) => {
         $(assert.equal(East.value('.Variant [(name=\"cons\", type=.Struct [(name=\"head\", type=.Integer), (name=\"tail\", type=.Recursive 2)]), (name=\"nil\", type=.Null)]').parse(EastTypeType), linkedListType));
     });
 
+    assert.examples(test, {
+        stringLength: ex.stringLength,
+    });
+
     test("String length", $ => {
         // Basic ASCII strings
         $(assert.equal(East.value("").length(), 0n));
@@ -340,6 +350,10 @@ await describe("String", (test) => {
         // Mixed content
         $(assert.equal(East.value("Hello 🚀 World!").length(), 14n));
         $(assert.equal(East.value("Test: 123 ✓").length(), 11n));
+    });
+
+    assert.examples(test, {
+        stringSubstring: ex.stringSubstring,
     });
 
     test("String substring", $ => {
@@ -389,6 +403,11 @@ await describe("String", (test) => {
         $(assert.equal(East.value("東京").substring(1n, 2n), "京"));
     });
 
+    assert.examples(test, {
+        stringUpperCase: ex.stringUpperCase,
+        stringLowerCase: ex.stringLowerCase,
+    });
+
     test("String case conversion", $ => {
         // Basic case conversion
         $(assert.equal(East.value("hello").upperCase(), "HELLO"));
@@ -410,6 +429,10 @@ await describe("String", (test) => {
         $(assert.equal(East.value("café").upperCase(), "CAFÉ"));
         $(assert.equal(East.value("CAFÉ").lowerCase(), "café"));
         $(assert.equal(East.value("naïve").upperCase(), "NAÏVE"));
+    });
+
+    assert.examples(test, {
+        stringSplit: ex.stringSplit,
     });
 
     test("String split", $ => {
@@ -438,6 +461,12 @@ await describe("String", (test) => {
         // Multi-character delimiter
         $(assert.equal(East.value("hello::world").split("::"), East.value(["hello", "world"], ArrayType(StringType))));
         $(assert.equal(East.value("one::two::three").split("::"), East.value(["one", "two", "three"], ArrayType(StringType))));
+    });
+
+    assert.examples(test, {
+        stringTrim: ex.stringTrim,
+        stringTrimStart: ex.stringTrimStart,
+        stringTrimEnd: ex.stringTrimEnd,
     });
 
     test("String trim", $ => {
@@ -474,6 +503,11 @@ await describe("String", (test) => {
         $(assert.equal(East.value("  🚀  ").trim(), "🚀"));
     });
 
+    assert.examples(test, {
+        stringStartsWith: ex.stringStartsWith,
+        stringEndsWith: ex.stringEndsWith,
+    });
+
     test("String starts/ends with", $ => {
         // Basic starts with
         $(assert.equal(East.value("hello world").startsWith("hello"), true));
@@ -502,6 +536,11 @@ await describe("String", (test) => {
         $(assert.equal(East.value("🚀🌟").endsWith("🌟"), true));
     });
 
+    assert.examples(test, {
+        stringContains: ex.stringContains,
+        stringContainsRegex: ex.stringContainsRegex,
+    });
+
     test("String contains", $ => {
         // Basic contains
         $(assert.equal(East.value("hello world").contains("hello"), true));
@@ -526,6 +565,11 @@ await describe("String", (test) => {
         $(assert.equal(East.value("café world").contains("café"), true));
         $(assert.equal(East.value("hello café").contains("é"), true));
         $(assert.equal(East.value("🚀🌟⭐").contains("🌟"), true));
+    });
+
+    assert.examples(test, {
+        stringIndexOf: ex.stringIndexOf,
+        stringIndexOfRegex: ex.stringIndexOfRegex,
     });
 
     test("String indexOf", $ => {
@@ -557,6 +601,11 @@ await describe("String", (test) => {
         // Japanese characters
         $(assert.equal(East.value("東京日本").indexOf("京"), 1n));
         $(assert.equal(East.value("東京日本").indexOf("日本"), 2n));
+    });
+
+    assert.examples(test, {
+        stringReplace: ex.stringReplace,
+        stringReplaceRegex: ex.stringReplaceRegex,
     });
 
     test("String replace", $ => {
@@ -745,6 +794,15 @@ await describe("String", (test) => {
         $(assert.equal(East.value("Hello\nWorld").indexOf(/hello.*world/i), -1n)); // No 's' flag
     });
 
+    assert.examples(test, {
+        stringEquals: ex.stringEquals,
+        stringNotEquals: ex.stringNotEquals,
+        stringLessThan: ex.stringLessThan,
+        stringLessThanOrEqual: ex.stringLessThanOrEqual,
+        stringGreaterThan: ex.stringGreaterThan,
+        stringGreaterThanOrEqual: ex.stringGreaterThanOrEqual,
+    });
+
     test("Comparisons", $ => {
         // Equality tests
         $(assert.equal(East.value("hello"), "hello"));
@@ -804,6 +862,10 @@ await describe("String", (test) => {
         $(assert.equal(East.value("a").greaterThan("b"), false));
         $(assert.equal(East.value("b").greaterThanOrEqual("a"), true));
         $(assert.equal(East.value("b").greaterThanOrEqual("b"), true));
+    });
+
+    assert.examples(test, {
+        stringPrintJson: ex.stringPrintJson,
     });
 
     test("JSON print", $ => {
@@ -959,6 +1021,10 @@ await describe("String", (test) => {
         $(assert.equal(printJson(linkedListType), '{"type":"Variant","value":[{"name":"cons","type":{"type":"Struct","value":[{"name":"head","type":{"type":"Integer","value":null}},{"name":"tail","type":{"type":"Recursive","value":"2"}}]}},{"name":"nil","type":{"type":"Null","value":null}}]}'));
     });
     
+    assert.examples(test, {
+        stringParseJson: ex.stringParseJson,
+    });
+
     test("JSON parse", $ => {
         const MAX_INT64 = 9223372036854775807n; // 2^63 - 1
         const MIN_INT64 = -9223372036854775808n; // -2^63

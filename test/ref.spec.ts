@@ -4,8 +4,15 @@
  */
 import { East, IntegerType, ref, RefType } from "../src/index.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
+import * as ex from "./ref.examples.js";
 
 await describe("Ref", (test) => {
+    assert.examples(test, {
+        refGet: ex.refGet,
+        refUpdate: ex.refUpdate,
+        refMerge: ex.refMerge,
+    });
+
     test("Construct, get, set", $ => {
         $(assert.equal(East.value(ref(42n)).get(), 42n));
 
@@ -21,6 +28,11 @@ await describe("Ref", (test) => {
         $(r1.merge(r2.get(), ($, i1, i2) => i1.add(i2)))
         $(assert.equal(r1.get(), 200n));
         $(assert.equal(r2.get(), 200n));
+    });
+
+    assert.examples(test, {
+        refEqual: ex.refEqual,
+        refNotEqual: ex.refNotEqual,
     });
 
     test("Comparisons", $ => {
@@ -59,8 +71,16 @@ await describe("Ref", (test) => {
         $(assert.equal(East.greaterEqual(r, r3), true));
     });
 
+    assert.examples(test, {
+        refPrint: ex.refPrint,
+    });
+
     test("Printing", $ => {
         $(assert.equal(East.print(East.value(ref(42n))), "&42"));
+    });
+
+    assert.examples(test, {
+        refParse: ex.refParse,
     });
 
     test("Parsing", $ => {

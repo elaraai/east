@@ -20,3 +20,4 @@ export * from './compile.js';
 export * from './default.js';
 export * from './eastir.js';
 export * from './patch/index.js';
+export * from './example.js';

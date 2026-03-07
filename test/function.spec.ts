@@ -21,8 +21,26 @@ import {
     variant,
 } from "../src/index.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
+import * as ex from "./function.examples.js";
 
 await describe("Function", (test) => {
+    assert.examples(test, {
+        functionSimpleCall: ex.functionSimpleCall,
+        functionMultipleArgs: ex.functionMultipleArgs,
+        functionNoArgs: ex.functionNoArgs,
+        functionReturningNull: ex.functionReturningNull,
+        functionStoredInVariable: ex.functionStoredInVariable,
+        functionHigherOrder: ex.functionHigherOrder,
+        functionReturningFunction: ex.functionReturningFunction,
+        functionNestedCalls: ex.functionNestedCalls,
+        functionEarlyReturn: ex.functionEarlyReturn,
+        functionClosure: ex.functionClosure,
+        functionClosureMultipleCaptures: ex.functionClosureMultipleCaptures,
+        functionStringArg: ex.functionStringArg,
+        functionInStruct: ex.functionInStruct,
+        functionInArray: ex.functionInArray,
+    });
+
     test("simple function call returns correct result", $ => {
         const addOne = East.function([IntegerType], IntegerType, ($, x) => {
             return x.add(1n);
@@ -869,6 +887,11 @@ await describe("Function", (test) => {
         $(assert.equal(first, 3n));
     });
 
+    assert.examples(test, {
+        asyncFunctionSimple: ex.asyncFunctionSimple,
+        asyncFunctionChain: ex.asyncFunctionChain,
+    });
+
     test("simple async function returns resolved promise", $ => {
         const asyncGreet = East.asyncFunction([], StringType, _$ => {
             return "Hello, async!";
@@ -890,6 +913,15 @@ await describe("Function", (test) => {
     // =========================================================================
     // Function Serialization (BEAST2)
     // =========================================================================
+
+    assert.examples(test, {
+        functionSerializeBeast: ex.functionSerializeBeast,
+        functionSerializeMultipleParams: ex.functionSerializeMultipleParams,
+        functionSerializeControlFlow: ex.functionSerializeControlFlow,
+        functionSerializeLoop: ex.functionSerializeLoop,
+        functionSerializeArrayOfFunctions: ex.functionSerializeArrayOfFunctions,
+        functionSerializeStruct: ex.functionSerializeStruct,
+    });
 
     test("free function serialized to beast2 and deserialized can be called", $ => {
         const FnType = FunctionType([IntegerType], IntegerType);
@@ -1146,6 +1178,19 @@ await describe("Function", (test) => {
     // =========================================================================
     // Closure Serialization (Functions with Captures)
     // =========================================================================
+
+    assert.examples(test, {
+        closureSerializeIntCapture: ex.closureSerializeIntCapture,
+        closureSerializeMultipleCaptures: ex.closureSerializeMultipleCaptures,
+        closureSerializeArrayCapture: ex.closureSerializeArrayCapture,
+        closureSerializeFunctionCapture: ex.closureSerializeFunctionCapture,
+        closureSerializeNested: ex.closureSerializeNested,
+        closureSerializeStructCapture: ex.closureSerializeStructCapture,
+        closureSerializeDeeplyNested: ex.closureSerializeDeeplyNested,
+        closureSerializeAsync: ex.closureSerializeAsync,
+        closureSerializeBlobCapture: ex.closureSerializeBlobCapture,
+        closureSharedMutableVariable: ex.closureSharedMutableVariable,
+    });
 
     test("closure with integer capture serialized and called", $ => {
         const FnType = FunctionType([], IntegerType);

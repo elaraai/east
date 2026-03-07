@@ -4,8 +4,14 @@
  */
 import { East, IntegerType, StringType, StructType } from "../src/index.js";
 import { describeEast as describe, assertEast as assert } from "./platforms.spec.js";
+import * as ex from "./struct.examples.js";
 
 await describe("Struct", (test) => {
+    assert.examples(test, {
+        structFieldAccess: ex.structFieldAccess,
+        structNested: ex.structNested,
+    });
+
     test("Struct operations", $ => {
         // Basic struct creation and field access
         const person = $.let(East.value({ name: "Alice", age: 30n }));
@@ -24,6 +30,12 @@ await describe("Struct", (test) => {
         $(assert.equal(nested.user.name, "Bob"));
         $(assert.equal(nested.user.age, 25n));
         $(assert.equal(nested.active, true));
+    });
+
+    assert.examples(test, {
+        structIs: ex.structIs,
+        structEqual: ex.structEqual,
+        structNotEqual: ex.structNotEqual,
     });
 
     test("Comparisons", $ => {
@@ -65,11 +77,19 @@ await describe("Struct", (test) => {
         // TODO: Fix comparison logic to implement proper lexical ordering
     });
 
+    assert.examples(test, {
+        structPrint: ex.structPrint,
+    });
+
     test("Printing", $ => {
         $(assert.equal(East.print(East.value({})), "()"));
         $(assert.equal(East.print(East.value({ a: 1n })), "(a=1)"));
         $(assert.equal(East.print(East.value({ a: 1n, b: "hello" })), "(a=1, b=\"hello\")"));
         $(assert.equal(East.print(East.value({ nested: { x: 5n } })), "(nested=(x=5))"));
+    });
+
+    assert.examples(test, {
+        structParse: ex.structParse,
     });
 
     test("Parsing", $ => {
