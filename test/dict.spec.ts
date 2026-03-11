@@ -109,6 +109,37 @@ await describe("Dict", (test) => {
 
     });
 
+    test("Dict error messages include printed key", $ => {
+        // Dict.get with missing integer key
+        const d1 = $.let(new Map([[1n, "a"]]), DictType(IntegerType, StringType))
+        $(assert.throws(d1.get(99n), /Dict does not contain key 99/))
+
+        // Dict.insert with duplicate integer key
+        const d2 = $.let(new Map([[1n, "a"]]), DictType(IntegerType, StringType))
+        $(assert.throws(d2.insert(1n, "b"), /Dict already contains key 1/))
+
+        // Dict.delete with missing integer key
+        const d3 = $.let(new Map([[1n, "a"]]), DictType(IntegerType, StringType))
+        $(assert.throws(d3.delete(42n), /Dict does not contain key 42/))
+
+        // Dict.update with missing key
+        const d4 = $.let(new Map([[1n, "a"]]), DictType(IntegerType, StringType))
+        $(assert.throws(d4.update(5n, "x"), /Dict does not contain key 5/))
+
+        // Dict.swap with missing key
+        const d5 = $.let(new Map([[1n, "a"]]), DictType(IntegerType, StringType))
+        $(assert.throws(d5.swap(7n, "x"), /Dict does not contain key 7/))
+
+        // Dict.pop with missing key
+        const d6 = $.let(new Map([[1n, "a"]]), DictType(IntegerType, StringType))
+        $(assert.throws(d6.pop(10n), /Dict does not contain key 10/))
+
+        // String keys
+        const d7 = $.let(new Map([["x", 1n]]), DictType(StringType, IntegerType))
+        $(assert.throws(d7.get("missing"), /Dict does not contain key "missing"/))
+        $(assert.throws(d7.insert("x", 2n), /Dict already contains key "x"/))
+    });
+
     assert.examples(test, {
         dictGet: ex.dictGet,
         dictGetDefault: ex.dictGetDefault,
