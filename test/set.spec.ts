@@ -439,6 +439,21 @@ await describe("Set", (test) => {
         )))
     });
 
+    test("Set error messages include printed key", $ => {
+        // Set.insert with duplicate integer key
+        const s1 = $.let(new Set([1n, 2n, 3n]), SetType(IntegerType));
+        $(assert.throws(s1.insert(2n), /Set already contains key 2/))
+
+        // Set.delete with missing integer key
+        const s2 = $.let(new Set([1n, 2n, 3n]), SetType(IntegerType));
+        $(assert.throws(s2.delete(99n), /Set does not contain key 99/))
+
+        // String keys
+        const s3 = $.let(new Set(["a", "b"]), SetType(StringType));
+        $(assert.throws(s3.insert("a"), /Set already contains key "a"/))
+        $(assert.throws(s3.delete("z"), /Set does not contain key "z"/))
+    });
+
     test("Set forEach - iteration guard", $ => {
         const s = $.let(new Set([1n, 2n, 3n]), SetType(IntegerType));
         $(assert.throws(s.forEach((_$, _x) => s.insert(4n)), /Cannot modify Set during iteration/));
