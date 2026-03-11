@@ -23,11 +23,11 @@ await describe("Array", (test) => {
         $(assert.equal(East.value([10n, 20n, 30n]).has(2n), true))
         $(assert.equal(East.value([10n, 20n, 30n]).has(3n), false))
 
-        $(assert.throws(East.value([10n, 20n, 30n]).get(-1n)))
+        $(assert.throws(East.value([10n, 20n, 30n]).get(-1n), /Array index .* out of bounds/))
         $(assert.equal(East.value([10n, 20n, 30n]).get(0n), 10n))
         $(assert.equal(East.value([10n, 20n, 30n]).get(1n), 20n))
         $(assert.equal(East.value([10n, 20n, 30n]).get(2n), 30n))
-        $(assert.throws(East.value([10n, 20n, 30n]).get(3n)))
+        $(assert.throws(East.value([10n, 20n, 30n]).get(3n), /Array index .* out of bounds/))
 
         $(assert.equal(East.value([10n, 20n, 30n]).get(3n, _ => 40n), 40n))
 
@@ -160,7 +160,7 @@ await describe("Array", (test) => {
         $(assert.equal(East.value([1n, 1n, 1n]).maximum(), 1n))
         $(assert.equal(East.value([1.0, 2.5, 1.5]).maximum(), 2.5))
         $(assert.equal(East.value(["a", "c", "b"]).maximum(), "c"))
-        $(assert.throws(East.value([], ArrayType(IntegerType)).maximum()))
+        $(assert.throws(East.value([], ArrayType(IntegerType)).maximum(), /Cannot reduce empty array/))
 
         // Maximum with projection
         $(assert.equal(East.value([1n, 2n, 3n]).maximum(($, x) => x.negate()), 1n))
@@ -174,7 +174,7 @@ await describe("Array", (test) => {
         $(assert.equal(East.value([1n, 1n, 1n]).minimum(), 1n))
         $(assert.equal(East.value([1.0, 2.5, 1.5]).minimum(), 1.0))
         $(assert.equal(East.value(["a", "c", "b"]).minimum(), "a"))
-        $(assert.throws(East.value([], ArrayType(IntegerType)).minimum()))
+        $(assert.throws(East.value([], ArrayType(IntegerType)).minimum(), /Cannot reduce empty array/))
 
         // Minimum with projection
         $(assert.equal(East.value([1n, 2n, 3n]).minimum(($, x) => x.negate()), 3n))
@@ -263,7 +263,7 @@ await describe("Array", (test) => {
 
     test("ForEach - iteration guard", $ => {
         const arr = $.let([1n, 2n, 3n]);
-        $(assert.throws(arr.forEach((_$, _x) => arr.pushLast(4n))));
+        $(assert.throws(arr.forEach((_$, _x) => arr.pushLast(4n)), /Cannot modify Array during iteration/));
     });
 
     test("For loop - iteration guard", $ => {
@@ -271,7 +271,7 @@ await describe("Array", (test) => {
         $(assert.throws(Expr.block($ => {
             $.for(arr, (_$, _key, _value) => arr.pushLast(4n));
             return null;
-        })));
+        }), /Cannot modify Array during iteration/));
     });
 
     assert.examples(test, { arrayMap: ex.arrayMap, arrayMapWithIndex: ex.arrayMapWithIndex });
@@ -379,7 +379,7 @@ await describe("Array", (test) => {
 
         $(assert.equal(East.value([1n, 2n, 3n]).reduce(($, a, b) => a.add(b), 10n), 16n))
 
-        $(assert.throws(East.value([], ArrayType(IntegerType)).mapReduce(($, x) => x.multiply(2n), ($, a, b) => a.add(b))))
+        $(assert.throws(East.value([], ArrayType(IntegerType)).mapReduce(($, x) => x.multiply(2n), ($, a, b) => a.add(b)), /Cannot reduce empty array/))
 
         $(assert.equal(East.value([1n, 2n, 3n]).mapReduce((_$, x, _i) => x.multiply(2n), ($, a, b) => a.add(b)), 12n))
     })
@@ -445,7 +445,7 @@ await describe("Array", (test) => {
 
         $(assert.equal(East.value([], ArrayType(IntegerType)).toDict((_$, x, _i) => East.print(x)), new Map()))
         $(assert.equal(East.value([1n, 2n, 3n]).toDict((_$, x, _i) => East.print(x)), new Map([["1", 1n], ["2", 2n], ["3", 3n]])))
-        $(assert.throws(East.value([1n, 2n, 2n, 3n, 3n, 3n]).toDict((_$, x, _i) => East.print(x))))
+        $(assert.throws(East.value([1n, 2n, 2n, 3n, 3n, 3n]).toDict((_$, x, _i) => East.print(x)), /Cannot insert duplicate key/))
 
         $(assert.equal(East.value([], ArrayType(IntegerType)).toDict((_$, _x, i) => East.print(i), (_$, x) => x.negate()), new Map()))
         $(assert.equal(East.value([1n, 2n, 3n]).toDict((_$, _x, i) => East.print(i), (_$, x) => x.negate()), new Map([["0", -1n], ["1", -2n], ["2", -3n]])))
@@ -453,7 +453,7 @@ await describe("Array", (test) => {
 
         $(assert.equal(East.value([], ArrayType(IntegerType)).toDict((_$, x, _i) => East.print(x), (_$, x) => x.negate()), new Map()))
         $(assert.equal(East.value([1n, 2n, 3n]).toDict((_$, x, _i) => East.print(x), (_$, x) => x.negate()), new Map([["1", -1n], ["2", -2n], ["3", -3n]])))
-        $(assert.throws(East.value([1n, 2n, 2n, 3n, 3n, 3n]).toDict((_$, x, _i) => East.print(x), (_$, x) => x.negate())))
+        $(assert.throws(East.value([1n, 2n, 2n, 3n, 3n, 3n]).toDict((_$, x, _i) => East.print(x), (_$, x) => x.negate()), /Cannot insert duplicate key/))
 
         $(assert.equal(East.value([], ArrayType(IntegerType)).toDict((_$, x, _i) => East.print(x), (_$, x) => x.negate(), (_$, x, y) => x.add(y)), new Map()))
         $(assert.equal(East.value([1n, 2n, 3n]).toDict((_$, x, _i) => East.print(x), (_$, x) => x.negate(), (_$, x, y) => x.add(y)), new Map([["1", -1n], ["2", -2n], ["3", -3n]])))
@@ -527,7 +527,7 @@ await describe("Array", (test) => {
         $(assert.equal(a5.flattenToDict(), new Map([["1", 1n], ["2", 2n], ["3", 3n]])))
 
         const a6 = East.value([new Map([["1", 1n], ["2", 2n]]), new Map([["2", 20n], ["3", 3n]])], ArrayType(DictType(StringType, IntegerType)));
-        $(assert.throws(a6.flattenToDict()))
+        $(assert.throws(a6.flattenToDict(), /Cannot insert duplicate key/))
 
         const a7 = East.value([new Map([["1", 1n], ["2", 2n]]), new Map([["2", 20n], ["3", 3n]])], ArrayType(DictType(StringType, IntegerType)));
         $(assert.equal(a7.flattenToDict(($, x) => x, ($, x1, x2) => x1.add(x2)), new Map([["1", 1n], ["2", 22n], ["3", 3n]])))
@@ -969,7 +969,7 @@ await describe("Array", (test) => {
 
         // Duplicate key should throw
         const a3 = East.value([1n, 2n, 1n], ArrayType(IntegerType));
-        $(assert.throws(a3.groupToDicts((_$, x) => x.remainder(2n), (_$, x) => x)))
+        $(assert.throws(a3.groupToDicts((_$, x) => x.remainder(2n), (_$, x) => x), /Dict already contains key/))
     })
 
     test("groupToDicts - with conflict handler", $ => {

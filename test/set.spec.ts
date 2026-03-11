@@ -245,9 +245,9 @@ await describe("Set", (test) => {
         $(assert.equal(East.value("{1,2,3}").parse(SetType(IntegerType)), new Set([1n, 2n, 3n])))
         $(assert.equal(East.value("{3,1,2}").parse(SetType(IntegerType)), new Set([1n, 2n, 3n])))
         $(assert.equal(East.value("{\"a\",\"b\",\"c\"}").parse(SetType(StringType)), new Set(["a", "b", "c"])))
-        $(assert.throws(East.value("{1,2,}").parse(SetType(IntegerType))))
-        $(assert.throws(East.value("{1,,2}").parse(SetType(IntegerType))))
-        $(assert.throws(East.value("[1,2,3]").parse(SetType(IntegerType))))
+        $(assert.throws(East.value("{1,2,}").parse(SetType(IntegerType)), /Failed to parse/))
+        $(assert.throws(East.value("{1,,2}").parse(SetType(IntegerType)), /Failed to parse/))
+        $(assert.throws(East.value("[1,2,3]").parse(SetType(IntegerType)), /Failed to parse/))
     });
 
     assert.examples(test, {
@@ -441,7 +441,7 @@ await describe("Set", (test) => {
 
     test("Set forEach - iteration guard", $ => {
         const s = $.let(new Set([1n, 2n, 3n]), SetType(IntegerType));
-        $(assert.throws(s.forEach((_$, _x) => s.insert(4n))));
+        $(assert.throws(s.forEach((_$, _x) => s.insert(4n)), /Cannot modify Set during iteration/));
     });
 
     test("Set for loop - iteration guard", $ => {
@@ -449,7 +449,7 @@ await describe("Set", (test) => {
         $(assert.throws(Expr.block($ => {
             $.for(s, (_$, _key) => s.insert(4n));
             return null;
-        })));
+        }), /Cannot modify Set during iteration/));
     });
 
     assert.examples(test, {
@@ -512,7 +512,7 @@ await describe("Set", (test) => {
         $(assert.equal(s1.flattenToSet((_$, x) => East.Array.range(0n, x).toSet()), new Set([0n, 1n, 2n])))
 
         // toDict
-        $(assert.throws(s1.flattenToDict((_$, x) => East.Array.range(0n, x).toDict(($, y) => East.print(y), (_$, y) => y.add(10n)))))
+        $(assert.throws(s1.flattenToDict((_$, x) => East.Array.range(0n, x).toDict(($, y) => East.print(y), (_$, y) => y.add(10n))), /Cannot insert duplicate key/))
         $(assert.equal(s1.flattenToDict((_$, x) => East.Array.range(0n, x).toDict(($, y) => East.str`${x}:${y}`, (_$, _y) => x.add(10n))), new Map([["1:0", 11n], ["2:0", 12n], ["2:1", 12n], ["3:0", 13n], ["3:1", 13n], ["3:2", 13n]])))
         $(assert.equal(s1.flattenToDict((_$, x) => East.Array.range(0n, x).toDict(($, y) => East.print(y), (_$, _y) => x.add(10n)), (_$, y1, y2) => y1.add(y2)), new Map([["0", 36n], ["1", 25n], ["2", 13n]])))
     });

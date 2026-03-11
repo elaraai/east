@@ -88,10 +88,10 @@ await describe("Vector", (test) => {
 
     test("Vector bounds checking", $ => {
         const v = $.let(East.Vector.zeros(3n));
-        $(assert.throws(v.get(-1n)))
-        $(assert.throws(v.get(3n)))
-        $(assert.throws(v.set(-1n, 0.0)))
-        $(assert.throws(v.set(3n, 0.0)))
+        $(assert.throws(v.get(-1n), /Vector index .* out of bounds/))
+        $(assert.throws(v.get(3n), /Vector index .* out of bounds/))
+        $(assert.throws(v.set(-1n, 0.0), /Vector index .* out of bounds/))
+        $(assert.throws(v.set(3n, 0.0), /Vector index .* out of bounds/))
     });
 
     assert.examples(test, {
