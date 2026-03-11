@@ -67,9 +67,9 @@ await describe("Dict", (test) => {
         $(assert.equal(East.value("{1:\"a\",2:\"b\",3:\"c\"}").parse(DictType(IntegerType, StringType)), new Map([[1n, "a"], [2n, "b"], [3n, "c"]])))
         $(assert.equal(East.value("{3:\"c\",1:\"a\",2:\"b\"}").parse(DictType(IntegerType, StringType)), new Map([[1n, "a"], [2n, "b"], [3n, "c"]])))
         $(assert.equal(East.value("{\"x\":1,\"y\":2,\"z\":3}").parse(DictType(StringType, IntegerType)), new Map([["x", 1n], ["y", 2n], ["z", 3n]])))
-        $(assert.throws(East.value("{1:\"a\",}").parse(DictType(IntegerType, StringType))))
-        $(assert.throws(East.value("{1:\"a\",,2:\"b\"}").parse(DictType(IntegerType, StringType))))
-        $(assert.throws(East.value("[1:\"a\",2:\"b\"]").parse(DictType(IntegerType, StringType))))
+        $(assert.throws(East.value("{1:\"a\",}").parse(DictType(IntegerType, StringType)), /Failed to parse/))
+        $(assert.throws(East.value("{1:\"a\",,2:\"b\"}").parse(DictType(IntegerType, StringType)), /Failed to parse/))
+        $(assert.throws(East.value("[1:\"a\",2:\"b\"]").parse(DictType(IntegerType, StringType)), /Failed to parse/))
         // $(expectError(Expr.from("{}").parse(DictType(IntegerType, StringType)))) // choosing to be permissive here
         $(assert.equal(East.value("{}").parse(DictType(IntegerType, StringType)), new Map<bigint, string>()))
 
@@ -105,7 +105,7 @@ await describe("Dict", (test) => {
 
         const d2 = $.let(new Map([[1n, "a"], [2n, "b"], [3n, "c"]]), DictType(IntegerType, StringType))
         $(assert.equal(d2.pop(2n), "b"))
-        $(assert.throws(d2.pop(4n)))
+        $(assert.throws(d2.pop(4n), /Dict does not contain key/))
 
     });
 
@@ -191,7 +191,7 @@ await describe("Dict", (test) => {
         const d2 = $.let(new Map([[1n, "a"], [2n, "b"], [3n, "c"]]), DictType(IntegerType, StringType))
         $(assert.equal(d2.swap(2n, "B"), "b"))
         $(assert.equal(d2.get(2n), "B"))
-        $(assert.throws(d2.swap(4n, "D")))
+        $(assert.throws(d2.swap(4n, "D"), /Dict does not contain key/))
         $(assert.equal(d2.get(4n, () => "missing"), "missing"))
     });
 
@@ -204,7 +204,7 @@ await describe("Dict", (test) => {
         const d1 = $.let(new Map([[1n, "a"], [2n, "b"]]), DictType(IntegerType, StringType))
         const d2 = $.let(new Map([[2n, "B"], [3n, "C"]]), DictType(IntegerType, StringType))
 
-        $(assert.throws(d1.unionInPlace(d2)))
+        $(assert.throws(d1.unionInPlace(d2), /Key .* exists in both dictionaries/))
 
         const d1b = $.let(new Map([[1n, "a"], [2n, "b"]]), DictType(IntegerType, StringType))
 
@@ -214,7 +214,7 @@ await describe("Dict", (test) => {
         const d3 = $.let(new Map([[1n, "a"], [2n, "b"]]), DictType(IntegerType, StringType))
         const d4 = $.let(new Map([[2n, "B"], [3n, "C"]]), DictType(IntegerType, StringType))
 
-        $(assert.throws(d3.mergeAll(d4, ($, v1, v2) => v1.concat("+").concat(v2))))
+        $(assert.throws(d3.mergeAll(d4, ($, v1, v2) => v1.concat("+").concat(v2)), /Key .* not found in dictionary/))
         $(assert.equal(d3, new Map([[1n, "a"], [2n, "b+B"]]))); // note that it won't realize the problem until it's edited key 2
         $(d3.mergeAll(d4, ($, v1, v2) => v1.concat("+").concat(v2), () => "default"))
         $(assert.equal(d3, new Map([[1n, "a"], [2n, "b+B+B"], [3n, "default+C"]])));
@@ -339,7 +339,7 @@ await describe("Dict", (test) => {
 
     test("Dict forEach - iteration guard", $ => {
         const d = $.let(new Map([[1n, "a"], [2n, "b"]]), DictType(IntegerType, StringType));
-        $(assert.throws(d.forEach((_$, _value, _key) => d.insert(3n, "c"))));
+        $(assert.throws(d.forEach((_$, _value, _key) => d.insert(3n, "c")), /Cannot modify Dict during iteration/));
     });
 
     test("Dict for loop - iteration guard", $ => {
@@ -347,7 +347,7 @@ await describe("Dict", (test) => {
         $(assert.throws(Expr.block($ => {
             $.for(d, (_$, _key, _value) => d.insert(3n, "c"));
             return null;
-        })));
+        }), /Cannot modify Dict during iteration/));
     });
 
     assert.examples(test, {
@@ -446,7 +446,7 @@ await describe("Dict", (test) => {
         $(assert.equal(a5.flattenToDict(), new Map([["1", 1n], ["2", 2n], ["3", 3n]])))
 
         const a6 = East.value(new Map([["a", new Map([["1", 1n], ["2", 2n]])], ["b", new Map([["2", 20n], ["3", 3n]])]]), DictType(StringType, DictType(StringType, IntegerType)));
-        $(assert.throws(a6.flattenToDict()))
+        $(assert.throws(a6.flattenToDict(), /Cannot insert duplicate key/))
 
         const a7 = East.value(new Map([["a", new Map([["1", 1n], ["2", 2n]])], ["b", new Map([["2", 20n], ["3", 3n]])]]), DictType(StringType, DictType(StringType, IntegerType)));
         $(assert.equal(a7.flattenToDict((_$, x) => x, (_$, x1, x2) => x1.add(x2)), new Map([["1", 1n], ["2", 22n], ["3", 3n]])))

@@ -37,7 +37,7 @@ await describe("Blob", (test) => {
 
     const invalid_utf8_blob = $.let(East.value(Uint8Array.from([0xff, 0xfe, 0xfd]), BlobType));
 
-    $(assert.throws(invalid_utf8_blob.decodeUtf8()));
+    $(assert.throws(invalid_utf8_blob.decodeUtf8(), /Blob is not valid UTF-8/));
   });
 
   assert.examples(test, { blobEncodeUtf16: ex.blobEncodeUtf16, blobDecodeUtf16: ex.blobDecodeUtf16 });
@@ -875,14 +875,14 @@ await describe("Blob", (test) => {
     const encoded = $.let(East.Blob.encodeBeast(value, 'v1'));
 
     // Try to decode integer as string
-    $(assert.throws(encoded.decodeBeast(StringType, 'v1')));
+    $(assert.throws(encoded.decodeBeast(StringType, 'v1'), /Failed to decode Beast data/));
   });
 
   test("Beast v1 - Error handling - invalid continuation byte", $ => {
     // Manually create array with invalid continuation byte (not 0x00 or 0x01)
     const invalidArray = $.let(East.value(new Uint8Array([0x02]), BlobType));
 
-    $(assert.throws(invalidArray.decodeBeast(ArrayType(IntegerType), 'v1')));
+    $(assert.throws(invalidArray.decodeBeast(ArrayType(IntegerType), 'v1'), /Failed to decode Beast data/));
   });
 
   test("Beast v1 - Error handling - invalid variant tag", $ => {
@@ -897,7 +897,7 @@ await describe("Blob", (test) => {
       BlobType
     ));
 
-    $(assert.throws(invalidVariant.decodeBeast(OptionType, 'v1')));
+    $(assert.throws(invalidVariant.decodeBeast(OptionType, 'v1'), /Failed to decode Beast data/));
   });
 
   // =========================================================================
@@ -1835,7 +1835,7 @@ await describe("Blob", (test) => {
     const encoded = $.let(East.Blob.encodeBeast(value, 'v2'));
 
     // Try to decode integer as string
-    $(assert.throws(encoded.decodeBeast(StringType, 'v2')));
+    $(assert.throws(encoded.decodeBeast(StringType, 'v2'), /Failed to decode Beast2 data/));
   });
 
   test("Beast v2 - Error handling - invalid magic bytes", $ => {
@@ -1845,7 +1845,7 @@ await describe("Blob", (test) => {
       BlobType
     ));
 
-    $(assert.throws(invalidMagic.decodeBeast(IntegerType, 'v2')));
+    $(assert.throws(invalidMagic.decodeBeast(IntegerType, 'v2'), /Failed to decode Beast2 data/));
   });
 
   test("Beast v2 - Error handling - wrong version", $ => {
@@ -1855,7 +1855,7 @@ await describe("Blob", (test) => {
       BlobType
     ));
 
-    $(assert.throws(wrongVersion.decodeBeast(IntegerType, 'v2')));
+    $(assert.throws(wrongVersion.decodeBeast(IntegerType, 'v2'), /Failed to decode Beast2 data/));
   });
 
   test("Beast v2 - Error handling - invalid variant tag", $ => {
@@ -1877,7 +1877,7 @@ await describe("Blob", (test) => {
       BlobType
     ));
 
-    $(assert.throws(invalidVariant.decodeBeast(OptionType, 'v2')));
+    $(assert.throws(invalidVariant.decodeBeast(OptionType, 'v2'), /Failed to decode Beast2 data/));
   });
 
   // =========================================================================
@@ -1899,11 +1899,11 @@ await describe("Blob", (test) => {
 
     // Encode with v1, try to decode with v2 (should fail)
     const v1_encoded = $.let(East.Blob.encodeBeast(person, 'v1'));
-    $(assert.throws(v1_encoded.decodeBeast(PersonType, 'v2')));
+    $(assert.throws(v1_encoded.decodeBeast(PersonType, 'v2'), /Failed to decode Beast2 data/));
 
     // Encode with v2, try to decode with v1 (should fail)
     const v2_encoded = $.let(East.Blob.encodeBeast(person, 'v2'));
-    $(assert.throws(v2_encoded.decodeBeast(PersonType, 'v1')));
+    $(assert.throws(v2_encoded.decodeBeast(PersonType, 'v1'), /Failed to decode Beast data/));
   });
 
   // =========================================================================

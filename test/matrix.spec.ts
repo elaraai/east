@@ -83,12 +83,12 @@ await describe("Matrix", (test) => {
 
     test("Matrix bounds checking", $ => {
         const m = $.let(East.Matrix.zeros(2n, 3n));
-        $(assert.throws(m.get(-1n, 0n)))
-        $(assert.throws(m.get(0n, -1n)))
-        $(assert.throws(m.get(2n, 0n)))
-        $(assert.throws(m.get(0n, 3n)))
-        $(assert.throws(m.set(-1n, 0n, 0.0)))
-        $(assert.throws(m.set(0n, 3n, 0.0)))
+        $(assert.throws(m.get(-1n, 0n), /Matrix index .* out of bounds/))
+        $(assert.throws(m.get(0n, -1n), /Matrix index .* out of bounds/))
+        $(assert.throws(m.get(2n, 0n), /Matrix index .* out of bounds/))
+        $(assert.throws(m.get(0n, 3n), /Matrix index .* out of bounds/))
+        $(assert.throws(m.set(-1n, 0n, 0.0), /Matrix index .* out of bounds/))
+        $(assert.throws(m.set(0n, 3n, 0.0), /Matrix index .* out of bounds/))
     });
 
     assert.examples(test, {
@@ -181,10 +181,10 @@ await describe("Matrix", (test) => {
 
     test("Matrix row col bounds", $ => {
         const m = $.let(East.Matrix.zeros(2n, 3n));
-        $(assert.throws(m.getRow(-1n)))
-        $(assert.throws(m.getRow(2n)))
-        $(assert.throws(m.getCol(-1n)))
-        $(assert.throws(m.getCol(3n)))
+        $(assert.throws(m.getRow(-1n), /Matrix row .* out of bounds/))
+        $(assert.throws(m.getRow(2n), /Matrix row .* out of bounds/))
+        $(assert.throws(m.getCol(-1n), /Matrix column .* out of bounds/))
+        $(assert.throws(m.getCol(3n), /Matrix column .* out of bounds/))
     });
 
     test("Matrix transpose square", $ => {
