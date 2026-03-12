@@ -22,7 +22,8 @@ export { OutOfScopeException } from './ast_to_ir.js';
 export * from './type_of_type.js';
 export * from './types.js';
 export * from './fuzz.js';
-export { decodeBeast2For, encodeBeast2For, compileFunctionIR, compileAsyncFunctionIR, EAST_IR_SYMBOL } from './serialization/beast2.js';
+export { decodeBeast2For, encodeBeast2For, compileFunctionIR, compileAsyncFunctionIR, EAST_IR_SYMBOL, type Beast2DecodeOptions } from './serialization/beast2.js';
+export { type RuntimeContext } from './compile.js';
 // Patch system internals - value-level operations
 export { diffFor } from './patch/diff.js';
 export { applyFor } from './patch/apply.js';
