@@ -673,15 +673,13 @@ export function decodeBeast2ValueFor(type: EastTypeValue | EastType, typeCtx: Be
       if (options?.compileFunctionOverride) {
         const overrideFn = options.compileFunctionOverride(ir as FunctionIR, captureContext, platform);
         if (overrideFn !== null) {
-          // Wrap as async for AsyncFunction values
-          const asyncFn = async (...inputs: unknown[]) => overrideFn(...inputs);
-          Object.defineProperty(asyncFn, EAST_IR_SYMBOL, {
+          Object.defineProperty(overrideFn, EAST_IR_SYMBOL, {
             value: ir,
             writable: false,
             enumerable: false,
             configurable: false
           });
-          return [asyncFn, currentOffset];
+          return [overrideFn, currentOffset];
         }
         // overrideFn === null means "fall back to compile_internal for this function"
       }
