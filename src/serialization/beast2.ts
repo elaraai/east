@@ -68,6 +68,13 @@ export type Beast2DecodeContext = {
  */
 export type Beast2DecodeOptions = {
   platform?: PlatformFunction[];
+  /** If provided, used instead of compile_internal for function values.
+   *  Return null to fall back to compile_internal for that specific function. */
+  compileFunctionOverride?: (
+    ir: FunctionIR,
+    captureContext: RuntimeContext,
+    platform: PlatformFunction[]
+  ) => ((...args: unknown[]) => unknown) | null;
 };
 
 // =============================================================================
@@ -551,6 +558,21 @@ export function decodeBeast2ValueFor(type: EastTypeValue | EastType, typeCtx: Be
           : variant("value", captureValue);
       }
 
+      // Check for compileFunctionOverride before falling back to compile_internal
+      if (options?.compileFunctionOverride) {
+        const overrideFn = options.compileFunctionOverride(ir as FunctionIR, captureContext, platform);
+        if (overrideFn !== null) {
+          Object.defineProperty(overrideFn, EAST_IR_SYMBOL, {
+            value: ir,
+            writable: false,
+            enumerable: false,
+            configurable: false
+          });
+          return [overrideFn, currentOffset];
+        }
+        // overrideFn === null means "fall back to compile_internal for this function"
+      }
+
       // Build variable context from captures for analyzeIR
       const variableContext: Record<string, { type: EastTypeValue; mutable: boolean; definedBy: any; captured: boolean }> = {};
       for (const captureVar of ir.value.captures) {
@@ -645,6 +667,23 @@ export function decodeBeast2ValueFor(type: EastTypeValue | EastType, typeCtx: Be
         captureContext[name] = captureVar.value.mutable
           ? variant("boxed", captureValue)
           : variant("value", captureValue);
+      }
+
+      // Check for compileFunctionOverride before falling back to compile_internal
+      if (options?.compileFunctionOverride) {
+        const overrideFn = options.compileFunctionOverride(ir as FunctionIR, captureContext, platform);
+        if (overrideFn !== null) {
+          // Wrap as async for AsyncFunction values
+          const asyncFn = async (...inputs: unknown[]) => overrideFn(...inputs);
+          Object.defineProperty(asyncFn, EAST_IR_SYMBOL, {
+            value: ir,
+            writable: false,
+            enumerable: false,
+            configurable: false
+          });
+          return [asyncFn, currentOffset];
+        }
+        // overrideFn === null means "fall back to compile_internal for this function"
       }
 
       // Build variable context from captures for analyzeIR
