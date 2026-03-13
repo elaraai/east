@@ -8,10 +8,7 @@ import type { EastType, ValueTypeOf } from "../types.js";
 import { isVariant, variant } from "../containers/variant.js";
 import {
   BufferWriter,
-  readVarint,
-  readZigzag,
-  readFloat64LE,
-  readStringUtf8Varint,
+  BufferReader,
 } from "./binary-utils.js";
 import { printFor } from "./east.js";
 import { ref } from "../containers/ref.js";
@@ -20,7 +17,7 @@ import { EAST_IR_SYMBOL, EAST_CAPTURES_SYMBOL, ReturnException, compile_internal
 import { InternalError } from "../error.js";
 import { IRType, type FunctionIR, type AsyncFunctionIR } from "../ir.js";
 import type { PlatformFunction } from "../platform.js";
-import { analyzeIR } from "../analyze.js";
+import type { AnalyzedIR } from "../analyze.js";
 
 const printTypeValue = printFor(EastTypeValueType) as (type: EastTypeValue) => string;
 
@@ -58,6 +55,12 @@ export type Beast2DecodeTypeContext = ((buffer: Uint8Array, offset: number, ctx?
 export type Beast2DecodeContext = {
   refs: Map<number, any>;
 };
+
+/** Cursor-based decoder function type (zero-allocation). Reads from BufferReader and mutates offset in place. */
+type CursorDecoder = (reader: BufferReader, refs: Map<number, any>) => any;
+
+/** Stack of cursor-based decoders for recursive types */
+type CursorTypeContext = CursorDecoder[];
 
 /**
  * Options for decoding, allowing function compilation.
@@ -324,188 +327,173 @@ export function encodeBeast2ValueToBufferFor(type: EastTypeValue, typeCtx: Beast
   }
 }
 
-export function decodeBeast2ValueFor(type: EastTypeValue | EastType, typeCtx: Beast2DecodeTypeContext = [], options?: Beast2DecodeOptions): (buffer: Uint8Array, offset: number, ctx?: Beast2DecodeContext) => [any, number] {
-  // Convert EastType to EastTypeValue if necessary
+export function decodeBeast2ValueFor(type: EastTypeValue | EastType, _typeCtx: Beast2DecodeTypeContext = [], options?: Beast2DecodeOptions): (buffer: Uint8Array, offset: number, ctx?: Beast2DecodeContext) => [any, number] {
+  // Delegate to cursor-based decoder and wrap result in tuple for backward compatibility
+  const cursorDecoder = _decodeCursorFor(type, [], options);
+  return (buffer: Uint8Array, offset: number, ctx?: Beast2DecodeContext): [any, number] => {
+    const reader = new BufferReader(buffer, offset);
+    const refs = ctx?.refs ?? new Map<number, any>();
+    const value = cursorDecoder(reader, refs);
+    return [value, reader.offset];
+  };
+}
+
+// =============================================================================
+// Cursor-based decoder factory (zero-allocation hot path)
+// =============================================================================
+
+/**
+ * Build a cursor-based decoder for the given type. Instead of returning
+ * [value, offset] tuples, reads from a mutable BufferReader and returns
+ * just the value. This eliminates millions of tuple allocations for large
+ * deeply-nested types like UIComponentType.
+ */
+function _decodeCursorFor(type: EastTypeValue | EastType, typeCtx: CursorTypeContext = [], options?: Beast2DecodeOptions): CursorDecoder {
   if (!isVariant(type)) {
     type = toEastTypeValue(type);
   }
 
   if (type.type === "Never") {
-    return (_buffer: Uint8Array, _offset: number, _ctx?: Beast2DecodeContext) => { throw new Error(`Attempted to decode value of type .Never`)};
+    return () => { throw new Error(`Attempted to decode value of type .Never`); };
   } else if (type.type === "Null") {
-    return (_buffer: Uint8Array, offset: number, _ctx?: Beast2DecodeContext) => [null, offset];
+    return () => null;
   } else if (type.type === "Boolean") {
-    return (buffer: Uint8Array, offset: number, _ctx?: Beast2DecodeContext) => {
-      if (offset >= buffer.length) {
-        throw new Error(`Buffer underflow reading boolean at offset ${offset}`);
-      }
-      return [buffer[offset] !== 0, offset + 1];
-    };
+    return (reader: BufferReader) => reader.readBoolean();
   } else if (type.type === "Integer") {
-    return (buffer: Uint8Array, offset: number, _ctx?: Beast2DecodeContext) => readZigzag(buffer, offset);
+    return (reader: BufferReader) => reader.readZigzag();
   } else if (type.type === "Float") {
-    return (buffer: Uint8Array, offset: number, _ctx?: Beast2DecodeContext) => {
-      const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
-      const value = readFloat64LE(view, offset);
-      return [value, offset + 8];
-    };
+    return (reader: BufferReader) => reader.readFloat64LE();
   } else if (type.type === "String") {
-    return (buffer: Uint8Array, offset: number, _ctx?: Beast2DecodeContext) => readStringUtf8Varint(buffer, offset);
+    return (reader: BufferReader) => reader.readStringUtf8Varint();
   } else if (type.type === "DateTime") {
-    return (buffer: Uint8Array, offset: number, _ctx?: Beast2DecodeContext) => {
-      const [millis, newOffset] = readZigzag(buffer, offset);
-      return [new Date(Number(millis)), newOffset];
-    };
+    return (reader: BufferReader) => new Date(Number(reader.readZigzag()));
   } else if (type.type === "Blob") {
-    return (buffer: Uint8Array, offset: number, _ctx?: Beast2DecodeContext) => {
-      const [length, newOffset] = readVarint(buffer, offset);
-      if (newOffset + length > buffer.length) {
-        throw new Error(`Buffer underflow reading blob at offset ${offset}, length ${length}`);
-      }
-      const blob = buffer.slice(newOffset, newOffset + length);
-      return [blob, newOffset + length];
+    return (reader: BufferReader) => {
+      const length = reader.readVarint();
+      return reader.readBytes(length);
     };
   } else if (type.type === "Ref") {
-    let valueDecoder: (buffer: Uint8Array, offset: number, ctx?: Beast2DecodeContext) => [any, number];
-    const ret = (buffer: Uint8Array, offset: number, ctx: Beast2DecodeContext = { refs: new Map() }): [any, number] => {
-      const [refOrLength, newOffset] = readVarint(buffer, offset);
-      // Check if this is a backreference
+    let valueDecoder: CursorDecoder;
+    const ret: CursorDecoder = (reader: BufferReader, refs: Map<number, any>) => {
+      const startOffset = reader.offset;
+      const refOrLength = reader.readVarint();
       if (refOrLength > 0) {
-        const targetOffset = offset - refOrLength;
-        if (!ctx.refs.has(targetOffset)) {
-          throw new Error(`Undefined backreference at offset ${offset}, target ${targetOffset}`);
+        const targetOffset = startOffset - refOrLength;
+        if (!refs.has(targetOffset)) {
+          throw new Error(`Undefined backreference at offset ${startOffset}, target ${targetOffset}`);
         }
-        return [ctx.refs.get(targetOffset), newOffset];
+        return refs.get(targetOffset);
       }
-      // Inline ref
       const result: ref<any> = ref(undefined);
-      ctx.refs.set(newOffset, result);
-      const [value, nextOffset] = valueDecoder(buffer, newOffset, ctx);
-      result.value = value;
-      return [result, nextOffset];
+      refs.set(reader.offset, result);
+      result.value = valueDecoder(reader, refs);
+      return result;
     };
     typeCtx.push(ret);
-    valueDecoder = decodeBeast2ValueFor(type.value, typeCtx, options);
+    valueDecoder = _decodeCursorFor(type.value, typeCtx, options);
     typeCtx.pop();
     return ret;
   } else if (type.type === "Array") {
-    let valueDecoder: (buffer: Uint8Array, offset: number, ctx?: Beast2DecodeContext) => [any, number];
-    const ret = (buffer: Uint8Array, offset: number, ctx: Beast2DecodeContext = { refs: new Map() }): [any, number] => {
-      const [refOrLength, newOffset] = readVarint(buffer, offset);
-      // Check if this is a backreference
+    let valueDecoder: CursorDecoder;
+    const ret: CursorDecoder = (reader: BufferReader, refs: Map<number, any>) => {
+      const startOffset = reader.offset;
+      const refOrLength = reader.readVarint();
       if (refOrLength > 0) {
-        const targetOffset = offset - refOrLength;
-        if (!ctx.refs.has(targetOffset)) {
-          throw new Error(`Undefined backreference at offset ${offset}, target ${targetOffset}`);
+        const targetOffset = startOffset - refOrLength;
+        if (!refs.has(targetOffset)) {
+          throw new Error(`Undefined backreference at offset ${startOffset}, target ${targetOffset}`);
         }
-        return [ctx.refs.get(targetOffset), newOffset];
+        return refs.get(targetOffset);
       }
-      // Inline array
       const result: any[] = [];
-      ctx.refs.set(newOffset, result);
-      const [length, lengthOffset] = readVarint(buffer, newOffset);
-      let currentOffset = lengthOffset;
+      refs.set(reader.offset, result);
+      const length = reader.readVarint();
       for (let i = 0; i < length; i++) {
-        const [value, nextOffset] = valueDecoder(buffer, currentOffset, ctx);
-        result.push(value);
-        currentOffset = nextOffset;
+        result.push(valueDecoder(reader, refs));
       }
-      return [result, currentOffset];
+      return result;
     };
     typeCtx.push(ret);
-    valueDecoder = decodeBeast2ValueFor(type.value, typeCtx, options);
+    valueDecoder = _decodeCursorFor(type.value, typeCtx, options);
     typeCtx.pop();
     return ret;
   } else if (type.type === "Set") {
-    const keyDecoder = decodeBeast2ValueFor(type.value, typeCtx, options);
-    return (buffer: Uint8Array, offset: number, ctx: Beast2DecodeContext = { refs: new Map() }) => {
-      const [refOrLength, newOffset] = readVarint(buffer, offset);
-      // Check if this is a backreference
+    const keyDecoder = _decodeCursorFor(type.value, typeCtx, options);
+    return (reader: BufferReader, refs: Map<number, any>) => {
+      const startOffset = reader.offset;
+      const refOrLength = reader.readVarint();
       if (refOrLength > 0) {
-        const targetOffset = offset - refOrLength;
-        if (!ctx.refs.has(targetOffset)) {
-          throw new Error(`Undefined backreference at offset ${offset}, target ${targetOffset}`);
+        const targetOffset = startOffset - refOrLength;
+        if (!refs.has(targetOffset)) {
+          throw new Error(`Undefined backreference at offset ${startOffset}, target ${targetOffset}`);
         }
-        return [ctx.refs.get(targetOffset), newOffset];
+        return refs.get(targetOffset);
       }
-      // Inline set
       const result = new Set<any>();
-      ctx.refs.set(newOffset, result);
-      const [length, lengthOffset] = readVarint(buffer, newOffset);
-      let currentOffset = lengthOffset;
+      refs.set(reader.offset, result);
+      const length = reader.readVarint();
       for (let i = 0; i < length; i++) {
-        const [key, nextOffset] = keyDecoder(buffer, currentOffset, ctx);
-        result.add(key);
-        currentOffset = nextOffset;
+        result.add(keyDecoder(reader, refs));
       }
-      return [result, currentOffset];
+      return result;
     };
   } else if (type.type === "Dict") {
-    const keyDecoder = decodeBeast2ValueFor(type.value.key, typeCtx, options);
-    let valueDecoder: (buffer: Uint8Array, offset: number, ctx?: Beast2DecodeContext) => [any, number];
-    const ret = (buffer: Uint8Array, offset: number, ctx: Beast2DecodeContext = { refs: new Map() }): [any, number] => {
-      const [refOrLength, newOffset] = readVarint(buffer, offset);
-      // Check if this is a backreference
+    const keyDecoder = _decodeCursorFor(type.value.key, typeCtx, options);
+    let valueDecoder: CursorDecoder;
+    const ret: CursorDecoder = (reader: BufferReader, refs: Map<number, any>) => {
+      const startOffset = reader.offset;
+      const refOrLength = reader.readVarint();
       if (refOrLength > 0) {
-        const targetOffset = offset - refOrLength;
-        if (!ctx.refs.has(targetOffset)) {
-          throw new Error(`Undefined backreference at offset ${offset}, target ${targetOffset}`);
+        const targetOffset = startOffset - refOrLength;
+        if (!refs.has(targetOffset)) {
+          throw new Error(`Undefined backreference at offset ${startOffset}, target ${targetOffset}`);
         }
-        return [ctx.refs.get(targetOffset), newOffset];
+        return refs.get(targetOffset);
       }
-      // Inline dict
       const result = new Map<any, any>();
-      ctx.refs.set(newOffset, result);
-      const [length, lengthOffset] = readVarint(buffer, newOffset);
-      let currentOffset = lengthOffset;
+      refs.set(reader.offset, result);
+      const length = reader.readVarint();
       for (let i = 0; i < length; i++) {
-        const [key, keyOffset] = keyDecoder(buffer, currentOffset, ctx);
-        const [value, valueOffset] = valueDecoder(buffer, keyOffset, ctx);
+        const key = keyDecoder(reader, refs);
+        const value = valueDecoder(reader, refs);
         result.set(key, value);
-        currentOffset = valueOffset;
       }
-      return [result, currentOffset];
+      return result;
     };
     typeCtx.push(ret);
-    valueDecoder = decodeBeast2ValueFor(type.value.value, typeCtx, options);
+    valueDecoder = _decodeCursorFor(type.value.value, typeCtx, options);
     typeCtx.pop();
     return ret;
   } else if (type.type === "Struct") {
-    const fieldDecoders: [string, (buffer: Uint8Array, offset: number, ctx?: Beast2DecodeContext) => [any, number]][] = [];
-    const ret = (buffer: Uint8Array, offset: number, ctx: Beast2DecodeContext = { refs: new Map() }): [any, number] => {
-      // Decode struct fields
+    const fieldDecoders: [string, CursorDecoder][] = [];
+    const ret: CursorDecoder = (reader: BufferReader, refs: Map<number, any>) => {
       const result: Record<string, any> = {};
-      let currentOffset = offset;
       for (const [k, decoder] of fieldDecoders) {
-        const [value, nextOffset] = decoder(buffer, currentOffset, ctx);
-        result[k] = value;
-        currentOffset = nextOffset;
+        result[k] = decoder(reader, refs);
       }
-      return [result, currentOffset];
+      return result;
     };
     typeCtx.push(ret);
     for (const { name, type: fieldType } of type.value) {
-      fieldDecoders.push([name, decodeBeast2ValueFor(fieldType, typeCtx, options)]);
+      fieldDecoders.push([name, _decodeCursorFor(fieldType, typeCtx, options)]);
     }
     typeCtx.pop();
     return ret;
   } else if (type.type === "Variant") {
-    const caseDecoders: [string, (buffer: Uint8Array, offset: number, ctx?: Beast2DecodeContext) => [any, number]][] = [];
-    const ret = (buffer: Uint8Array, offset: number, ctx: Beast2DecodeContext = { refs: new Map() }): [any, number] => {
-      // Decode variant
-      const [tagIndex, tagOffset] = readVarint(buffer, offset);
+    const caseDecoders: [string, CursorDecoder][] = [];
+    const ret: CursorDecoder = (reader: BufferReader, refs: Map<number, any>) => {
+      const tagIndex = reader.readVarint();
       if (tagIndex >= caseDecoders.length) {
-        throw new Error(`Invalid variant tag ${tagIndex} at offset ${offset}`);
+        throw new Error(`Invalid variant tag ${tagIndex} at offset ${reader.offset}`);
       }
       const [caseName, caseDecoder] = caseDecoders[tagIndex]!;
       const v = variant(caseName, undefined as any);
-      const [value, finalOffset] = caseDecoder(buffer, tagOffset, ctx);
-      (v as any).value = value;
-      return [v, finalOffset];
+      (v as any).value = caseDecoder(reader, refs);
+      return v;
     };
     typeCtx.push(ret);
     for (const { name, type: caseType } of type.value) {
-      caseDecoders.push([name, decodeBeast2ValueFor(caseType, typeCtx, options)]);
+      caseDecoders.push([name, _decodeCursorFor(caseType, typeCtx, options)]);
     }
     typeCtx.pop();
     return ret;
@@ -516,27 +504,19 @@ export function decodeBeast2ValueFor(type: EastTypeValue | EastType, typeCtx: Be
     }
     return ret;
   } else if (type.type === "Function") {
-    // Convert platform to internal format
     const platform = options?.platform ?? [];
     const platformFns = Object.fromEntries(platform.map(fn => [fn.name, fn.fn]));
     const asyncPlatformFns = new Set(platform.filter(fn => fn.type === 'async').map(fn => fn.name));
+    const irCursorDecoder = _decodeCursorFor(IRTypeValue, [], options);
 
-    return (buffer: Uint8Array, offset: number, ctx: Beast2DecodeContext = { refs: new Map() }): [any, number] => {
-      // Decode the IR
-      const [ir, newOffset] = irDecoder(buffer, offset, ctx);
-      let currentOffset = newOffset;
+    return (reader: BufferReader, refs: Map<number, any>) => {
+      const ir = irCursorDecoder(reader, refs) as FunctionIR;
 
-      // Validate it's a FunctionIR
       if (ir.type !== "Function") {
-        throw new Error(
-          `Expected Function IR, got ${ir.type} at offset ${offset}`
-        );
+        throw new Error(`Expected Function IR, got ${ir.type} at offset ${reader.offset}`);
       }
 
-      // Decode capture count
-      const [captureCount, offsetAfterCount] = readVarint(buffer, currentOffset);
-      currentOffset = offsetAfterCount;
-
+      const captureCount = reader.readVarint();
       if (captureCount !== ir.value.captures.length) {
         throw new Error(
           `Capture count mismatch: IR has ${ir.value.captures.length} captures, ` +
@@ -544,51 +524,32 @@ export function decodeBeast2ValueFor(type: EastTypeValue | EastType, typeCtx: Be
         );
       }
 
-      // Decode capture values
       const captureContext: RuntimeContext = {};
       for (const captureVar of ir.value.captures) {
         const name = captureVar.value.name;
         const captureType = captureVar.value.type;
-
-        // Get decoder for this capture's type and decode the value
-        const captureDecoder = decodeBeast2ValueFor(captureType, typeCtx, options);
-        const [captureValue, nextOffset] = captureDecoder(buffer, currentOffset, ctx);
-        currentOffset = nextOffset;
-
-        // Wrap captures in appropriate variants
+        const captureDecoder = _decodeCursorFor(captureType, [], options);
+        const captureValue = captureDecoder(reader, refs);
         captureContext[name] = captureVar.value.mutable
           ? variant("boxed", captureValue)
           : variant("value", captureValue);
       }
 
-      // Build variable context from captures for analyzeIR
-      const variableContext: Record<string, { type: EastTypeValue; mutable: boolean; definedBy: any; captured: boolean }> = {};
-      for (const captureVar of ir.value.captures) {
-        variableContext[captureVar.value.name] = {
-          type: captureVar.value.type,
-          mutable: captureVar.value.mutable,
-          definedBy: captureVar,
-          captured: true  // Already captured from outer scope
-        };
-      }
-
-      // Build type context for compile_internal
       const typeContext: Record<string, EastTypeValue> = {};
       for (const captureVar of ir.value.captures) {
         typeContext[captureVar.value.name] = captureVar.value.type;
       }
 
-      // Analyze and compile the function with capture context
+      // Skip analyzeIR — the IR was already analyzed before serialization.
       let rawFn: any;
       try {
-        const analyzedIR = analyzeIR(ir, platform, variableContext);
+        const analyzedIR = { ...ir, value: { ...ir.value, isAsync: false } } as AnalyzedIR;
         const compiled = compile_internal(analyzedIR, typeContext, platformFns, asyncPlatformFns, platform, true, new Set());
         rawFn = compiled(captureContext);
       } catch (e: unknown) {
         throw new Error(`Failed to compile decoded function: ${(e as Error).message}`);
       }
 
-      // Wrap with ReturnException handler (same as EastIR.compile)
       const fn = (...inputs: any[]) => {
         try {
           return rawFn(...inputs);
@@ -601,7 +562,6 @@ export function decodeBeast2ValueFor(type: EastTypeValue | EastType, typeCtx: Be
         }
       };
 
-      // Attach IR to wrapper for re-serialization support
       Object.defineProperty(fn, EAST_IR_SYMBOL, {
         value: ir,
         writable: false,
@@ -609,30 +569,22 @@ export function decodeBeast2ValueFor(type: EastTypeValue | EastType, typeCtx: Be
         configurable: false
       });
 
-      return [fn, currentOffset];
+      return fn;
     };
   } else if (type.type === "AsyncFunction") {
-    // Convert platform to internal format
     const platform = options?.platform ?? [];
     const platformFns = Object.fromEntries(platform.map(fn => [fn.name, fn.fn]));
     const asyncPlatformFns = new Set(platform.filter(fn => fn.type === 'async').map(fn => fn.name));
+    const irCursorDecoder = _decodeCursorFor(IRTypeValue, [], options);
 
-    return (buffer: Uint8Array, offset: number, ctx: Beast2DecodeContext = { refs: new Map() }): [any, number] => {
-      // Decode the IR
-      const [ir, newOffset] = irDecoder(buffer, offset, ctx);
-      let currentOffset = newOffset;
+    return (reader: BufferReader, refs: Map<number, any>) => {
+      const ir = irCursorDecoder(reader, refs) as AsyncFunctionIR;
 
-      // Validate it's an AsyncFunctionIR
       if (ir.type !== "AsyncFunction") {
-        throw new Error(
-          `Expected AsyncFunction IR, got ${ir.type} at offset ${offset}`
-        );
+        throw new Error(`Expected AsyncFunction IR, got ${ir.type} at offset ${reader.offset}`);
       }
 
-      // Decode capture count
-      const [captureCount, offsetAfterCount] = readVarint(buffer, currentOffset);
-      currentOffset = offsetAfterCount;
-
+      const captureCount = reader.readVarint();
       if (captureCount !== ir.value.captures.length) {
         throw new Error(
           `Capture count mismatch: IR has ${ir.value.captures.length} captures, ` +
@@ -640,51 +592,32 @@ export function decodeBeast2ValueFor(type: EastTypeValue | EastType, typeCtx: Be
         );
       }
 
-      // Decode capture values
       const captureContext: RuntimeContext = {};
       for (const captureVar of ir.value.captures) {
         const name = captureVar.value.name;
         const captureType = captureVar.value.type;
-
-        // Get decoder for this capture's type and decode the value
-        const captureDecoder = decodeBeast2ValueFor(captureType, typeCtx, options);
-        const [captureValue, nextOffset] = captureDecoder(buffer, currentOffset, ctx);
-        currentOffset = nextOffset;
-
-        // Wrap captures in appropriate variants
+        const captureDecoder = _decodeCursorFor(captureType, [], options);
+        const captureValue = captureDecoder(reader, refs);
         captureContext[name] = captureVar.value.mutable
           ? variant("boxed", captureValue)
           : variant("value", captureValue);
       }
 
-      // Build variable context from captures for analyzeIR
-      const variableContext: Record<string, { type: EastTypeValue; mutable: boolean; definedBy: any; captured: boolean }> = {};
-      for (const captureVar of ir.value.captures) {
-        variableContext[captureVar.value.name] = {
-          type: captureVar.value.type,
-          mutable: captureVar.value.mutable,
-          definedBy: captureVar,
-          captured: true  // Already captured from outer scope
-        };
-      }
-
-      // Build type context for compile_internal
       const typeContext: Record<string, EastTypeValue> = {};
       for (const captureVar of ir.value.captures) {
         typeContext[captureVar.value.name] = captureVar.value.type;
       }
 
-      // Analyze and compile the function with capture context
+      // Skip analyzeIR — the IR was already analyzed before serialization.
       let rawFn: any;
       try {
-        const analyzedIR = analyzeIR(ir, platform, variableContext);
+        const analyzedIR = { ...ir, value: { ...ir.value, isAsync: true } } as AnalyzedIR;
         const compiled = compile_internal(analyzedIR, typeContext, platformFns, asyncPlatformFns, platform, true, new Set());
         rawFn = compiled(captureContext);
       } catch (e: unknown) {
         throw new Error(`Failed to compile decoded async function: ${(e as Error).message}`);
       }
 
-      // Wrap with ReturnException handler (same as AsyncEastIR.compile)
       const fn = async (...inputs: any[]) => {
         try {
           return await rawFn(...inputs);
@@ -697,7 +630,6 @@ export function decodeBeast2ValueFor(type: EastTypeValue | EastType, typeCtx: Be
         }
       };
 
-      // Attach IR to wrapper for re-serialization support
       Object.defineProperty(fn, EAST_IR_SYMBOL, {
         value: ir,
         writable: false,
@@ -705,53 +637,37 @@ export function decodeBeast2ValueFor(type: EastTypeValue | EastType, typeCtx: Be
         configurable: false
       });
 
-      return [fn, currentOffset];
+      return fn;
     };
   } else if (type.type === "Vector") {
     const bytesPerElement = _bytesPerElement(type.value);
-    return (buffer: Uint8Array, offset: number, _ctx?: Beast2DecodeContext): [any, number] => {
-      const [length, newOffset] = readVarint(buffer, offset);
+    return (reader: BufferReader) => {
+      const length = reader.readVarint();
       const byteLen = length * bytesPerElement;
-      if (newOffset + byteLen > buffer.length) {
-        throw new Error(`Buffer underflow reading vector at offset ${offset}, length ${length}`);
-      }
-      // Copy bytes to a new aligned buffer. Note: buffer.slice() on a Node.js
-      // Buffer creates a view (not a copy), so we use Uint8Array.from() to
-      // guarantee a fresh ArrayBuffer with byteOffset === 0.
-      const rawBytes = new Uint8Array(buffer.subarray(newOffset, newOffset + byteLen));
-      let typedArray: Float64Array | BigInt64Array | Uint8ClampedArray;
+      // Copy bytes to a new aligned buffer
+      const rawBytes = new Uint8Array(reader.readBytesView(byteLen));
       if (type.value.type === "Float") {
-        typedArray = new Float64Array(rawBytes.buffer, 0, length);
+        return new Float64Array(rawBytes.buffer, 0, length);
       } else if (type.value.type === "Integer") {
-        typedArray = new BigInt64Array(rawBytes.buffer, 0, length);
+        return new BigInt64Array(rawBytes.buffer, 0, length);
       } else {
-        typedArray = new Uint8ClampedArray(rawBytes.buffer, 0, length);
+        return new Uint8ClampedArray(rawBytes.buffer, 0, length);
       }
-      return [typedArray, newOffset + byteLen];
     };
   } else if (type.type === "Matrix") {
     const bytesPerElement = _bytesPerElement(type.value);
-    return (buffer: Uint8Array, offset: number, _ctx?: Beast2DecodeContext): [any, number] => {
-      const [rows, offsetAfterRows] = readVarint(buffer, offset);
-      const [cols, offsetAfterCols] = readVarint(buffer, offsetAfterRows);
-      const totalElements = rows * cols;
-      const byteLen = totalElements * bytesPerElement;
-      if (offsetAfterCols + byteLen > buffer.length) {
-        throw new Error(`Buffer underflow reading matrix at offset ${offset}, rows ${rows}, cols ${cols}`);
-      }
-      // Copy bytes to a new aligned buffer. Note: buffer.slice() on a Node.js
-      // Buffer creates a view (not a copy), so we use Uint8Array.from() to
-      // guarantee a fresh ArrayBuffer with byteOffset === 0.
-      const rawBytes = new Uint8Array(buffer.subarray(offsetAfterCols, offsetAfterCols + byteLen));
-      let typedArray: Float64Array | BigInt64Array | Uint8ClampedArray;
+    return (reader: BufferReader) => {
+      const rows = reader.readVarint();
+      const cols = reader.readVarint();
+      const byteLen = rows * cols * bytesPerElement;
+      const rawBytes = new Uint8Array(reader.readBytesView(byteLen));
       if (type.value.type === "Float") {
-        typedArray = new Float64Array(rawBytes.buffer, 0, totalElements);
+        return matrix(new Float64Array(rawBytes.buffer, 0, rows * cols), rows, cols);
       } else if (type.value.type === "Integer") {
-        typedArray = new BigInt64Array(rawBytes.buffer, 0, totalElements);
+        return matrix(new BigInt64Array(rawBytes.buffer, 0, rows * cols), rows, cols);
       } else {
-        typedArray = new Uint8ClampedArray(rawBytes.buffer, 0, totalElements);
+        return matrix(new Uint8ClampedArray(rawBytes.buffer, 0, rows * cols), rows, cols);
       }
-      return [matrix(typedArray, rows, cols), offsetAfterCols + byteLen];
     };
   } else {
     throw new Error(`Unhandled type ${(type satisfies never as EastTypeValue).type}`);
@@ -790,12 +706,11 @@ export function encodeBeast2ValueFor(type: EastTypeValue | EastType): (value: an
 // 0x01       - Version byte (currently 1)
 export const MAGIC_BYTES = new Uint8Array([0x89, 0x45, 0x61, 0x73, 0x74, 0x0D, 0x0A, 0x01]);
 const typeEncoder = encodeBeast2ValueToBufferFor(EastTypeValueType);
-const typeDecoder = decodeBeast2ValueFor(EastTypeValueType);
+const typeCursorDecoder = _decodeCursorFor(EastTypeValueType);
 
 // IR encoder/decoder for function serialization
 const IRTypeValue = toEastTypeValue(IRType);
 const irEncoder = encodeBeast2ValueToBufferFor(IRTypeValue);
-const irDecoder = decodeBeast2ValueFor(IRTypeValue);
 
 export function encodeBeast2For(type: EastTypeValue): (value: any) => Uint8Array
 export function encodeBeast2For<T extends EastType>(type: T): (value: ValueTypeOf<T>) => Uint8Array
@@ -836,19 +751,18 @@ export function decodeBeast2(data: Uint8Array): { type: EastTypeValue; value: an
     }
   }
 
-  // Decode type schema
-  let offset = MAGIC_BYTES.length;
-  const [type, typeEndOffset] = typeDecoder(data, offset);
-  if (type.type === "Set") console.log(type);
+  // Decode type schema and value using cursor-based decoders
+  const reader = new BufferReader(data, MAGIC_BYTES.length);
+  const refs = new Map<number, any>();
+  const type = typeCursorDecoder(reader, refs) as EastTypeValue;
 
   // Decode value
-  const valueDecoder = decodeBeast2ValueFor(type);
-  const ctx: Beast2DecodeContext = { refs: new Map() };
-  const [value, valueEndOffset] = valueDecoder(data, typeEndOffset, ctx);
+  const valueDecoder = _decodeCursorFor(type);
+  const value = valueDecoder(reader, refs);
 
   // Verify we consumed all data
-  if (valueEndOffset !== data.length) {
-    throw new Error(`Unexpected data after Beast value at offset ${valueEndOffset} (${data.length - valueEndOffset} bytes remaining)`);
+  if (reader.offset !== data.length) {
+    throw new Error(`Unexpected data after Beast value at offset ${reader.offset} (${data.length - reader.offset} bytes remaining)`);
   }
 
   return { type, value };
@@ -862,7 +776,7 @@ export function decodeBeast2For(type: EastTypeValue | EastType, options?: Beast2
       type = toEastTypeValue(type);
   }
 
-  const valueDecoder = decodeBeast2ValueFor(type as EastTypeValue, [], options);
+  const cursorDecoder = _decodeCursorFor(type as EastTypeValue, [], options);
   const skipTypeCheck = options?.skipTypeCheck ?? false;
 
   // Pre-encode the expected type header bytes for fast byte-level comparison.
@@ -887,28 +801,26 @@ export function decodeBeast2For(type: EastTypeValue | EastType, options?: Beast2
 
     if (!skipTypeCheck) {
       // Fast path: compare raw type header bytes instead of decode + structural equality.
-      // The same type always encodes to identical bytes, so byte comparison is equivalent
-      // to structural equality but avoids the cost of decoding the type header (~92KB for
-      // UIComponentType) and deep-comparing two large object graphs on every call.
       if (data.length < valueStartOffset) {
         throw new Error(`Data too short for type header: expected at least ${valueStartOffset} bytes, got ${data.length}`);
       }
       for (let i = 0; i < expectedTypeLen; i++) {
         if (data[MAGIC_BYTES.length + i] !== expectedTypeBytes[i]) {
-          // Fall back to full decode + structural comparison for a detailed error message
-          const [decodedType] = typeDecoder(data, MAGIC_BYTES.length);
+          const typeReader = new BufferReader(data, MAGIC_BYTES.length);
+          const decodedType = typeCursorDecoder(typeReader, new Map()) as EastTypeValue;
           throw new Error(`Type mismatch: expected ${printTypeValue(type as EastTypeValue)}, got ${printTypeValue(decodedType)}`);
         }
       }
     }
 
-    // Decode value
-    const ctx: Beast2DecodeContext = { refs: new Map() };
-    const [value, valueEndOffset] = valueDecoder(data, valueStartOffset, ctx);
+    // Decode value using cursor-based decoder
+    const reader = new BufferReader(data, valueStartOffset);
+    const refs = new Map<number, any>();
+    const value = cursorDecoder(reader, refs);
 
     // Verify we consumed all data
-    if (valueEndOffset !== data.length) {
-      throw new Error(`Unexpected data after Beast value at offset ${valueEndOffset} (${data.length - valueEndOffset} bytes remaining)`);
+    if (reader.offset !== data.length) {
+      throw new Error(`Unexpected data after Beast value at offset ${reader.offset} (${data.length - reader.offset} bytes remaining)`);
     }
 
     return value;
