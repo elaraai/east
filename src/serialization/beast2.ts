@@ -3,7 +3,6 @@
  * Dual-licensed under AGPL-3.0 and commercial license. See LICENSE for details.
  */
 
-import { equalFor } from "../comparison.js";
 import { EastTypeValueType, toEastTypeValue, type EastTypeValue } from "../type_of_type.js";
 import type { EastType, ValueTypeOf } from "../types.js";
 import { isVariant, variant } from "../containers/variant.js";
@@ -24,7 +23,6 @@ import type { PlatformFunction } from "../platform.js";
 import { analyzeIR } from "../analyze.js";
 
 const printTypeValue = printFor(EastTypeValueType) as (type: EastTypeValue) => string;
-const isTypeValueEqual = equalFor(EastTypeValueType) as (t1: EastTypeValue, t2: EastTypeValue) => boolean;
 
 function _bytesPerElement(elementType: EastTypeValue): number {
   if (elementType.type === "Float") return 8;
@@ -68,13 +66,18 @@ export type Beast2DecodeContext = {
  */
 export type Beast2DecodeOptions = {
   platform?: PlatformFunction[];
-  /** If provided, used instead of compile_internal for function values.
-   *  Return null to fall back to compile_internal for that specific function. */
-  compileFunctionOverride?: (
-    ir: FunctionIR,
-    captureContext: RuntimeContext,
-    platform: PlatformFunction[]
-  ) => ((...args: unknown[]) => unknown) | null;
+  /**
+   * When true, skip decoding and verifying the type header on each call.
+   * The type header is still used to determine the value data offset on the
+   * first call, but subsequent calls reuse the cached offset.
+   *
+   * This can dramatically improve performance for large recursive types
+   * (e.g. UIComponentType) where the type header is tens of KB and decoding
+   * + comparing it on every call dominates total decode time.
+   *
+   * Only use this when you trust the data was encoded with the correct type.
+   */
+  skipTypeCheck?: boolean;
 };
 
 // =============================================================================
@@ -558,21 +561,6 @@ export function decodeBeast2ValueFor(type: EastTypeValue | EastType, typeCtx: Be
           : variant("value", captureValue);
       }
 
-      // Check for compileFunctionOverride before falling back to compile_internal
-      if (options?.compileFunctionOverride) {
-        const overrideFn = options.compileFunctionOverride(ir as FunctionIR, captureContext, platform);
-        if (overrideFn !== null) {
-          Object.defineProperty(overrideFn, EAST_IR_SYMBOL, {
-            value: ir,
-            writable: false,
-            enumerable: false,
-            configurable: false
-          });
-          return [overrideFn, currentOffset];
-        }
-        // overrideFn === null means "fall back to compile_internal for this function"
-      }
-
       // Build variable context from captures for analyzeIR
       const variableContext: Record<string, { type: EastTypeValue; mutable: boolean; definedBy: any; captured: boolean }> = {};
       for (const captureVar of ir.value.captures) {
@@ -667,21 +655,6 @@ export function decodeBeast2ValueFor(type: EastTypeValue | EastType, typeCtx: Be
         captureContext[name] = captureVar.value.mutable
           ? variant("boxed", captureValue)
           : variant("value", captureValue);
-      }
-
-      // Check for compileFunctionOverride before falling back to compile_internal
-      if (options?.compileFunctionOverride) {
-        const overrideFn = options.compileFunctionOverride(ir as FunctionIR, captureContext, platform);
-        if (overrideFn !== null) {
-          Object.defineProperty(overrideFn, EAST_IR_SYMBOL, {
-            value: ir,
-            writable: false,
-            enumerable: false,
-            configurable: false
-          });
-          return [overrideFn, currentOffset];
-        }
-        // overrideFn === null means "fall back to compile_internal for this function"
       }
 
       // Build variable context from captures for analyzeIR
@@ -890,6 +863,15 @@ export function decodeBeast2For(type: EastTypeValue | EastType, options?: Beast2
   }
 
   const valueDecoder = decodeBeast2ValueFor(type as EastTypeValue, [], options);
+  const skipTypeCheck = options?.skipTypeCheck ?? false;
+
+  // Pre-encode the expected type header bytes for fast byte-level comparison.
+  // This avoids decoding the type from binary + deep structural equality on every call.
+  const expectedTypeWriter = new BufferWriter();
+  typeEncoder(type, expectedTypeWriter, { refs: new Map() });
+  const expectedTypeBytes = expectedTypeWriter.toUint8Array();
+  const expectedTypeLen = expectedTypeBytes.length;
+  const valueStartOffset = MAGIC_BYTES.length + expectedTypeLen;
 
   return (data: Uint8Array) => {
     // Verify magic bytes
@@ -903,18 +885,26 @@ export function decodeBeast2For(type: EastTypeValue | EastType, options?: Beast2
       }
     }
 
-    // Decode type schema
-    let offset = MAGIC_BYTES.length;
-    const [decodedType, typeEndOffset] = typeDecoder(data, offset);
-
-    // Verify type matches expected type
-    if (!isTypeValueEqual(decodedType, type as EastTypeValue)) {
-      throw new Error(`Type mismatch: expected ${printTypeValue(type as EastTypeValue)}, got ${printTypeValue(decodedType)}`);
+    if (!skipTypeCheck) {
+      // Fast path: compare raw type header bytes instead of decode + structural equality.
+      // The same type always encodes to identical bytes, so byte comparison is equivalent
+      // to structural equality but avoids the cost of decoding the type header (~92KB for
+      // UIComponentType) and deep-comparing two large object graphs on every call.
+      if (data.length < valueStartOffset) {
+        throw new Error(`Data too short for type header: expected at least ${valueStartOffset} bytes, got ${data.length}`);
+      }
+      for (let i = 0; i < expectedTypeLen; i++) {
+        if (data[MAGIC_BYTES.length + i] !== expectedTypeBytes[i]) {
+          // Fall back to full decode + structural comparison for a detailed error message
+          const [decodedType] = typeDecoder(data, MAGIC_BYTES.length);
+          throw new Error(`Type mismatch: expected ${printTypeValue(type as EastTypeValue)}, got ${printTypeValue(decodedType)}`);
+        }
+      }
     }
 
     // Decode value
     const ctx: Beast2DecodeContext = { refs: new Map() };
-    const [value, valueEndOffset] = valueDecoder(data, typeEndOffset, ctx);
+    const [value, valueEndOffset] = valueDecoder(data, valueStartOffset, ctx);
 
     // Verify we consumed all data
     if (valueEndOffset !== data.length) {

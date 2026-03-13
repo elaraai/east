@@ -27,10 +27,15 @@ import {
     variant,
     BlobType,
     OptionType,
+    RecursiveType,
+    FunctionType,
 } from "../../src/index.js";
 import { toJSONFor } from "../../src/serialization/json.js";
-import { encodeBeast2For } from "../../src/serialization/beast2.js";
+import { encodeBeast2For, decodeBeast2For, encodeBeast2ValueFor, decodeBeast2ValueFor } from "../../src/serialization/beast2.js";
+import { toEastTypeValue, EastTypeValueType } from "../../src/type_of_type.js";
+import { equalFor } from "../../src/comparison.js";
 import type { IR } from "../../src/ir.js";
+import type { EastType } from "../../src/types.js";
 
 // =============================================================================
 // Configuration
@@ -462,6 +467,297 @@ function createLargeOutputTest(size: number) {
 }
 
 // =============================================================================
+// Beast2 Decode Profiling - Deeply Nested Recursive Types
+// =============================================================================
+
+/**
+ * Create a deeply nested recursive variant type that simulates UIComponentType.
+ * UIComponentType has 60+ variant cases, each with struct types containing
+ * many optional fields, and container components hold ArrayType(node) children.
+ *
+ * This is the pattern that causes slow decodeBeast2For construction.
+ */
+function createUILikeRecursiveType(numCases: number, fieldsPerCase: number): EastType {
+    // Style type: struct with many optional string/float fields (simulates CSS props)
+    // Each component gets unique field names (like the real UIComponentType where
+    // BoxStyleType, StackStyleType, etc. all have different fields)
+    function makeStyleType(prefix: string): EastType {
+        const fields: Record<string, EastType> = {};
+        const commonProps = [
+            "color", "background", "padding", "margin", "border",
+            "width", "height", "display", "position", "overflow",
+        ];
+        // Common CSS-like fields
+        for (const prop of commonProps) {
+            fields[prop] = OptionType(StringType);
+        }
+        // Component-specific fields (unique per component, creating distinct type trees)
+        for (let i = 0; i < fieldsPerCase; i++) {
+            fields[`${prefix}_prop_${i}`] = OptionType(StringType);
+        }
+        return StructType(fields);
+    }
+
+    return RecursiveType(node => {
+        const cases: Record<string, EastType> = {};
+
+        // Text-like components (leaf nodes with string content + style)
+        const textLikeNames = [
+            "Text", "Code", "Heading", "Link", "Highlight", "Mark",
+            "CodeBlock", "Badge", "Tag", "Label", "Caption", "Subtitle",
+        ];
+        for (let i = 0; i < Math.min(numCases / 3, textLikeNames.length); i++) {
+            cases[textLikeNames[i]!] = StructType({
+                content: StringType,
+                style: OptionType(makeStyleType(textLikeNames[i]!)),
+            });
+        }
+
+        // Container components (hold children arrays + style)
+        const containerNames = [
+            "Box", "Flex", "Stack", "Grid", "Card", "Accordion",
+            "Dialog", "Drawer", "Popover", "HoverCard", "Tooltip", "Menu",
+            "Tabs", "Carousel", "Splitter", "ActionBar",
+        ];
+        for (let i = 0; i < Math.min(numCases / 3, containerNames.length); i++) {
+            cases[containerNames[i]!] = StructType({
+                children: ArrayType(node),
+                style: OptionType(makeStyleType(containerNames[i]!)),
+            });
+        }
+
+        // Form/interactive components (inputs with callbacks + style)
+        const formNames = [
+            "Button", "IconButton", "StringInput", "IntegerInput",
+            "FloatInput", "DateTimeInput", "Checkbox", "Switch",
+            "Select", "Combobox", "Slider", "FileUpload",
+            "Textarea", "TagsInput", "Progress", "Alert",
+        ];
+        for (let i = 0; i < Math.min(numCases / 3, formNames.length); i++) {
+            cases[formNames[i]!] = StructType({
+                label: OptionType(StringType),
+                value: OptionType(StringType),
+                disabled: OptionType(BooleanType),
+                style: OptionType(makeStyleType(formNames[i]!)),
+            });
+        }
+
+        // Chart components (complex struct types)
+        const chartNames = [
+            "AreaChart", "BarChart", "LineChart", "ScatterChart",
+            "PieChart", "RadarChart", "Sparkline", "BarList",
+        ];
+        for (let i = 0; i < Math.min(numCases / 6, chartNames.length); i++) {
+            cases[chartNames[i]!] = StructType({
+                data: ArrayType(StructType({ x: FloatType, y: FloatType, label: OptionType(StringType) })),
+                title: OptionType(StringType),
+                style: OptionType(makeStyleType(chartNames[i]!)),
+            });
+        }
+
+        // Reactive component (contains a render function returning node)
+        cases["ReactiveComponent"] = StructType({
+            render: FunctionType([], node),
+        });
+
+        // Stat component (with child node for value)
+        cases["Stat"] = StructType({
+            label: StringType,
+            value: node,
+            helpText: OptionType(StringType),
+            indicator: OptionType(StringType),
+        });
+
+        // DataList (array of key-value nodes)
+        cases["DataList"] = StructType({
+            items: ArrayType(StructType({ key: StringType, value: node })),
+            style: OptionType(makeStyleType("DataList")),
+        });
+
+        return VariantType(cases);
+    });
+}
+
+/**
+ * Build a style value matching the style struct for a given component.
+ * Must produce fields matching makeStyleType(componentName).
+ */
+function makeStyleValue(componentName: string, fieldsPerCase: number, overrides: Record<string, string> = {}): any {
+    const commonProps = [
+        "color", "background", "padding", "margin", "border",
+        "width", "height", "display", "position", "overflow",
+    ];
+    const result: Record<string, any> = {};
+    for (const prop of commonProps) {
+        result[prop] = prop in overrides ? variant("some", overrides[prop]!) : variant("none", null);
+    }
+    for (let i = 0; i < fieldsPerCase; i++) {
+        result[`${componentName}_prop_${i}`] = variant("none", null);
+    }
+    return result;
+}
+
+/**
+ * Create sample data for the UI-like recursive type.
+ * Builds a tree of components with realistic nesting depth.
+ * Only uses "Text" (leaf) and "Stack" (container) which are always present.
+ */
+function createSampleUIData(depth: number, fieldsPerCase: number): any {
+    if (depth <= 0) {
+        return variant("Text", {
+            content: "leaf text",
+            style: variant("none", null),
+        });
+    }
+
+    // Create a Stack with mixed children
+    const children: any[] = [];
+
+    // Add a Text leaf
+    children.push(variant("Text", {
+        content: `level ${depth}`,
+        style: variant("some", makeStyleValue("Text", fieldsPerCase, {
+            color: "gray.800", padding: "2",
+        })),
+    }));
+
+    // Add another Text leaf
+    children.push(variant("Text", {
+        content: "description text",
+        style: variant("some", makeStyleValue("Text", fieldsPerCase, {
+            color: "gray.500",
+        })),
+    }));
+
+    // Nested container
+    children.push(createSampleUIData(depth - 1, fieldsPerCase));
+
+    return variant("Stack", {
+        children,
+        style: variant("some", makeStyleValue("Stack", fieldsPerCase, {
+            padding: "4",
+        })),
+    });
+}
+
+/**
+ * Profile Beast2 encode/decode for deeply nested recursive types.
+ */
+function profileBeast2RecursiveType() {
+    console.log("\n" + "=".repeat(60));
+    console.log(" Beast2 Decode Profiling - Recursive Types");
+    console.log("=".repeat(60));
+
+    const configs = [
+        { label: "small (12 cases, 5 fields/case)", numCases: 12, fieldsPerCase: 5, depth: 3 },
+        { label: "medium (24 cases, 15 fields/case)", numCases: 24, fieldsPerCase: 15, depth: 5 },
+        { label: "large (48 cases, 20 fields/case)", numCases: 48, fieldsPerCase: 20, depth: 5 },
+        { label: "ui-like (60 cases, 25 fields/case)", numCases: 60, fieldsPerCase: 25, depth: 8 },
+        { label: "stress (60 cases, 40 fields/case)", numCases: 60, fieldsPerCase: 40, depth: 8 },
+    ];
+
+    for (const cfg of configs) {
+        console.log(`\n--- ${cfg.label} ---`);
+
+        // Create the type
+        const t0 = performance.now();
+        const type = createUILikeRecursiveType(cfg.numCases, cfg.fieldsPerCase);
+        const t1 = performance.now();
+        console.log(`  Type creation: ${(t1 - t0).toFixed(1)}ms`);
+
+        // Convert to EastTypeValue (needed for beast2)
+        const t2 = performance.now();
+        const typeValue = toEastTypeValue(type);
+        const t3 = performance.now();
+        console.log(`  toEastTypeValue: ${(t3 - t2).toFixed(1)}ms`);
+
+        // Create sample data
+        const data = createSampleUIData(cfg.depth, cfg.fieldsPerCase);
+
+        // Time encoder construction
+        const t4 = performance.now();
+        const encode = encodeBeast2For(type);
+        const t5 = performance.now();
+        console.log(`  Encoder construction (encodeBeast2For): ${(t5 - t4).toFixed(1)}ms`);
+
+        // Time encoding
+        const t6 = performance.now();
+        const encoded = encode(data);
+        const t7 = performance.now();
+        console.log(`  Encoding: ${(t7 - t6).toFixed(1)}ms (${encoded.length} bytes)`);
+
+        // Time decoder construction
+        const t8 = performance.now();
+        const decode = decodeBeast2For(type);
+        const t9 = performance.now();
+        console.log(`  Decoder construction: ${(t9 - t8).toFixed(1)}ms`);
+
+        // Measure type header size in the encoded beast2 data
+        const typeHeaderEncoder = encodeBeast2ValueFor(EastTypeValueType);
+        const typeHeaderBytes = typeHeaderEncoder(typeValue);
+        console.log(`  Type header in beast2: ${(typeHeaderBytes.length / 1024).toFixed(1)}KB`);
+        console.log(`  Value data in beast2: ${((encoded.length - typeHeaderBytes.length - 8) / 1024).toFixed(1)}KB`);
+
+        // Per-call breakdown: type header decode + equality check + value decode
+        // These happen on EVERY call to the function returned by decodeBeast2For
+        const typeDecoder = decodeBeast2ValueFor(EastTypeValueType);
+        const isEqual = equalFor(EastTypeValueType) as (a: any, b: any) => boolean;
+        const valueDecoder = decodeBeast2ValueFor(typeValue);
+
+        // Warmup
+        for (let i = 0; i < 5; i++) decode(encoded);
+
+        const N = 100;
+        let ta: number, tb: number;
+
+        // Type header decode (happens every call)
+        ta = performance.now();
+        let typeEndOff = 0;
+        for (let i = 0; i < N; i++) {
+            const [, off] = typeDecoder(encoded, 8);
+            typeEndOff = off;
+        }
+        tb = performance.now();
+        const headerMs = (tb - ta) / N;
+
+        // Type equality check (happens every call)
+        const [decodedTV] = typeDecoder(encoded, 8);
+        ta = performance.now();
+        for (let i = 0; i < N; i++) isEqual(decodedTV, typeValue);
+        tb = performance.now();
+        const eqMs = (tb - ta) / N;
+
+        // Value decode only
+        ta = performance.now();
+        let decoded: any;
+        for (let i = 0; i < N; i++) decoded = valueDecoder(encoded, typeEndOff)[0];
+        tb = performance.now();
+        const valMs = (tb - ta) / N;
+
+        // Full decode
+        ta = performance.now();
+        for (let i = 0; i < N; i++) decoded = decode(encoded);
+        tb = performance.now();
+        const fullMs = (tb - ta) / N;
+
+        console.log(`  --- Per-call breakdown (avg of ${N}) ---`);
+        console.log(`  Type header decode: ${headerMs.toFixed(3)}ms (${(headerMs / fullMs * 100).toFixed(0)}%)`);
+        console.log(`  Type equality check: ${eqMs.toFixed(3)}ms (${(eqMs / fullMs * 100).toFixed(0)}%)`);
+        console.log(`  Value decode:        ${valMs.toFixed(3)}ms (${(valMs / fullMs * 100).toFixed(0)}%)`);
+        console.log(`  Full decode:         ${fullMs.toFixed(3)}ms`);
+        console.log(`  >>> OVERHEAD (header+eq): ${(headerMs + eqMs).toFixed(3)}ms (${((headerMs + eqMs) / fullMs * 100).toFixed(0)}%)`);
+
+        // Verify round-trip
+        const reEncoded = encode(decoded);
+        const match = encoded.length === reEncoded.length &&
+            encoded.every((b: number, i: number) => b === reEncoded[i]);
+        console.log(`  Round-trip match: ${match}`);
+    }
+
+    console.log("\n" + "=".repeat(60));
+}
+
+// =============================================================================
 // Main
 // =============================================================================
 
@@ -513,6 +809,13 @@ function parseArgs(): ProfileConfig {
 
 async function main() {
     const config = parseArgs();
+
+    // Run beast2 decode profiling for recursive types
+    if (process.argv.includes("--beast2-profile")) {
+        profileBeast2RecursiveType();
+        return;
+    }
+
     console.log("=".repeat(60));
     console.log(" East Profile IR Generator");
     console.log("=".repeat(60));
