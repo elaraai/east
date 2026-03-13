@@ -319,7 +319,7 @@ export const datetimeToEpochMilliseconds = example({
 export const datetimeFromEpochMilliseconds = example({
     keywords: ["datetime", "DateTimeType", "fromEpochMilliseconds", "epoch", "construct"],
     description: "Create a datetime from epoch milliseconds",
-    fn: East.function([], DateTimeType, ($) => {
+    fn: East.function([], DateTimeType, (_$) => {
         return East.DateTime.fromEpochMilliseconds(1710498645123n);
     }),
     inputs: [],
@@ -329,7 +329,7 @@ export const datetimeFromEpochMilliseconds = example({
 export const datetimeFromComponents = example({
     keywords: ["datetime", "DateTimeType", "fromComponents", "construct", "year", "month", "day"],
     description: "Create a datetime from year/month/day/hour/minute/second/ms components",
-    fn: East.function([], DateTimeType, ($) => {
+    fn: East.function([], DateTimeType, (_$) => {
         return East.DateTime.fromComponents(2024n, 3n, 15n, 10n, 30n, 45n, 123n);
     }),
     inputs: [],
@@ -676,7 +676,7 @@ export const datetimePrintFormatted = example({
 export const datetimeParseFormatted = example({
     keywords: ["datetime", "DateTimeType", "parseFormatted", "parse", "string", "construct"],
     description: "Parse a formatted string into a datetime",
-    fn: East.function([], DateTimeType, ($) => {
+    fn: East.function([], DateTimeType, (_$) => {
         return East.DateTime.parseFormatted("2025-01-15 14:30:45", "YYYY-MM-DD HH:mm:ss");
     }),
     inputs: [],

@@ -310,7 +310,7 @@ export const floatToInteger = example({
 export const floatApproxEqual = example({
     keywords: ["float", "FloatType", "approxEqual", "approximate", "tolerance"],
     description: "Check if two floats are approximately equal within a tolerance",
-    fn: East.function([], BooleanType, ($) => {
+    fn: East.function([], BooleanType, (_$) => {
         return East.Float.approxEqual(1.0, 1.0001, 0.001);
     }),
     inputs: [],
@@ -324,7 +324,7 @@ export const floatApproxEqual = example({
 export const floatRoundFloor = example({
     keywords: ["float", "FloatType", "roundFloor", "floor", "rounding"],
     description: "Round a float down to the nearest integer (floor)",
-    fn: East.function([], IntegerType, ($) => {
+    fn: East.function([], IntegerType, (_$) => {
         return East.Float.roundFloor(3.7);
     }),
     inputs: [],
@@ -334,7 +334,7 @@ export const floatRoundFloor = example({
 export const floatRoundCeil = example({
     keywords: ["float", "FloatType", "roundCeil", "ceiling", "rounding"],
     description: "Round a float up to the nearest integer (ceiling)",
-    fn: East.function([], IntegerType, ($) => {
+    fn: East.function([], IntegerType, (_$) => {
         return East.Float.roundCeil(3.2);
     }),
     inputs: [],
@@ -344,7 +344,7 @@ export const floatRoundCeil = example({
 export const floatRoundHalf = example({
     keywords: ["float", "FloatType", "roundHalf", "round", "rounding"],
     description: "Round a float to the nearest integer (half rounds away from zero)",
-    fn: East.function([], IntegerType, ($) => {
+    fn: East.function([], IntegerType, (_$) => {
         return East.Float.roundHalf(3.5);
     }),
     inputs: [],
@@ -354,7 +354,7 @@ export const floatRoundHalf = example({
 export const floatRoundTrunc = example({
     keywords: ["float", "FloatType", "roundTrunc", "truncate", "rounding"],
     description: "Truncate a float toward zero to the nearest integer",
-    fn: East.function([], IntegerType, ($) => {
+    fn: East.function([], IntegerType, (_$) => {
         return East.Float.roundTrunc(-3.7);
     }),
     inputs: [],
@@ -368,7 +368,7 @@ export const floatRoundTrunc = example({
 export const floatRoundNearest = example({
     keywords: ["float", "FloatType", "roundNearest", "round", "step"],
     description: "Round a float to the nearest multiple of a step",
-    fn: East.function([], FloatType, ($) => {
+    fn: East.function([], FloatType, (_$) => {
         return East.Float.roundNearest(12.0, 5.0);
     }),
     inputs: [],
@@ -378,7 +378,7 @@ export const floatRoundNearest = example({
 export const floatRoundUp = example({
     keywords: ["float", "FloatType", "roundUp", "ceiling", "step"],
     description: "Round a float up to the next multiple of a step",
-    fn: East.function([], FloatType, ($) => {
+    fn: East.function([], FloatType, (_$) => {
         return East.Float.roundUp(12.0, 5.0);
     }),
     inputs: [],
@@ -388,7 +388,7 @@ export const floatRoundUp = example({
 export const floatRoundDown = example({
     keywords: ["float", "FloatType", "roundDown", "floor", "step"],
     description: "Round a float down to the previous multiple of a step",
-    fn: East.function([], FloatType, ($) => {
+    fn: East.function([], FloatType, (_$) => {
         return East.Float.roundDown(12.0, 5.0);
     }),
     inputs: [],
@@ -398,7 +398,7 @@ export const floatRoundDown = example({
 export const floatRoundTruncate = example({
     keywords: ["float", "FloatType", "roundTruncate", "truncate", "step"],
     description: "Truncate a float toward zero to the nearest multiple of a step",
-    fn: East.function([], FloatType, ($) => {
+    fn: East.function([], FloatType, (_$) => {
         return East.Float.roundTruncate(-12.0, 5.0);
     }),
     inputs: [],
@@ -408,7 +408,7 @@ export const floatRoundTruncate = example({
 export const floatRoundToDecimals = example({
     keywords: ["float", "FloatType", "roundToDecimals", "decimals", "precision"],
     description: "Round a float to a specific number of decimal places",
-    fn: East.function([], FloatType, ($) => {
+    fn: East.function([], FloatType, (_$) => {
         return East.Float.roundToDecimals(3.14159, 2n);
     }),
     inputs: [],
@@ -422,7 +422,7 @@ export const floatRoundToDecimals = example({
 export const floatPrintCommaSeperated = example({
     keywords: ["float", "FloatType", "printCommaSeperated", "format", "comma"],
     description: "Format a float with comma separators and fixed decimals",
-    fn: East.function([], StringType, ($) => {
+    fn: East.function([], StringType, (_$) => {
         return East.Float.printCommaSeperated(1234.56, 2n);
     }),
     inputs: [],
@@ -432,7 +432,7 @@ export const floatPrintCommaSeperated = example({
 export const floatPrintCurrency = example({
     keywords: ["float", "FloatType", "printCurrency", "format", "dollar"],
     description: "Format a float as a currency string",
-    fn: East.function([], StringType, ($) => {
+    fn: East.function([], StringType, (_$) => {
         return East.Float.printCurrency(1234.56);
     }),
     inputs: [],
@@ -442,7 +442,7 @@ export const floatPrintCurrency = example({
 export const floatPrintFixed = example({
     keywords: ["float", "FloatType", "printFixed", "format", "decimals"],
     description: "Format a float with a fixed number of decimal places",
-    fn: East.function([], StringType, ($) => {
+    fn: East.function([], StringType, (_$) => {
         return East.Float.printFixed(3.14159, 2n);
     }),
     inputs: [],
@@ -452,7 +452,7 @@ export const floatPrintFixed = example({
 export const floatPrintCompact = example({
     keywords: ["float", "FloatType", "printCompact", "format", "abbreviation"],
     description: "Format a float in compact notation (K, M, B)",
-    fn: East.function([], StringType, ($) => {
+    fn: East.function([], StringType, (_$) => {
         return East.Float.printCompact(1500000.0);
     }),
     inputs: [],
@@ -462,7 +462,7 @@ export const floatPrintCompact = example({
 export const floatPrintPercentage = example({
     keywords: ["float", "FloatType", "printPercentage", "format", "percent"],
     description: "Format a float as a percentage string",
-    fn: East.function([], StringType, ($) => {
+    fn: East.function([], StringType, (_$) => {
         return East.Float.printPercentage(0.1234, 2n);
     }),
     inputs: [],

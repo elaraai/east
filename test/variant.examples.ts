@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Elara AI Pty Ltd
  * Dual-licensed under AGPL-3.0 and commercial license. See LICENSE for details.
  */
-import { East, Expr, IntegerType, NullType, OptionType, VariantType, BooleanType, StringType, variant, example } from "@elaraai/east";
+import { East, Expr, IntegerType, OptionType, BooleanType, StringType, variant, example } from "@elaraai/east";
 
 // ---------------------------------------------------------------------------
 // Variant Creation
@@ -11,7 +11,7 @@ import { East, Expr, IntegerType, NullType, OptionType, VariantType, BooleanType
 export const variantCreate = example({
     keywords: ["variant", "VariantType", "ifElse", "create", "option"],
     description: "Create a variant value via conditional branching",
-    fn: East.function([], OptionType(IntegerType), ($) => {
+    fn: East.function([], OptionType(IntegerType), () => {
         return East.value(true).ifElse(_$ => variant("some", 42n), _$ => variant("none", null));
     }),
     inputs: [],

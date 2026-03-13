@@ -350,7 +350,7 @@ export const integerPrintPercentage = example({
 export const integerPrintCurrency = example({
     keywords: ["integer", "IntegerType", "printCurrency", "currency", "dollar", "money"],
     description: "Print an integer as a currency value",
-    fn: East.function([], StringType, ($) => {
+    fn: East.function([], StringType, () => {
         return East.Integer.printCurrency(1234n);
     }),
     inputs: [],
