@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Elara AI Pty Ltd
  * Dual-licensed under AGPL-3.0 and commercial license. See LICENSE for details.
  */
-import { East, Expr, ArrayType, IntegerType, FloatType, StringType, BooleanType, some, none, SetType, DictType, StructType, NullType, OptionType, example } from "@elaraai/east";
+import { East, Expr, ArrayType, IntegerType, FloatType, StringType, BooleanType, some, none, SetType, DictType, StructType, example } from "@elaraai/east";
 import type { option } from "@elaraai/east";
 
 // ---------------------------------------------------------------------------
@@ -242,7 +242,7 @@ export const arrayIsSorted = example({
 export const arrayGenerate = example({
     keywords: ["array", "ArrayType", "generate", "create", "East.Array"],
     description: "Generate an array of N elements using a builder function",
-    fn: East.function([], ArrayType(IntegerType), ($) => {
+    fn: East.function([], ArrayType(IntegerType), (_$) => {
         return East.Array.generate(6n, IntegerType, ($, i) => i.add(1n));
     }),
     inputs: [],
@@ -252,7 +252,7 @@ export const arrayGenerate = example({
 export const arrayRange = example({
     keywords: ["array", "ArrayType", "range", "East.Array"],
     description: "Create an array with a range of integers",
-    fn: East.function([], ArrayType(IntegerType), ($) => {
+    fn: East.function([], ArrayType(IntegerType), (_$) => {
         return East.Array.range(0n, 6n);
     }),
     inputs: [],
@@ -262,7 +262,7 @@ export const arrayRange = example({
 export const arrayRangeWithStep = example({
     keywords: ["array", "ArrayType", "range", "step", "East.Array"],
     description: "Create an array with a range of integers with a step",
-    fn: East.function([], ArrayType(IntegerType), ($) => {
+    fn: East.function([], ArrayType(IntegerType), (_$) => {
         return East.Array.range(0n, 6n, 2n);
     }),
     inputs: [],
@@ -272,7 +272,7 @@ export const arrayRangeWithStep = example({
 export const arrayLinspace = example({
     keywords: ["array", "ArrayType", "linspace", "East.Array", "float"],
     description: "Create equally-spaced float values between start and stop",
-    fn: East.function([], ArrayType(FloatType), ($) => {
+    fn: East.function([], ArrayType(FloatType), (_$) => {
         return East.Array.linspace(0.0, 1.0, 5n);
     }),
     inputs: [],

@@ -35,7 +35,7 @@ export const dictHas = example({
 export const dictGenerate = example({
     keywords: ["dict", "DictType", "generate", "create", "build"],
     description: "Generate a dict from a count with key and value functions",
-    fn: East.function([], DictType(IntegerType, StringType), ($) => {
+    fn: East.function([], DictType(IntegerType, StringType), (_$) => {
         return East.Dict.generate(3n, IntegerType, StringType, (_$, i) => i.add(1n), (_$, i) => East.print(i));
     }),
     inputs: [],

@@ -231,6 +231,157 @@ export class BufferWriter {
 }
 
 // =============================================================================
+// BufferReader - Mutable cursor for zero-allocation decoding
+// =============================================================================
+
+/**
+ * Mutable cursor over a Uint8Array for high-performance decoding.
+ * Eliminates per-call [value, offset] tuple allocations by maintaining
+ * offset as mutable state. Also provides Number-based varint reading
+ * that avoids BigInt overhead for common small values.
+ */
+export class BufferReader {
+  buffer: Uint8Array;
+  view: DataView;
+  offset: number;
+
+  constructor(buffer: Uint8Array, offset: number = 0) {
+    this.buffer = buffer;
+    this.view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+    this.offset = offset;
+  }
+
+  /** Read unsigned LEB128 varint as Number. Uses Number math for speed. */
+  readVarint(): number {
+    let result = 0;
+    let shift = 0;
+    const buf = this.buffer;
+    let off = this.offset;
+
+    while (true) {
+      if (off >= buf.length) {
+        throw new Error(`Buffer underflow reading varint at offset ${off}`);
+      }
+
+      const byte = buf[off++]!;
+      // Use bitwise OR for values up to 28 bits (4 varint bytes)
+      // For larger values, switch to multiplication to avoid 32-bit truncation
+      if (shift < 28) {
+        result |= (byte & 0x7F) << shift;
+      } else {
+        result += (byte & 0x7F) * (2 ** shift);
+      }
+
+      if ((byte & 0x80) === 0) {
+        break;
+      }
+
+      shift += 7;
+      if (shift >= 64) {
+        throw new Error(`Varint too long at offset ${off - 1}`);
+      }
+    }
+
+    this.offset = off;
+    return result;
+  }
+
+  /** Read zigzag-encoded signed varint as bigint. */
+  readZigzag(): bigint {
+    let result = 0n;
+    let shift = 0n;
+    const buf = this.buffer;
+    let off = this.offset;
+
+    while (true) {
+      if (off >= buf.length) {
+        throw new Error(`Buffer underflow reading zigzag at offset ${off}`);
+      }
+
+      const byte = buf[off++]!;
+      result |= BigInt(byte & 0x7F) << shift;
+
+      if ((byte & 0x80) === 0) {
+        break;
+      }
+
+      shift += 7n;
+      if (shift >= 64n) {
+        throw new Error(`Zigzag varint too long at offset ${off - 1}`);
+      }
+    }
+
+    this.offset = off;
+    return (result >> 1n) ^ -(result & 1n);
+  }
+
+  /** Read little-endian float64 with NaN validation. */
+  readFloat64LE(): number {
+    const off = this.offset;
+    if (off + 8 > this.buffer.length) {
+      throw new Error(`Buffer underflow reading float64 at offset ${off}`);
+    }
+
+    const bits = this.view.getBigUint64(off, true);
+
+    // Check for non-canonical NaN
+    if ((bits & 0x7FF0000000000000n) === 0x7FF0000000000000n &&
+        (bits & 0x000FFFFFFFFFFFFFn) !== 0n) {
+      if (bits !== 0x7FF8000000000000n && bits !== 0xFFF8000000000000n) {
+        throw new Error(`Non-canonical NaN at offset ${off}: 0x${bits.toString(16)}`);
+      }
+    }
+
+    this.offset = off + 8;
+    return this.view.getFloat64(off, true);
+  }
+
+  /** Read varint-prefixed UTF-8 string. */
+  readStringUtf8Varint(): string {
+    const length = this.readVarint();
+    const off = this.offset;
+
+    if (off + length > this.buffer.length) {
+      throw new Error(`Buffer underflow reading string at offset ${off}, length ${length}`);
+    }
+
+    const str = utf8Decode(this.buffer, off, length);
+    this.offset = off + length;
+    return str;
+  }
+
+  /** Read a single byte as boolean. */
+  readBoolean(): boolean {
+    if (this.offset >= this.buffer.length) {
+      throw new Error(`Buffer underflow reading boolean at offset ${this.offset}`);
+    }
+    return this.buffer[this.offset++] !== 0;
+  }
+
+  /** Read raw bytes of given length (returns a slice). */
+  readBytes(length: number): Uint8Array {
+    const off = this.offset;
+    if (off + length > this.buffer.length) {
+      throw new Error(`Buffer underflow reading bytes at offset ${off}, length ${length}`);
+    }
+    const result = this.buffer.slice(off, off + length);
+    this.offset = off + length;
+    return result;
+  }
+
+  /** Read raw bytes as a subarray (no copy). */
+  readBytesView(length: number): Uint8Array {
+    const off = this.offset;
+    if (off + length > this.buffer.length) {
+      throw new Error(`Buffer underflow reading bytes at offset ${off}, length ${length}`);
+    }
+    const result = this.buffer.subarray(off, off + length);
+    this.offset = off + length;
+    return result;
+  }
+}
+
+// =============================================================================
 // Stateless read functions
 // =============================================================================
 

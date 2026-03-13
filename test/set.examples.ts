@@ -2,8 +2,7 @@
  * Copyright (c) 2025 Elara AI Pty Ltd
  * Dual-licensed under AGPL-3.0 and commercial license. See LICENSE for details.
  */
-import { East, Expr, IntegerType, FloatType, SetType, StringType, BooleanType, DictType, some, none, example } from "@elaraai/east";
-import type { option } from "@elaraai/east";
+import { East, IntegerType, FloatType, SetType, StringType, BooleanType, DictType, some, none, example } from "@elaraai/east";
 
 // ---------------------------------------------------------------------------
 // Set Creation and Basic Ops
@@ -34,7 +33,7 @@ export const setHas = example({
 export const setGenerate = example({
     keywords: ["set", "SetType", "generate", "create", "build"],
     description: "Generate a set from a count and a mapping function",
-    fn: East.function([], SetType(IntegerType), ($) => {
+    fn: East.function([], SetType(IntegerType), () => {
         return East.Set.generate(5n, IntegerType, (_$, i) => i.add(1n));
     }),
     inputs: [],

@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Elara AI Pty Ltd
  * Dual-licensed under AGPL-3.0 and commercial license. See LICENSE for details.
  */
-import { East, ArrayType, FloatType, IntegerType, VectorType, example } from "@elaraai/east";
+import { East, ArrayType, FloatType, IntegerType, example } from "@elaraai/east";
 
 // ---------------------------------------------------------------------------
 // Vector Creation
