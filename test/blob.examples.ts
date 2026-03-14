@@ -142,6 +142,7 @@ export const blobEncodeBeastV2 = example({
     returns: new Uint8Array([
         137, 69, 97, 115, 116, 13, 10, 1,
         8,
+        0,
         84,
     ]),
 });

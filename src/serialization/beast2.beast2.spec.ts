@@ -43,7 +43,7 @@ describe("Beast magic bytes", () => {
     assert.equal(MAGIC_BYTES[6], 0x0A); // LF
   });
 
-  test("MAGIC_BYTES should have version byte 0x01", () => {
+  test("MAGIC_BYTES should have encoding mode byte 0x01 (standard)", () => {
     assert.equal(MAGIC_BYTES[7], 0x01);
   });
 });
@@ -320,9 +320,9 @@ describe("Beast error handling", () => {
     assert.throws(() => decodeBeast2(invalidData), /Invalid Beast magic bytes/);
   });
 
-  test("should reject data with wrong version", () => {
-    const wrongVersion = new Uint8Array([0x89, 0x45, 0x61, 0x73, 0x74, 0x0D, 0x0A, 0x02, 0x0A]);
-    assert.throws(() => decodeBeast2(wrongVersion), /Invalid Beast magic bytes at offset 7/);
+  test("should reject data with unknown encoding mode", () => {
+    const wrongVersion = new Uint8Array([0x89, 0x45, 0x61, 0x73, 0x74, 0x0D, 0x0A, 0x03, 0x0A]);
+    assert.throws(() => decodeBeast2(wrongVersion), /Unknown Beast encoding mode/);
   });
 
   test("should reject truncated data", () => {
@@ -337,24 +337,24 @@ describe("Beast error handling", () => {
 // =============================================================================
 
 describe("Beast format overhead", () => {
-  test("overhead for null should be 8 bytes (magic) + 1 byte (type tag)", () => {
+  test("overhead for null should be 8 (magic) + 1 (type) + 1 (global table) = 10", () => {
     const encoded = encodeBeast2For(NullType)(null);
-    assert.equal(encoded.length, 9); // 8 magic + 1 type tag + 0 value
+    assert.equal(encoded.length, 10); // 8 magic + 1 type tag + 1 global table (0) + 0 value
   });
 
-  test("overhead for boolean should be 8 bytes (magic) + 1 byte (type tag)", () => {
+  test("overhead for boolean should be 8 (magic) + 1 (type) + 1 (global table) + 1 (value) = 11", () => {
     const encoded = encodeBeast2For(BooleanType)(true);
-    assert.equal(encoded.length, 10); // 8 magic + 1 type tag + 1 value
+    assert.equal(encoded.length, 11); // 8 magic + 1 type + 1 global table (0) + 1 value
   });
 
   test("overhead for simple integer should be minimal", () => {
     const encoded = encodeBeast2For(IntegerType)(0n);
-    assert.equal(encoded.length, 10); // 8 magic + 1 type tag + 1 value (zigzag 0)
+    assert.equal(encoded.length, 11); // 8 magic + 1 type + 1 global table (0) + 1 value (zigzag 0)
   });
 
   test("array type overhead should include element type", () => {
     const encoded = encodeBeast2For(ArrayType(IntegerType))([]);
-    // 8 magic + 2 type tags (Array + Integer) + 1 inline marker + 1 length (0) = 12
-    assert.equal(encoded.length, 12);
+    // 8 magic + 2 type (2 variant tags) + 1 global table (0) + 1 inline marker + 1 length (0) = 13
+    assert.equal(encoded.length, 13);
   });
 });

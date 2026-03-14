@@ -15,7 +15,7 @@ import { ref } from "../containers/ref.js";
 import { matrix } from "../containers/matrix.js";
 import { EAST_IR_SYMBOL, EAST_CAPTURES_SYMBOL, ReturnException, compile_internal, type RuntimeContext } from "../compile.js";
 import { InternalError } from "../error.js";
-import { IRType, type FunctionIR, type AsyncFunctionIR } from "../ir.js";
+import { type FunctionIR, type AsyncFunctionIR } from "../ir.js";
 import type { PlatformFunction } from "../platform.js";
 import type { AnalyzedIR } from "../analyze.js";
 
@@ -42,6 +42,7 @@ export type Beast2EncodeTypeContext = ((value: any, writer: BufferWriter, ctx?: 
  */
 export type Beast2EncodeContext = {
   refs: Map<any, number>;
+  globalTypeTable?: Map<any, number>;
 };
 
 /** Stack of decoders for recursive types */
@@ -57,7 +58,7 @@ export type Beast2DecodeContext = {
 };
 
 /** Cursor-based decoder function type (zero-allocation). Reads from BufferReader and mutates offset in place. */
-type CursorDecoder = (reader: BufferReader, refs: Map<number, any>) => any;
+export type CursorDecoder = (reader: BufferReader, refs: Map<number, any>) => any;
 
 /** Stack of cursor-based decoders for recursive types */
 type CursorTypeContext = CursorDecoder[];
@@ -67,6 +68,12 @@ type CursorTypeContext = CursorDecoder[];
  * When platform is provided, decoded functions will be compiled to callables with IR attached.
  * When not provided, raw FunctionIR/AsyncFunctionIR is returned.
  */
+/**
+ * Callback invoked when a function handle is encountered during handle-aware decoding.
+ * Returns a callable JS function wrapper for the handle.
+ */
+export type FunctionHandleResolver = (handleId: number, fnType: EastTypeValue) => (...args: any[]) => any;
+
 export type Beast2DecodeOptions = {
   platform?: PlatformFunction[];
   /**
@@ -81,6 +88,14 @@ export type Beast2DecodeOptions = {
    * Only use this when you trust the data was encoded with the correct type.
    */
   skipTypeCheck?: boolean;
+  /**
+   * Handle-aware decoding mode. When set, function positions in the value stream
+   * contain varint handle IDs instead of IR+captures. The resolver is called to
+   * create callable wrappers for each handle.
+   */
+  functionHandleResolver?: FunctionHandleResolver;
+  /** Global type table for IR decoding. Set internally by the beast2 header reader. */
+  globalTypeTable?: EastTypeValue[];
 };
 
 // =============================================================================
@@ -193,7 +208,6 @@ export function encodeBeast2ValueToBufferFor(type: EastTypeValue, typeCtx: Beast
   } else if (type.type === "Struct") {
     const fieldEncoders: [string, (value: any, writer: BufferWriter, ctx?: Beast2EncodeContext) => void][] = [];
     const ret = (x: Record<string, any>, writer: BufferWriter, ctx: Beast2EncodeContext = { refs: new Map() }) => {
-      // Encode fields
       for (const [k, encoder] of fieldEncoders) {
         encoder(x[k], writer, ctx);
       }
@@ -208,9 +222,8 @@ export function encodeBeast2ValueToBufferFor(type: EastTypeValue, typeCtx: Beast
     const caseEncoders: Record<string, (value: any, writer: BufferWriter, ctx?: Beast2EncodeContext) => void> = {};
     const caseTags = Object.fromEntries(type.value.map(({ name }, i) => [name, i]));
     const ret = (x: any, writer: BufferWriter, ctx: Beast2EncodeContext = { refs: new Map() }) => {
-      // Encode tag and value
       const tag = x.type as string;
-      const tagIndex = caseTags[tag]!; // Assume valid input
+      const tagIndex = caseTags[tag]!;
       writer.writeVarint(tagIndex);
       caseEncoders[tag]!(x.value, writer, ctx);
     };
@@ -238,8 +251,9 @@ export function encodeBeast2ValueToBufferFor(type: EastTypeValue, typeCtx: Beast
         );
       }
 
-      // Serialize the IR
-      irEncoder(ir, writer, ctx);
+      // Serialize the IR using global type table indices
+      if (!ctx.globalTypeTable) throw new InternalError('Function encoding requires globalTypeTable in context');
+      encodeIRWithGlobalTable(ir, writer, ctx, ctx.globalTypeTable);
 
       // Serialize capture values
       const captures = value[EAST_CAPTURES_SYMBOL] as RuntimeContext | undefined;
@@ -280,8 +294,9 @@ export function encodeBeast2ValueToBufferFor(type: EastTypeValue, typeCtx: Beast
         );
       }
 
-      // Serialize the IR
-      irEncoder(ir, writer, ctx);
+      // Serialize the IR using global type table indices
+      if (!ctx.globalTypeTable) throw new InternalError('Function encoding requires globalTypeTable in context');
+      encodeIRWithGlobalTable(ir, writer, ctx, ctx.globalTypeTable);
 
       // Serialize capture values
       const captures = value[EAST_CAPTURES_SYMBOL] as RuntimeContext | undefined;
@@ -348,7 +363,7 @@ export function decodeBeast2ValueFor(type: EastTypeValue | EastType, _typeCtx: B
  * just the value. This eliminates millions of tuple allocations for large
  * deeply-nested types like UIComponentType.
  */
-function _decodeCursorFor(type: EastTypeValue | EastType, typeCtx: CursorTypeContext = [], options?: Beast2DecodeOptions): CursorDecoder {
+export function _decodeCursorFor(type: EastTypeValue | EastType, typeCtx: CursorTypeContext = [], options?: Beast2DecodeOptions): CursorDecoder {
   if (!isVariant(type)) {
     type = toEastTypeValue(type);
   }
@@ -504,13 +519,23 @@ function _decodeCursorFor(type: EastTypeValue | EastType, typeCtx: CursorTypeCon
     }
     return ret;
   } else if (type.type === "Function") {
+    // Handle-aware mode: read varint handle ID, create wrapper via resolver
+    if (options?.functionHandleResolver) {
+      const resolver = options.functionHandleResolver;
+      const fnType = type as EastTypeValue;
+      return (reader: BufferReader, _refs: Map<number, any>) => {
+        const handleId = reader.readVarint();
+        return resolver(handleId, fnType);
+      };
+    }
+
     const platform = options?.platform ?? [];
     const platformFns = Object.fromEntries(platform.map(fn => [fn.name, fn.fn]));
     const asyncPlatformFns = new Set(platform.filter(fn => fn.type === 'async').map(fn => fn.name));
-    const irCursorDecoder = _decodeCursorFor(IRTypeValue, [], options);
 
     return (reader: BufferReader, refs: Map<number, any>) => {
-      const ir = irCursorDecoder(reader, refs) as FunctionIR;
+      if (!options?.globalTypeTable) throw new InternalError('Function decoding requires globalTypeTable in options');
+      const ir = decodeIRWithGlobalTable(reader, refs, options.globalTypeTable) as FunctionIR;
 
       if (ir.type !== "Function") {
         throw new Error(`Expected Function IR, got ${ir.type} at offset ${reader.offset}`);
@@ -569,16 +594,33 @@ function _decodeCursorFor(type: EastTypeValue | EastType, typeCtx: CursorTypeCon
         configurable: false
       });
 
+      Object.defineProperty(fn, EAST_CAPTURES_SYMBOL, {
+        value: captureContext,
+        writable: false,
+        enumerable: false,
+        configurable: false
+      });
+
       return fn;
     };
   } else if (type.type === "AsyncFunction") {
+    // Handle-aware mode: read varint handle ID, create wrapper via resolver
+    if (options?.functionHandleResolver) {
+      const resolver = options.functionHandleResolver;
+      const fnType = type as EastTypeValue;
+      return (reader: BufferReader, _refs: Map<number, any>) => {
+        const handleId = reader.readVarint();
+        return resolver(handleId, fnType);
+      };
+    }
+
     const platform = options?.platform ?? [];
     const platformFns = Object.fromEntries(platform.map(fn => [fn.name, fn.fn]));
     const asyncPlatformFns = new Set(platform.filter(fn => fn.type === 'async').map(fn => fn.name));
-    const irCursorDecoder = _decodeCursorFor(IRTypeValue, [], options);
 
     return (reader: BufferReader, refs: Map<number, any>) => {
-      const ir = irCursorDecoder(reader, refs) as AsyncFunctionIR;
+      if (!options?.globalTypeTable) throw new InternalError('AsyncFunction decoding requires globalTypeTable in options');
+      const ir = decodeIRWithGlobalTable(reader, refs, options.globalTypeTable) as AsyncFunctionIR;
 
       if (ir.type !== "AsyncFunction") {
         throw new Error(`Expected AsyncFunction IR, got ${ir.type} at offset ${reader.offset}`);
@@ -632,6 +674,13 @@ function _decodeCursorFor(type: EastTypeValue | EastType, typeCtx: CursorTypeCon
 
       Object.defineProperty(fn, EAST_IR_SYMBOL, {
         value: ir,
+        writable: false,
+        enumerable: false,
+        configurable: false
+      });
+
+      Object.defineProperty(fn, EAST_CAPTURES_SYMBOL, {
+        value: captureContext,
         writable: false,
         enumerable: false,
         configurable: false
@@ -703,14 +752,35 @@ export function encodeBeast2ValueFor(type: EastTypeValue | EastType): (value: an
 // 0x89       - Invalid UTF-8 marker (like PNG)
 // 0x45 0x61 0x73 0x74 - "East" (human-readable in hex dumps)
 // 0x0D 0x0A  - CRLF (detects line-ending corruption)
-// 0x01       - Version byte (currently 1)
-export const MAGIC_BYTES = new Uint8Array([0x89, 0x45, 0x61, 0x73, 0x74, 0x0D, 0x0A, 0x01]);
+// Last byte  - Encoding mode:
+//   0x01 "standard" — backreferences for mutable containers only (Array/Set/Dict/Ref)
+const BEAST2_STANDARD = 0x01;
+export const MAGIC_BYTES = new Uint8Array([0x89, 0x45, 0x61, 0x73, 0x74, 0x0D, 0x0A, BEAST2_STANDARD]);
+
+/** Verify magic bytes. Throws on invalid data. */
+function verifyMagic(data: Uint8Array): void {
+  if (data.length < 8) {
+    throw new Error(`Data too short for Beast format: ${data.length} bytes`);
+  }
+  for (let i = 0; i < MAGIC_BYTES.length; i++) {
+    if (data[i] !== MAGIC_BYTES[i]) {
+      if (i < 7) {
+        throw new Error(`Invalid Beast magic bytes at offset ${i}: expected 0x${MAGIC_BYTES[i]!.toString(16)}, got 0x${data[i]!.toString(16)}`);
+      }
+      throw new Error(`Unknown Beast encoding mode: 0x${data[i]!.toString(16)}`);
+    }
+  }
+}
+
 const typeEncoder = encodeBeast2ValueToBufferFor(EastTypeValueType);
 const typeCursorDecoder = _decodeCursorFor(EastTypeValueType);
 
-// IR encoder/decoder for function serialization
-const IRTypeValue = toEastTypeValue(IRType);
-const irEncoder = encodeBeast2ValueToBufferFor(IRTypeValue);
+// IR type table — deduplicates EastTypeValue objects in function IR encoding
+import { initIRTypeTable, preCollectAllIRTypes } from "./beast2-ir-table.js";
+const { encodeIRWithGlobalTable, decodeIRWithGlobalTable, writeGlobalTypeTable, readGlobalTypeTable } = initIRTypeTable(
+  type => encodeBeast2ValueToBufferFor(toEastTypeValue(type)),
+  type => _decodeCursorFor(toEastTypeValue(type)),
+);
 
 export function encodeBeast2For(type: EastTypeValue): (value: any) => Uint8Array
 export function encodeBeast2For<T extends EastType>(type: T): (value: ValueTypeOf<T>) => Uint8Array
@@ -731,8 +801,15 @@ export function encodeBeast2For(type: EastTypeValue | EastType): (value: any) =>
     // Write type schema
     typeEncoder(type, writer, { refs: new Map() });
 
-    // Write value
-    const ctx: Beast2EncodeContext = { refs: new Map() };
+    // Pre-scan value tree to collect all IR types into a global table
+    const globalTypeTable = new Map<any, number>();
+    preCollectAllIRTypes(value, globalTypeTable, EAST_IR_SYMBOL, EAST_CAPTURES_SYMBOL);
+
+    // Write global type table
+    writeGlobalTypeTable(globalTypeTable, writer);
+
+    // Write value with global type table in context
+    const ctx: Beast2EncodeContext = { refs: new Map(), globalTypeTable };
     valueEncoder(value, writer, ctx);
 
     return writer.toUint8Array();
@@ -740,24 +817,18 @@ export function encodeBeast2For(type: EastTypeValue | EastType): (value: any) =>
 }
 
 export function decodeBeast2(data: Uint8Array): { type: EastTypeValue; value: any } {
-  // Verify magic bytes
-  if (data.length < MAGIC_BYTES.length) {
-    throw new Error(`Data too short for Beast format: ${data.length} bytes`);
-  }
+  verifyMagic(data);
 
-  for (let i = 0; i < MAGIC_BYTES.length; i++) {
-    if (data[i] !== MAGIC_BYTES[i]) {
-      throw new Error(`Invalid Beast magic bytes at offset ${i}: expected 0x${MAGIC_BYTES[i]!.toString(16)}, got 0x${data[i]!.toString(16)}`);
-    }
-  }
-
-  // Decode type schema and value using cursor-based decoders
+  // Decode type schema
   const reader = new BufferReader(data, MAGIC_BYTES.length);
   const refs = new Map<number, any>();
   const type = typeCursorDecoder(reader, refs) as EastTypeValue;
 
-  // Decode value
-  const valueDecoder = _decodeCursorFor(type);
+  // Read global type table
+  const globalTypeTable = readGlobalTypeTable(reader);
+
+  // Decode value with global type table
+  const valueDecoder = _decodeCursorFor(type, [], { globalTypeTable });
   const value = valueDecoder(reader, refs);
 
   // Verify we consumed all data
@@ -776,35 +847,22 @@ export function decodeBeast2For(type: EastTypeValue | EastType, options?: Beast2
       type = toEastTypeValue(type);
   }
 
-  const cursorDecoder = _decodeCursorFor(type as EastTypeValue, [], options);
   const skipTypeCheck = options?.skipTypeCheck ?? false;
 
   // Pre-encode the expected type header bytes for fast byte-level comparison.
-  // This avoids decoding the type from binary + deep structural equality on every call.
-  const expectedTypeWriter = new BufferWriter();
-  typeEncoder(type, expectedTypeWriter, { refs: new Map() });
-  const expectedTypeBytes = expectedTypeWriter.toUint8Array();
-  const expectedTypeLen = expectedTypeBytes.length;
-  const valueStartOffset = MAGIC_BYTES.length + expectedTypeLen;
+  const typeWriter = new BufferWriter();
+  typeEncoder(type, typeWriter, { refs: new Map() });
+  const expectedTypeBytes = typeWriter.toUint8Array();
+  const typeHeaderEnd = MAGIC_BYTES.length + expectedTypeBytes.length;
 
   return (data: Uint8Array) => {
-    // Verify magic bytes
-    if (data.length < MAGIC_BYTES.length) {
-      throw new Error(`Data too short for Beast format: ${data.length} bytes`);
-    }
-
-    for (let i = 0; i < MAGIC_BYTES.length; i++) {
-      if (data[i] !== MAGIC_BYTES[i]) {
-        throw new Error(`Invalid Beast magic bytes at offset ${i}: expected 0x${MAGIC_BYTES[i]!.toString(16)}, got 0x${data[i]!.toString(16)}`);
-      }
-    }
+    verifyMagic(data);
 
     if (!skipTypeCheck) {
-      // Fast path: compare raw type header bytes instead of decode + structural equality.
-      if (data.length < valueStartOffset) {
-        throw new Error(`Data too short for type header: expected at least ${valueStartOffset} bytes, got ${data.length}`);
+      if (data.length < typeHeaderEnd) {
+        throw new Error(`Data too short for type header: expected at least ${typeHeaderEnd} bytes, got ${data.length}`);
       }
-      for (let i = 0; i < expectedTypeLen; i++) {
+      for (let i = 0; i < expectedTypeBytes.length; i++) {
         if (data[MAGIC_BYTES.length + i] !== expectedTypeBytes[i]) {
           const typeReader = new BufferReader(data, MAGIC_BYTES.length);
           const decodedType = typeCursorDecoder(typeReader, new Map()) as EastTypeValue;
@@ -813,18 +871,55 @@ export function decodeBeast2For(type: EastTypeValue | EastType, options?: Beast2
       }
     }
 
-    // Decode value using cursor-based decoder
-    const reader = new BufferReader(data, valueStartOffset);
-    const refs = new Map<number, any>();
-    const value = cursorDecoder(reader, refs);
+    // Read the global type table (comes after type header, before value data)
+    const reader = new BufferReader(data, typeHeaderEnd);
+    const globalTypeTable = readGlobalTypeTable(reader);
 
-    // Verify we consumed all data
+    // Build decoder with this file's global type table
+    const decoder = _decodeCursorFor(type as EastTypeValue, [], { ...options, globalTypeTable });
+    const refs = new Map<number, any>();
+    const value = decoder(reader, refs);
+
     if (reader.offset !== data.length) {
       throw new Error(`Unexpected data after Beast value at offset ${reader.offset} (${data.length - reader.offset} bytes remaining)`);
     }
 
     return value;
   };
+}
+
+/**
+ * Decode beast2-full data with handle-aware function decoding.
+ * At function type positions, reads varint handle IDs and calls the resolver
+ * to create callable wrappers. Returns type, decoded value, and collected handles.
+ */
+export function decodeBeast2WithHandles(
+  data: Uint8Array,
+  resolver: FunctionHandleResolver,
+): { type: EastTypeValue; value: any; handles: number[] } {
+  verifyMagic(data);
+
+  // Decode type schema
+  const reader = new BufferReader(data, MAGIC_BYTES.length);
+  const typeRefs = new Map<number, any>();
+  const type = typeCursorDecoder(reader, typeRefs) as EastTypeValue;
+
+  // Read global type table (skip past it — handle-aware mode doesn't use IR)
+  const globalTypeTable = readGlobalTypeTable(reader);
+
+  // Collect handles
+  const handles: number[] = [];
+  const wrappingResolver: FunctionHandleResolver = (handleId, fnType) => {
+    handles.push(handleId);
+    return resolver(handleId, fnType);
+  };
+
+  // Decode value with handle-aware decoder
+  const cursorDecoder = _decodeCursorFor(type, [], { functionHandleResolver: wrappingResolver, globalTypeTable });
+  const refs = new Map<number, any>();
+  const value = cursorDecoder(reader, refs);
+
+  return { type, value, handles };
 }
 
 // =============================================================================
