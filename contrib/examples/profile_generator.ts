@@ -25,8 +25,9 @@ import {
     FunctionType,
     NullType,
     DictType,
+    IRType,
 } from "../../src/index.js";
-import { encodeBeast2For, decodeBeast2 } from "../../src/serialization/beast2.js";
+import { encodeBeast2For } from "../../src/serialization/beast2.js";
 import { variant } from "../../src/containers/variant.js";
 
 // ---------------------------------------------------------------------------
@@ -349,30 +350,27 @@ const page = box(
 );
 
 // ---------------------------------------------------------------------------
-// 4. Encode to beast2 and measure sizes
+// 4. Wrap in an East.function that returns the component tree, export as IR
 // ---------------------------------------------------------------------------
 
 console.log(`Generated tree with ${NUM_DASHBOARDS} dashboards`);
 
-console.log("\nEncoding...");
+// Build a function that returns the page value
+const irFn = East.function([], ComponentType, ($) => {
+    return $.const(page, ComponentType);
+});
+
+// Serialize IR as beast2 (type = IRType)
+const ir = irFn.toIR();
+
+console.log("\nEncoding IR as beast2...");
 const t0 = performance.now();
-const encoder = encodeBeast2For(ComponentType);
-const encodedBytes = encoder(page);
+const encoder = encodeBeast2For(IRType);
+const encodedBytes = encoder(ir.ir);
 const t1 = performance.now();
 console.log(`Encode: ${(t1 - t0).toFixed(1)}ms`);
 console.log(`Size: ${(encodedBytes.length / 1024 / 1024).toFixed(2)} MB`);
 
-// Write file
-const outputPath = "/tmp/ui-gen.beast2";
+const outputPath = "/tmp/ui-gen-ir.beast2";
 writeFileSync(outputPath, encodedBytes);
-console.log(`\nWrote: ${outputPath} (${(encodedBytes.length / 1024 / 1024).toFixed(2)} MB)`);
-
-// Decode and time
-console.log("\nDecoding...");
-const t2 = performance.now();
-decodeBeast2(encodedBytes);
-const t3 = performance.now();
-console.log(`Decode: ${(t3 - t2).toFixed(1)}ms`);
-
-console.log(`\n--- Summary ---`);
-console.log(`Size: ${(encodedBytes.length / 1024 / 1024).toFixed(2)} MB, encode ${(t1 - t0).toFixed(1)}ms, decode ${(t3 - t2).toFixed(1)}ms`);
+console.log(`Wrote: ${outputPath}`);
