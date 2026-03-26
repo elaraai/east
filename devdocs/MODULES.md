@@ -1,340 +1,129 @@
 # East Module System
 
-This document describes the module system for East: how code is organized into modules, how modules reference each other, and how they are linked and executed.
+This document describes the module system for East: how code is organized into symbols and modules, how they reference each other, and how they are linked and executed.
 
-> **Status**: Design specification. Modules are not yet implemented in the East codebase.
+> **Status**: Core implementation complete. SymbolIR, compiler, analyzer, SDK interface (`East.export`, `East.module`, `East.extern`), and compliance tests are all implemented.
 
-## Overview
+## Definitions
 
-East modules are **values**. A module is a named struct of **exports** — named values that can be referenced by other modules via `SymbolIR`. Each export is a "module global": a named value that the linker can resolve across module boundaries.
+- **Symbol** — the atomic unit of the module system. A named, typed value. Defined by `East.export()` (has IR) or referenced by `East.extern()` (unresolved, provided by runtime).
+- **Module** — a named collection of symbol definitions. A partial symbol table. Created by `East.module()`.
+- **Symbol table** — the complete set of symbols needed for linking. Composed by combining modules. Represented as `Map<string, IR>` mapping fully-qualified symbol names to their IR.
+- **Program** — a complete symbol table + an entry point. The runner looks up the entry point in the symbol table and executes it.
 
-The key principles are:
+## Symbols
 
-1. **A module is a struct of exports** — each export is a named value of any East type (functions, constants, mutable state, etc.).
-2. **Exports are module globals** — an export is a value that can be referenced by name from any function body within the same module or other modules, via `SymbolIR`.
-3. **Non-export values are inlined** — values not marked as exports are embedded directly in the IR wherever they appear. No deduplication, no SymbolIR.
-4. **Linking is value substitution** — the linker resolves `SymbolIR` nodes by substituting concrete values from a flat registry.
-5. **Module IR constructs the export value** — the stored module contains IR that constructs its export struct. This is pure value construction (no platform calls, no effects). The IR is evaluated at load time to produce the module's value.
+A symbol is a named, typed value — the atomic unit of the module system. Symbols are what `SymbolIR` nodes reference, and what the linker resolves.
 
-### Why modules are values (not evaluated code)
+### Defining symbols: `East.export()`
 
-Earlier designs had modules evaluate arbitrary IR on first import (like Python or Node.js). The current design restricts module IR to pure value construction:
+`East.export(name, value)` creates a symbol definition. It carries a local name and value, and produces IR that can be included in a module.
 
-- No platform calls in module IR — side effects belong in program execution, not module loading.
-- No ordering concerns — value construction is deterministic and order-independent.
-- Runtimes are simpler — evaluate the IR (trivial struct/function assembly), register the value, done.
-- East now supports closure serialization, so functions can carry their own captured state without module-level initialization.
+```typescript
+const pi = East.export("pi", 3.14159);
+const add = East.export("add",
+    East.function([IntegerType, IntegerType], IntegerType, ($, a, b) => a.add(b)));
+```
+
+The returned value is fully transparent — callable if the value is a function, has field access if it's a struct, etc. The TypeScript types are preserved: `add` is a callable `FunctionExpr`, `pi` is a `FloatExpr`.
+
+Exports are validated at creation time: only values and free functions can be exported. Control flow, re-exports, and recursive export references are rejected with clear error messages.
+
+### Referencing external symbols: `East.extern()`
+
+`East.extern(module, name, type)` creates a reference to a symbol that will be provided by the runtime (not backed by East IR). Intended for platform-defined modules (native capabilities like `fs`, `net`, etc.):
+
+```typescript
+const readFile = East.extern("east-node-std.fs", "readFile", FunctionType([StringType], StringType));
+// readFile(path) generates Call(Symbol("east-node-std.fs.readFile"), [path])
+```
+
+### Non-symbol values
+
+Values not wrapped in `East.export()` are NOT symbols. They are inlined wherever they appear in the IR — no deduplication, no SymbolIR. Using an `East.export()` value outside of a module context is an error — use `East.extern()` for references to externally-provided symbols.
+
+```typescript
+// NOT a symbol — will be inlined in every function body that uses it
+const helper = East.function([IntegerType], IntegerType, ($, x) => x.add(1n));
+```
 
 ## SymbolIR
 
-`SymbolIR` is a new IR node — a named reference to an export value, resolved by the linker:
+`SymbolIR` is the IR node that references a symbol by name:
 
 ```
 SymbolIR = variant<"Symbol", {
     type: EastTypeValue,         // expected type of the resolved value
     location: LocationValue[],   // source location for error reporting
-    name: String,                // symbol name (opaque string, typically "module/export")
+    name: String,                // symbol name (e.g. "math.add")
 }>
 ```
+
+Symbol names use East's path notation: identifiers joined by `.`, with backtick-quoting for non-standard identifiers (e.g., `` `my-app`.math.add ``). The SDK constructs these names using `printIdentifier()` for each segment. Names are opaque strings to the IR — the linker matches them exactly.
 
 `SymbolIR` is analogous to an unresolved symbol in a C object file. It says: "I need a value of this type, identified by this name. The linker will provide it."
 
-### How it appears in IR
-
-A function body that uses an imported module's `add` function:
-
-```
-// IR for: math.add(x, 1)
-Call(
-    Symbol("myapp/math.add"),       // resolves to the add function directly
-    [Variable("x"), Value(1)]
-)
-```
-
-Or equivalently, referencing the module struct and accessing a field:
-
-```
-Call(
-    GetField(Symbol("myapp/math"), "add"),
-    [Variable("x"), Value(1)]
-)
-```
-
-Both forms are valid. The first is a direct symbol reference (flat namespace). The second accesses a field on a module-level symbol. The SDK and linker may use either form — the choice is a convention, not a language constraint. Symbol names are opaque strings.
-
 ### Relationship to PlatformIR
-
-East currently uses `PlatformIR` for calling external functions. Platform functions are flat — identified by name with no namespacing:
-
-```
-PlatformIR = variant<"Platform", {
-    type: EastType,
-    location: LocationValue[],
-    name: String,
-    type_parameters: EastTypeValue[],
-    arguments: IR[],
-    async: Boolean,
-    optional: Boolean,
-}>
-```
 
 `PlatformIR` is a **direct call** to a named external function. `SymbolIR` is a **value reference** — it resolves to a value, and the caller uses standard IR nodes (`GetField`, `Call`) to interact with it.
 
-The migration path:
-
-- Runtime packages (e.g., `east-node-std`) currently provide platform function implementations. With modules, they additionally provide a module that exports a struct of those same functions.
-- New code should prefer the module interface. `PlatformIR` remains available as the lower-level direct mechanism.
-- `BuiltinIR` (language primitives like arithmetic, comparison, collection operations) is unrelated to modules. Builtins are intrinsic to the East language and are always available.
+The migration path: runtime packages currently provide platform function implementations. With modules, they additionally provide symbols exporting those same functions. New code should prefer the module interface. `PlatformIR` remains available as the lower-level direct mechanism.
 
 ### Relationship to VariableIR
-
-`SymbolIR` resembles `VariableIR` but is fundamentally different:
 
 - **VariableIR** references a lexically-scoped local variable, resolved during AST-to-IR compilation.
 - **SymbolIR** references an externally-provided value, resolved by the linker before execution.
 
 A variable is part of the program's control flow. A symbol is a hole to be filled by the environment.
 
-## Exports and Deduplication
+## Modules
 
-### `East.export()` — named module globals
-
-`East.export(name, value)` creates a named module global. The export carries its own name from the start, making SymbolIR generation straightforward — when the export appears inside another export's function body, the SDK emits a `SymbolIR` reference using the export's name.
-
-```typescript
-const pi = East.export("pi", 3.14159);
-const add = East.export("add",
-    East.function([FloatType, FloatType], FloatType, ($, a, b) => a.add(b)));
-
-// helper is NOT exported — it will be inlined wherever it appears
-const helper = East.function([FloatType], FloatType, ($, x) => x.multiply(2.0));
-
-const compute = East.export("compute",
-    East.function([FloatType], FloatType, ($, x) => {
-        // pi → SymbolIR("myapp/math/pi")       (pi is a named export)
-        // add → SymbolIR("myapp/math/add")      (add is a named export)
-        // helper → inlined FunctionIR           (helper is NOT an export)
-        return add(x, pi);
-    }));
-
-East.module("myapp/math", pi, add, compute);
-```
-
-`East.export()` returns an `ExportExpr` — a special AST node that carries the export name and wrapped value. When the SDK encounters an `ExportExpr` inside a function body during AST-to-IR conversion, it emits `SymbolIR("{module}/{export}")` instead of inlining the value. No `===` scanning needed — the export IS a distinct AST node type.
-
-### Deduplication rules
-
-1. **Only exports are deduplicated.** Values wrapped in `East.export()` are tracked by the SDK. When they appear inside other exports' function bodies, they are replaced with `SymbolIR` references.
-
-2. **Non-exports are always inlined.** Plain values (not wrapped in `East.export()`) are embedded directly in the IR wherever they appear. If the same helper function is used in three places, it appears three times in the IR. This is the correct behavior for private implementation details.
-
-3. **Detection is by export identity.** The SDK recognizes `ExportExpr` nodes during AST-to-IR conversion. Each export has a unique identity (the `ExportExpr` object) and a name. No structural comparison or content hashing.
-
-4. **Any East type can be an export.** Functions, constants, mutable values (Ref, Array), structs, variants — all are valid exports. The deduplication mechanism is type-agnostic.
-
-### Why only exports?
-
-- **Explicit control** — the user decides what gets deduplicated. No magic heuristics.
-- **Clear semantics** — exports are module globals with names. Non-exports are private implementation details with no identity beyond the IR they produce.
-- **Mutable state works correctly** — an exported `Ref` or `Array` that appears in multiple function bodies resolves to the same value at runtime (via SymbolIR), preserving shared identity. A non-exported mutable value would be inlined, creating separate instances — different semantics.
-
-## Module Structure
-
-### StoredModule
-
-The canonical on-disk representation of a module:
-
-```ts
-type StoredModuleType = StructType<{
-    name: StringType,                                    // fully-qualified name, e.g. "myapp/math"
-    type: EastTypeValueType,                             // type of the export struct
-    ir: IRType,                                          // IR that constructs the export value
-    imports: DictType<StringType, EastTypeValueType>,    // symbol name → expected type
-}>;
-```
-
-Key fields:
-
-- **name**: Unique identifier for this module within an execution environment. Opaque string.
-- **type**: The East type of the module's export value (typically a struct type). Used for type checking at link time.
-- **ir**: East IR that constructs the module's export value. This is pure value construction — struct assembly, function definitions, constant values, `NewArray`, `NewRef`, etc. No platform calls, no side effects. Evaluated at load time to produce the module's runtime value.
-- **imports**: The symbols that function bodies within this module reference via `SymbolIR`. Maps symbol name to expected type. The linker uses this to verify all dependencies are available and type-compatible before execution.
-
-### Why `ir` and not `value`
-
-The module stores IR (an expression that constructs the export value) rather than a pre-serialized value because:
-
-- Function values ARE their IR — serializing a function means serializing its `FunctionIR`. A struct of functions is a struct of IR nodes.
-- Mutable values (Array, Ref, etc.) need fresh instances per load. The IR specifies how to create them (`NewArrayIR`, `NewRefIR`), and each load evaluates the IR to produce fresh instances.
-- Self-referencing exports work correctly — function bodies contain `SymbolIR` nodes that reference the module's own exports. The module's IR constructs the struct, the runtime registers it, and function bodies resolve symbols against the registry.
-
-The "evaluation" of module IR is trivial: construct a struct from literal values, functions, and fresh mutable instances. No loops, no branching, no platform calls. This is equivalent to C's `.data` section initialization — allocation + initialization of known values.
-
-### Why `imports` is a manifest (not derived)
-
-The `imports` dict could theoretically be derived by walking all function bodies and collecting `SymbolIR` nodes. We include it explicitly because:
-
-- The linker can check dependency availability and type compatibility without deserializing all function bodies.
-- It serves as documentation — you can inspect a module's dependencies without parsing its code.
-- It enables fast dependency graph construction for build systems like e3.
-
-The SDK generates the `imports` manifest automatically during module construction.
-
-### Naming
-
-Module names are opaque strings in a single flat namespace. East requires only that names are unique within an execution environment.
-
-By convention, systems like e3 use `{package}/{module}` with `/` as a separator (e.g., `"east-node-std/console"`, `"acme-forecast/train"`). Symbol names for individual exports may use `.` as a field separator (e.g., `"myapp/math.add"`), but the East language does not parse or interpret these — they are opaque strings.
-
-## Programs
-
-A **program** is a module whose exported value is a `Function` (or a struct containing a main function). The function's signature defines how the program is invoked:
-
-- `(input: T) => U` — transformation (e3 dataflow tasks)
-- `(args: Array<String>) => Integer` — CLI program
-- `(request: HttpRequest) => HttpResponse` — HTTP handler
-
-The runner determines what signatures it supports and how to provide arguments. In e3, the primary pattern is transformation: a task reads input datasets, calls the program function, and writes the output.
-
-```typescript
-// A program module — exports a single function
-const main = East.export("main",
-    East.function([StringType], IntegerType, ($, input) => {
-        // ... program logic ...
-        return 0n;
-    }));
-East.module("myapp/main", main);
-```
-
-## Linking
-
-Linking is the process of resolving `SymbolIR` nodes to concrete values before execution.
-
-### The linker's job
-
-1. Build a **symbol registry**: `Dict<String, Value>` — populated from stored modules and native runtime modules.
-2. **Type check**: For each module's `imports`, verify the registry has an entry with a compatible type (structural equality via `isTypeEqual`).
-3. **Resolve**: Replace `SymbolIR` nodes in function bodies with their concrete values from the registry.
-
-### Resolution strategies
-
-The linker may resolve symbols in different ways depending on the runtime:
-
-**Static linking (pre-execution substitution):**
-Walk all function bodies, replace `SymbolIR` nodes with the resolved value. The resulting IR has no unresolved symbols and can be compiled/executed without a registry. Enables further optimization (constant propagation, inlining).
-
-**Runtime linking (registry lookup):**
-Compile `SymbolIR` to a registry lookup (e.g., `__symbols["myapp/math.add"]` in JavaScript). Simpler to implement, no IR rewriting needed, but the registry must be available at runtime.
-
-Both are valid. The East specification does not mandate a strategy.
-
-### Link-time optimization
-
-Since imports are known constant values, the linker can perform constant propagation:
-
-```
-// Before:
-Call(Symbol("myapp/math.add"), [x, Value(1)])
-
-// After symbol resolution:
-Call(Value(<add function>), [x, Value(1)])
-
-// After inlining (optional):
-Builtin("Add", [x, Value(1)])
-```
-
-For module-as-struct references with `GetField`:
-
-```
-// Before:
-Call(GetField(Symbol("myapp/math"), "add"), [x, Value(1)])
-
-// After symbol resolution + constant propagation:
-Call(Value(<add function>), [x, Value(1)])
-```
-
-Standard constant propagation — no special LTO mechanism needed.
-
-### Error handling
-
-- **Missing symbol**: If a symbol name is not in the registry, the linker MUST produce an error before execution begins.
-- **Type mismatch**: If a resolved value's type doesn't match the expected type in `imports`, the linker MUST produce an error before execution begins.
-- **Self-references**: A module may reference its own exports via SymbolIR. This is valid because function bodies are lazy — they are not evaluated during module construction. The runtime registers the module's value before any function bodies execute.
-
-## Runtime Environment Contract
-
-The East language specification does not define packages, package management, or module resolution. These are concerns of the runtime environment (e.g., e3).
-
-The specification requires only that:
-
-1. **Uniqueness**: The environment MUST ensure that symbol names resolve unambiguously within an execution context.
-2. **Availability**: The environment MUST ensure that all symbols are available before execution begins. This includes native modules which MUST be pre-registered by the runtime.
-3. **Linking errors**: If a symbol cannot be resolved, the environment MUST produce an error during linking, prior to execution.
-4. **Type checking**: The environment MUST verify that resolved values have types compatible with what importers expect (structural equality).
-
-The symbol registry is a flat `Dict<String, Value>` keyed by symbol name.
-
-## Module Identity and Content Addressing
-
-Modules are identified by **name** (a string) for linking purposes.
-
-In the object store, modules are content-addressed by **hash** (like all e3 objects). This means:
-
-- Two modules with identical content share the same hash and are stored once.
-- Two modules with the same name but different content are different objects — the environment (e3) enforces that only one version of a given name is active in a workspace.
-
-## Package Publishing (e3 Context)
-
-> This section describes how e3 uses the module system. It is not part of the East language specification.
-
-When publishing a module as part of an e3 package:
-
-1. The publisher provides a **package name** (e.g., `east-python`, `myapp`).
-2. The publisher declares which modules are **public** and their names within the package namespace.
-3. The full module identifier becomes `{package}/{module}` (e.g., `east-python/fs`).
-4. Private/internal modules are bundled but not exposed in the package's public API.
-
-See the e3 design documents for the full package object structure and deployment model.
-
-## TypeScript SDK API
-
-### Creating exports
-
-`East.export(name, value)` creates a named module global:
-
-```typescript
-import { East, IntegerType, FloatType, FunctionType, RefType } from "@elaraai/east";
-
-// Function export
-const add = East.export("add",
-    East.function([IntegerType, IntegerType], IntegerType, ($, a, b) => a.add(b)));
-
-// Constant export
-const pi = East.export("pi", 3.14159);
-
-// Mutable state export
-const counter = East.export("counter", East.ref(0n));
-```
-
-Each export carries its own name. This name becomes part of the symbol name when the export is assigned to a module.
+A module is a named collection of symbol definitions — a partial symbol table. Each symbol's fully-qualified name is `printIdentifier({module}).printIdentifier({symbol})` using East's path notation.
 
 ### Creating modules
 
-`East.module(name, ...exports)` creates a module from named exports (varargs):
+`East.module(name, ...symbols)` creates a module from named symbols (varargs):
 
 ```typescript
-const mathModule = East.module("myapp/math", add, pi, counter);
+const mathModule = East.module("math", pi, add, compute);
+// Creates symbols: "math.pi", "math.add", "math.compute"
 ```
 
 This follows the same pattern as `e3.package(name, version, ...items)` — each item already carries its own name and dependencies are tracked automatically.
 
-`East.module()` returns a module descriptor that doubles as an Expr — accessing fields on it produces `SymbolIR`-based expressions for use in other modules.
+### How `East.module()` works
+
+1. Validates each argument is an `East.export()` symbol (checks `ast_type === "ExportRef"`).
+2. Builds an export registry mapping local names to full symbol names and types.
+3. For each export, unwraps the `ExportRefAST` to get the inner AST, then calls `ast_to_ir` with the export registry as context. Any `ExportRefAST` nodes in sub-expressions (e.g., one export referencing another) are resolved to `SymbolIR` using the registry.
+4. Stores each symbol's IR keyed by fully-qualified name.
+5. Tracks cross-module dependencies automatically: when the `ast_to_ir` context encounters `SymbolAST` nodes (from `East.extern()` or module descriptor field access), the referenced modules are added to the dependency set.
+6. Returns a `Module` descriptor with dynamic field getters for cross-module references.
+
+### Module descriptor
+
+The `Module` class returned by `East.module()` uses hidden JS `Symbol` properties for metadata. The visible (enumerable) properties are dynamic getters for each exported symbol:
+
+```typescript
+const mathModule = East.module("math", add, pi);
+
+// Field access — returns typed Expr wrapping SymbolAST
+mathModule.add(x, 1n)  // generates Call(Symbol("math.add"), [x, Value(1)])
+mathModule.pi           // generates Symbol("math.pi")
+
+// Module metadata — accessed via static methods
+Module.name(mathModule)          // "math"
+Module.symbols(mathModule)       // Record<string, IR> — the symbol table
+Module.dependencies(mathModule)  // Set<Module> — transitively referenced modules
+```
+
+No clashes between symbol names and metadata. Clean enumeration (`Object.keys`, spread) shows only exported symbols. TypeScript types are fully preserved — `mathModule.add` returns a correctly-typed callable `FunctionExpr`.
 
 ### Cross-module references
 
 ```typescript
 // math.ts
-export const mathModule = East.module("myapp/math", add, pi);
+export const mathModule = East.module("math", add, pi);
 
 // main.ts
 import { mathModule } from "./math";
@@ -342,52 +131,225 @@ import { mathModule } from "./math";
 const process = East.export("process",
     East.function([IntegerType], IntegerType, ($, x) => {
         return mathModule.add(x, 1n);
-        // Generates: Call(Symbol("myapp/math/add"), [x, Value(1)])
+        // Generates: Call(Symbol("math.add"), [x, Value(1)])
     }));
-East.module("myapp/main", process);
+const mainModule = East.module("main", process);
 ```
 
-Dependencies are tracked automatically — the SDK collects `SymbolIR` references from function body IR and builds the `imports` manifest. No explicit `$.import()` needed. The TypeScript `import` IS the East import.
+Dependencies are tracked automatically via the `SymbolAST.modules` field. When a module descriptor getter creates a `SymbolAST`, it includes a reference to the containing module and its transitive dependencies. During `ast_to_ir`, these are collected into the `imports` set. The TypeScript `import` IS the East import.
 
-### External (runtime-provided) modules
+## Symbol Tables and Compilation
 
-For modules that don't exist as TypeScript values (provided by the runtime at link time):
+### Symbol table
+
+A symbol table is a `Map<string, IR>` — mapping fully-qualified symbol names to the IR that constructs their values. Composed by combining modules:
 
 ```typescript
-const fs = East.extern("east-node-std/fs", FsType);
-// fs is an Expr wrapping SymbolIR("east-node-std/fs")
-// fs.readFile(path) generates GetField(SymbolIR, "readFile") + Call
-
-const process = East.export("process",
-    East.function([StringType], IntegerType, ($, path) => {
-        const data = $.let(fs.readFile(path));
-        return data.length();
-    }));
+const symbolIRs = new Map<string, IR>();
+for (const [name, ir] of Object.entries(Module.symbols(mathModule))) {
+    symbolIRs.set(name, ir);
+}
 ```
 
-### Module operations
+### Compilation
 
-A module descriptor supports:
+The compiler accepts two maps:
 
-1. **Export to .o file** — serialize the module's IR and metadata (AST → IR conversion, no JS compilation).
-2. **Compile** — compile the module's IR to executable JavaScript, given a symbol registry for linking.
-3. **Field access** — `mathModule.add` returns a typed Expr for use in other expressions (generates SymbolIR-based IR).
-4. **ES module export** — standard TypeScript `export` for use across `.ts` files.
+- **`symbol_irs: Map<string, IR>`** — the symbol table (name → IR). Symbols are compiled and evaluated on first reference, with results cached in `symbol_values`.
+- **`symbol_values: Map<string, any>`** — the shared memoization cache (name → evaluated JS value). Pre-populated values are used directly; new symbols are compiled from `symbol_irs` and cached here.
 
-### How the SDK generates IR
+```typescript
+const symbolIRs = new Map<string, IR>(Object.entries(Module.symbols(mathModule)));
+const symbolValues = new Map<string, any>();  // shared cache
 
-When `East.module("myapp/math", add, pi, compute)` is called:
+const compiled = East.compile(fn, symbolValues, platform);
+```
 
-1. Collect all `ExportExpr` items. Each carries its own name (e.g., `"add"`, `"pi"`, `"compute"`).
-2. Assign full symbol names by combining the module name with each export name: `"myapp/math/add"`, `"myapp/math/pi"`, `"myapp/math/compute"`.
-3. For each export, convert its Expr/AST to IR. During AST-to-IR conversion, when an `ExportExpr` node is encountered as a sub-expression, emit `SymbolIR("{module}/{export}")` instead of inlining the value.
-4. The top-level IR is a `StructIR` assembling all exports by name.
-5. Walk all IR trees, collect `SymbolIR` references → build the `imports` manifest.
-6. Return `{ name, type, ir, imports }`.
+The `symbol_values` map serves as the **environment** — it defines the scope of shared mutable state. Functions compiled with the same `symbol_values` map share module-scoped mutable values (Refs, Arrays). Functions compiled with different maps are isolated. This is analogous to:
 
-### Worked example: self-referencing exports
+- **east-ui**: one `symbol_values` per application. All UI components share state.
+- **e3**: one `symbol_values` per task execution. Different tasks are isolated.
 
-A module where one export references another:
+### Automatic symbol collection via `toIR()`
+
+`FunctionExpr.toIR(symbols?)` accepts an optional `Map<string, IR>` parameter. If provided, the function's transitive module dependencies are collected into it:
+
+```typescript
+const symbolIRs = new Map<string, IR>();
+const ir = fn.toIR(symbolIRs);  // collects all referenced module symbols
+// symbolIRs now contains all symbols needed to compile fn
+```
+
+`East.compile()` does this automatically — it creates the symbol IR map, calls `toIR()` to collect dependencies, then compiles with the collected symbols.
+
+### Program
+
+A **program** is a complete symbol table + an entry point. No formal `Program` class — just the pattern:
+
+```typescript
+// { main: IR, symbols: Map<string, IR> }
+```
+
+The entry point is just a function — typically a `FunctionIR`. The function's signature defines how the program is invoked:
+
+- `(input: T) => U` — transformation (e3 dataflow tasks)
+- `(args: Array<String>) => Integer` — CLI program
+- `(request: HttpRequest) => HttpResponse` — HTTP handler
+
+The `EastProgramType` East type captures this for serialization:
+
+```ts
+const EastProgramType = StructType({
+    main: IRType,                                // the entry point function IR
+    symbols: DictType(StringType, IRType),        // complete symbol table
+    imports: DictType(StringType, EastTypeType),  // unresolved external dependencies
+});
+```
+
+## Serialization
+
+### Module format
+
+The serialized form of a module (`EastModuleType` in `src/module.ts`):
+
+```ts
+const EastModuleType = StructType({
+    symbols: DictType(StringType, IRType),        // symbol name → IR
+    imports: DictType(StringType, EastTypeType),  // unresolved deps → expected type
+});
+```
+
+This is a flat symbol table with explicit dependency metadata. No module name — naming is the packaging layer's concern (e3 object store, file system, etc.).
+
+### Function serialization and symbols
+
+Functions serialize as IR via BEAST2. `SymbolIR` nodes in the function body are preserved in the serialized form — they are "holes" that the linker fills at load time.
+
+**The function does NOT include its symbol implementations.** The symbol table is a separate artifact. This is the C model: a `.o` file has unresolved symbols; libraries are separate; the linker combines them.
+
+```typescript
+// Serialize: function and module are separate blobs
+const fnBlob = encodeBeast2For(FunctionType(...))(fn);
+const moduleBlob = encodeBeast2For(EastModuleType)(module);
+
+// Deserialize: provide symbols to the decoder
+const symbols = decodeBeast2For(EastModuleType)(moduleBlob);
+const fn = decodeBeast2For(FunctionType(...), { symbols: symbolIRs })(fnBlob);
+```
+
+For bundled distribution (e.g., sending to a browser), compose a struct:
+
+```typescript
+const BundleType = StructType({
+    main: FunctionType([IntegerType], IntegerType),
+    symbols: DictType(StringType, IRType),
+});
+```
+
+The user controls what goes in the blob:
+- **Lean (separate)**: function alone + module `.o` files alongside. Good for e3 (content-addressed dedup), CLI runners.
+- **Fat (bundled)**: function + symbols as one struct. Good for east-ui (server → browser).
+- **Partial**: server resolves user symbols, sends partially-linked IR to client. Client provides only native symbols. Works with the lenient compiler (unresolved symbols become runtime stubs).
+
+## ExportRefAST — the deduplication mechanism
+
+`East.export()` returns a fully transparent Expr whose internal AST is an `ExportRefAST`:
+
+```
+ExportRefAST = {
+    ast_type: "ExportRef",
+    type: EastType,              // the symbol value's type
+    location: Location[],
+    localName: String,           // symbol name, e.g. "pi"
+    innerAst: AST,              // the value's actual AST
+}
+```
+
+`ExportRefAST` is an **AST-only** node — it never appears in IR. It solves the timing problem: function body callbacks run eagerly (before `East.module()` assigns full symbol names), so the AST captures the local name.
+
+When `East.module()` calls `ast_to_ir`, it provides an export registry (`Map<localName, { symbol: fullName, type }>`) as context:
+
+- **Inside a module context**: `ExportRefAST` → `SymbolIR("{module}.{symbol}")`.
+- **Outside a module context**: error — exports must be used within a module. Use `East.extern()` for standalone symbol references.
+
+### Deduplication rules
+
+1. **Only symbols (exports) are deduplicated.** Values wrapped in `East.export()` carry `ExportRefAST`. When they appear inside other exports' function bodies, `ast_to_ir` converts them to `SymbolIR`.
+2. **Non-symbols are always inlined.** Plain values not wrapped in `East.export()` are embedded directly in the IR wherever they appear.
+3. **Detection is by AST node type.** No `===` scanning, no structural comparison, no content hashing.
+4. **Any East type can be a symbol.** The deduplication mechanism is type-agnostic.
+
+## Linking
+
+Linking resolves `SymbolIR` nodes to concrete values before execution.
+
+### How the JS compiler resolves symbols
+
+The JS compiler uses **late binding**: `SymbolIR` compiles to a dynamic lookup in `symbol_values` at call time. This allows symbols to be compiled and evaluated in any order — the memoization cache is populated lazily.
+
+```typescript
+// compile_internal for SymbolIR:
+return (_ctx) => {
+    const ret = symbol_values.get(name);
+    if (ret === undefined) throw new EastError(`Symbol '${name}' is not available`);
+    return ret;
+};
+```
+
+`EastIR.compile()` pre-populates `symbol_values` by compiling each symbol's IR from `symbol_irs` before compiling the main function. Symbols that depend on other symbols are resolved transitively.
+
+### Error handling
+
+- **Missing symbol**: throws `EastError` at runtime when the symbol is accessed (not at compile time). This supports partial compilation for SSR and other two-phase workflows.
+- **Self-references**: A module may reference its own symbols via SymbolIR. This works because function bodies are lazy — not evaluated during module construction.
+
+## Distribution: Static Linking vs Separate Modules
+
+When producing an artifact (e.g., an e3 package), the SDK has two strategies:
+
+**Static linking** — recursively collect all referenced modules into a single flat symbol table. Simple and self-contained. `FunctionExpr.toIR(symbolIRs)` does this automatically.
+
+**Separate modules** — store each module as an independent object. The runner composes the symbol table at load time. This enables:
+
+- **Dedup within a package**: if task1 and task2 both use `math`, the module is stored once.
+- **Dedup across packages**: in the e3 object store, content-addressed modules are shared.
+- **Incremental updates**: changing one module only invalidates that module's object.
+
+The `extern` distinction controls this: `East.extern()` symbols are never bundled — they are provided by the runtime. `East.export()` + `East.module()` symbols can be either bundled or kept separate.
+
+## Runtime Environment Contract
+
+The East language specification does not define packages, package management, or module resolution. These are concerns of the runtime environment (e.g., e3).
+
+The specification requires only that:
+
+1. **Uniqueness**: Symbol names resolve unambiguously within an execution context.
+2. **Availability**: All symbols are available before execution begins.
+3. **Linking errors**: Unresolved symbols produce errors when accessed at runtime.
+4. **Type checking**: Resolved values have types compatible with what importers expect.
+
+## Module Identity and Content Addressing
+
+Modules are identified by **name** for linking purposes. In the object store, modules are content-addressed by **hash** (like all e3 objects). The environment (e3) enforces that only one version of a given name is active in a workspace.
+
+## Package Publishing (e3 Context)
+
+> This section describes how e3 uses the module system. It is not part of the East language specification.
+
+When publishing modules as part of an e3 package:
+
+1. The publisher provides a **package name** (e.g., `east-python`, `myapp`).
+2. The publisher declares which modules are **public** and their names within the package namespace.
+3. The full module identifier becomes `{package}.{module}` (e.g., `east-python.fs`).
+4. Private/internal modules are bundled but not exposed in the package's public API.
+
+Each e3 task has a manifest of required modules. The e3 runner composes the symbol table from these modules (plus runtime-provided native modules) before executing the task.
+
+Native modules (effectful things like `fs`, `net`, database connectors) are provided by the runtime and referenced via `East.extern()`. The design of native module distribution is phase 2.
+
+## Worked Examples
+
+### Self-referencing symbols within a module
 
 ```typescript
 const addOne = East.export("addOne",
@@ -395,96 +357,140 @@ const addOne = East.export("addOne",
 
 const addTwo = East.export("addTwo",
     East.function([IntegerType], IntegerType, ($, x) => {
-        // addOne is an ExportExpr — the SDK emits SymbolIR instead of inlining
         return addOne(addOne(x));
     }));
 
-const mathModule = East.module("myapp/math", addOne, addTwo);
+const mathModule = East.module("math", addOne, addTwo);
 ```
 
-The resulting IR for module `"myapp/math"`:
+**Step by step:**
+
+1. `East.export("addOne", fn)` — creates a FunctionExpr whose internal AST is `ExportRefAST { localName: "addOne", innerAst: FunctionAST { ... } }`.
+
+2. Inside `addTwo`'s body, `addOne(x)` calls the FunctionExpr. Since `addOne`'s AST is an `ExportRefAST`, the resulting `CallAST` has `ExportRefAST` as its function child.
+
+3. `East.module("math", addOne, addTwo)` builds the export registry: `{ "addOne" → "math.addOne", "addTwo" → "math.addTwo" }`. Each export's `ExportRefAST` is unwrapped to get the inner AST.
+
+4. During `ast_to_ir` with this registry, the `ExportRefAST` nodes inside `addTwo`'s function body are resolved to `SymbolIR("math.addOne")`.
+
+5. The resulting symbol table:
 
 ```
-StructIR {
-    fields: [
-        { name: "addOne", value: FunctionIR { params: [x], body: Builtin("Add", [x, Value(1)]) } },
-        { name: "addTwo", value: FunctionIR { params: [x], body:
-            Call(Symbol("myapp/math/addOne"),
-                [Call(Symbol("myapp/math/addOne"), [Variable(x)])])
-        } },
-    ]
+"math.addOne" → FunctionIR { params: [x], body: Builtin("Add", [x, Value(1)]) }
+"math.addTwo" → FunctionIR { params: [x], body:
+    Call(Symbol("math.addOne"), [Call(Symbol("math.addOne"), [Variable(x)])])
 }
 ```
 
-`addOne`'s IR appears once (as the "addOne" field). `addTwo` references it via `SymbolIR("myapp/math/addOne")`.
+Self-references work because function bodies are lazy — not evaluated during module construction.
 
-At runtime:
-1. The module's IR is evaluated → creates a struct with `addOne` and `addTwo` fields.
-2. The struct is registered in the symbol registry as `"myapp/math"`, and each export is registered individually as `"myapp/math/addOne"`, `"myapp/math/addTwo"`.
-3. When `addTwo(5n)` is called, `Symbol("myapp/math/addOne")` resolves to the `addOne` function in the registry → calls it → returns the result.
+### Cross-module references
 
-Self-references work because function bodies are lazy — they are not evaluated during struct construction. By the time a function body executes, all exports are registered.
+```typescript
+// math.ts
+const add = East.export("add",
+    East.function([IntegerType, IntegerType], IntegerType, ($, a, b) => a.add(b)));
+export const mathModule = East.module("math", add);
+
+// main.ts
+import { mathModule } from "./math";
+
+const process = East.export("process",
+    East.function([IntegerType], IntegerType, ($, x) => {
+        return mathModule.add(x, 1n);
+    }));
+const mainModule = East.module("main", process);
+```
+
+`mathModule.add` is a dynamic getter that returns an Expr wrapping `SymbolAST { name: "math.add", modules: Set{mathModule} }`. The `modules` field tracks dependencies automatically — when `ast_to_ir` processes this `SymbolAST`, the referenced modules are added to the dependency set.
+
+### Compilation
+
+```typescript
+// East.compile handles symbol collection automatically
+const symbolValues = new Map<string, any>();
+const compiled = East.compile(
+    East.function([IntegerType], IntegerType, ($, x) => mathModule.add(x, 1n)),
+    symbolValues,
+);
+compiled(5n);  // 6n
+```
 
 ## Future: Parametric Functions
 
 When East adds user-defined parametric (generic) functions, modules will be able to export them. The linker's role expands slightly:
 
-- A `SymbolIR` may include `type_args` for specialization: `Symbol("math.add", type_args: [FloatType])`.
+- A `SymbolIR` may include `type_args` for specialization.
 - The linker specializes the generic function to a concrete type, memoizing the result.
 - This is link-time monomorphization — the same approach used by C++ templates and Rust generics.
 
-The module structure doesn't change. The function value in the module is parametric; the linker produces concrete instantiations on demand.
+## Compliance Test Suite
 
-## Homoiconic IR Type
+The compliance test suite exports IR + symbols for testing on all East runtimes (east-py, east-c, etc.).
 
-`SymbolIR` must be added to the `IRType` definition in `src/ir.ts` so it can be serialized as an East value:
+### Test data format
 
-```ts
-// Added to the IRType RecursiveType variant:
-Symbol: StructType({
-    type: EastTypeType,
-    location: ArrayType(LocationType),
-    name: StringType,
-}),
+The exported test data includes an optional symbol table alongside the test IR:
+
+```json
+{
+    "ir": { ... },                    // the test suite function IR
+    "symbols": { "name": { ... } }   // symbol name → IR (default: {})
+}
 ```
 
-This extends the existing `IRType` which already includes all other IR nodes (`Value`, `Variable`, `Call`, `Platform`, etc.).
+Runners that don't support symbols yet can ignore the `symbols` field — the lenient compiler stubs unresolved symbols.
+
+### Test categories
+
+**Compliance tests** (`test/module.spec.ts`): SymbolIR in the IR layer — functions with SymbolIR nodes compile and execute correctly when symbols are provided. Exported as IR for cross-runtime testing.
+
+**SDK unit tests** (`src/module.spec.ts`): The TypeScript SDK interface — `East.export()`, `East.module()`, `East.extern()`, deduplication, dependency tracking, compilation. JS-only (not exported as IR).
+
+**Examples** (`contrib/examples/module.ts`): Informal examples demonstrating module usage.
 
 ## Implementation Checklist
 
 ### IR layer (`src/ir.ts`)
-- [ ] Add `SymbolIR` type definition
-- [ ] Add `Symbol` to the `IR` union type
-- [ ] Add `Symbol` variant to the homoiconic `IRType`
+- [x] `SymbolIR` type definition, `IR` union, homoiconic `IRType`
 
 ### Compiler (`src/compile.ts`)
-- [ ] Handle `SymbolIR` in the JS compiler (emit registry lookup or resolved value)
-- [ ] Accept a symbol registry parameter in `compile_internal`
+- [x] `SymbolIR` handler: late-binding lookup in `symbol_values` map
+- [x] `symbol_irs` and `symbol_values` maps threaded through `compile_internal`
 
 ### Analysis (`src/analyze.ts`)
-- [ ] Handle `SymbolIR` in IR analysis (no async propagation needed — symbols are values, not calls)
+- [x] `SymbolIR` handler (lenient: skip missing, type-check present)
 
-### Serialization
-- [ ] Handle `Symbol` variant in BEAST2 IR encoder/decoder (automatic via `IRType`)
-- [ ] Handle `Symbol` variant in East text format
-- [ ] Handle `Symbol` variant in JSON format
+### Serialization (`src/module.ts`)
+- [x] `EastModuleType` — `{ symbols: Dict<String, IR>, imports: Dict<String, EastType> }`
+- [x] `EastProgramType` — `{ main: IR, symbols: Dict<String, IR>, imports: Dict<String, EastType> }`
 
-### Fluent interface (`src/expr/`)
-- [ ] Add `ExportExpr` AST node type (carries export name + wrapped value)
-- [ ] Add `East.export(name, value)` — creates named `ExportExpr`
-- [ ] Add `East.extern(name, type)` — creates SymbolIR-based Expr for runtime-provided modules
-- [ ] Add `East.module(name, ...exports)` — constructs module from varargs exports
-- [ ] Module descriptor acts as Expr (field access returns SymbolIR-based expressions)
-- [ ] Wire up SymbolIR generation during AST-to-IR conversion (emit SymbolIR when `ExportExpr` encountered as sub-expression)
+### AST layer (`src/ast.ts`, `src/ast_to_ir.ts`)
+- [x] `SymbolAST` with `modules: Set` for automatic dependency tracking
+- [x] `ExportRefAST` for intra-module deduplication
+- [x] `exports` and `imports` fields in `ast_to_ir` `Ctx`
+- [x] `ExportRefAST` → `SymbolIR` (in module context) or error (outside)
+- [x] `SymbolAST` → `SymbolIR` with dependency collection
 
-### Testing (`test/`)
-- [ ] SymbolIR round-trip through BEAST2
-- [ ] Module construction via SDK
-- [ ] Export deduplication (same export referenced in multiple function bodies)
-- [ ] Non-export inlining (helper functions remain inlined)
-- [ ] Cross-module references via module descriptor field access
-- [ ] External references via `East.extern()`
-- [ ] Linking with resolved symbols
-- [ ] Type checking at link time
-- [ ] Error cases: missing symbol, type mismatch
-- [ ] Mutable exports (Ref, Array) with shared identity
+### SDK (`src/expr/block.ts`)
+- [x] `East.export(name, value)` — validates, wraps in `ExportRefAST`, returns transparent Expr
+- [x] `East.extern(module, name, type)` — creates `SymbolAST`-based Expr
+- [x] `East.module(name, ...symbols)` — varargs, typed, with field getters
+- [x] `Module` class with hidden metadata (`Module.name()`, `Module.symbols()`, `Module.dependencies()`)
+- [x] `FunctionExpr.toIR(symbols?)` — collects transitive module dependencies
+
+### SDK unit tests (`src/module.spec.ts`)
+- [x] Export creation, transparency, callability
+- [x] Export outside module context errors
+- [x] Extern name construction and callability
+- [x] Module construction, validation, field getters, metadata
+- [x] Same-module dedup (ExportRef → SymbolIR)
+- [x] Non-export inlining
+- [x] Cross-module references and transitive dependencies
+- [x] End-to-end compile + execute (same-module, cross-module, automatic collection)
+
+### Compliance tests (`test/module.spec.ts`)
+- [x] `describeEast` updated to support symbol tables
+- [x] Symbol resolution (constants, functions, multiple symbols)
+- [x] Nested function bodies referencing symbols
+- [x] Missing symbol runtime error

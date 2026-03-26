@@ -33,7 +33,7 @@ const platform = [
 ];
 
 // With the fix, this now compiles and infers the correct types
-const compiled = East.compileAsync(getStatus, platform);
+const compiled = East.compileAsync(getStatus, new Map(), platform);
 
 // Type check: compiled should be (url: string) => Promise<{ path: string; count: bigint }>
 async function main() {

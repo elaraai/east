@@ -38,7 +38,7 @@ runAndCatch("Direct $.error() call", () => {
     const f = East.function([], NullType, $ => {
         $.error("This is a direct error");
     });
-    const compiled = East.compile(f, platform);
+    const compiled = East.compile(f, new Map(), platform);
     compiled();
 });
 
@@ -52,7 +52,7 @@ runAndCatch("Error in nested function", () => {
         $(inner());
     });
 
-    const compiled = East.compile(outer, platform);
+    const compiled = East.compile(outer, new Map(), platform);
     compiled();
 });
 
@@ -70,7 +70,7 @@ runAndCatch("Deeply nested error", () => {
         $(level2());
     });
 
-    const compiled = East.compile(level1, platform);
+    const compiled = East.compile(level1, new Map(), platform);
     compiled();
 });
 
@@ -79,7 +79,7 @@ runAndCatch("Expr.error() static method", () => {
     const f = East.function([], NullType, $ => {
         $.return($.error("Static error method"));
     });
-    const compiled = East.compile(f, platform);
+    const compiled = East.compile(f, new Map(), platform);
     compiled();
 });
 
@@ -90,7 +90,7 @@ runAndCatch("Error in if branch", () => {
             $.error("Cannot be zero!");
         });
     });
-    const compiled = East.compile(f, platform);
+    const compiled = East.compile(f, new Map(), platform);
     compiled(0n);
 });
 
@@ -103,7 +103,7 @@ runAndCatch("Error in forEach loop", () => {
             });
         }));
     });
-    const compiled = East.compile(f, platform);
+    const compiled = East.compile(f, new Map(), platform);
     compiled([1n, 2n, -3n, 4n]);
 });
 
@@ -122,7 +122,7 @@ runAndCatch("Try-catch captures stack", () => {
         }).finally(() => {});
         $.return("done");
     });
-    const compiled = East.compile(f, platform);
+    const compiled = East.compile(f, new Map(), platform);
     const result = compiled();
     console.log("Function returned:", result);
 });

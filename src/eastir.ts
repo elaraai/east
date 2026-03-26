@@ -7,6 +7,7 @@ import type { AsyncFunctionIR, FunctionIR } from "./ir.js";
 import { compile_internal, ReturnException, EAST_IR_SYMBOL } from "./compile.js";
 import type { PlatformFunction } from "./platform.js";
 import { analyzeIR } from "./analyze.js";
+import type { IR } from "./ir.js";
 
 /** A helper class wrapping East's "intermediate representation" (IR) for a free function.
  * The IR can be serialized and saved, or compiled so that the function can be executed.
@@ -22,11 +23,25 @@ export class EastIR<Inputs extends any[], Output extends any> {
   }
 
   /** Compile the function for execution in JavaScript using a closure-compiler technique.
-   * Platform functions must be provided for the function to evaluate.
+   * Import symbols and platform functions must be provided for the function to evaluate.
    *
+   * @param symbols - Array of import symbol definitions the function can access
    * @param platform - Array of platform function implementations
    */
-  compile(platform: PlatformFunction[]): (...inputs: { [K in keyof Inputs]: ValueTypeOf<Inputs[K]> }) => ValueTypeOf<Output> {
+  compile(symbol_irs: Map<string, IR>, symbol_values: Map<string, IR>, platform: PlatformFunction[] = []): (...inputs: { [K in keyof Inputs]: ValueTypeOf<Inputs[K]> }) => ValueTypeOf<Output> {
+    // Process the symbols first
+    for (const [symbol_name, symbol_ir] of symbol_irs) {
+      if (!symbol_values.has(symbol_name)) {
+        // Compile this symbol, execute it, add the result to symbol_values
+        const analyzed_ir = analyzeIR(symbol_ir, platform);
+        const platformFns = Object.fromEntries(platform.map(fn => [fn.name, fn.fn]));
+        const asyncPlatformFns = new Set<string>();
+        const compiled_expr = compile_internal(analyzed_ir, {}, symbol_irs, symbol_values, platformFns, asyncPlatformFns, platform);
+        const value = compiled_expr({});
+        symbol_values.set(symbol_name, value);
+      }
+    }
+
     // Analyse the IR
     const analyzed_ir = analyzeIR(this.ir, platform);
 
@@ -34,7 +49,7 @@ export class EastIR<Inputs extends any[], Output extends any> {
     const platformFns = Object.fromEntries(platform.map(fn => [fn.name, fn.fn]));
     const asyncPlatformFns = new Set<string>();
 
-    const compiled_expr = compile_internal(analyzed_ir, {}, platformFns, asyncPlatformFns, platform);
+    const compiled_expr = compile_internal(analyzed_ir, {}, symbol_irs, symbol_values, platformFns, asyncPlatformFns, platform);
 
     // instantiate the function (with no environment)
     const instantiated_function = compiled_expr({});
@@ -78,12 +93,26 @@ export class AsyncEastIR<Inputs extends any[], Output extends any> {
   }
 
   /** Compile the async function for execution in JavaScript using a closure-compiler technique.
-   * Platform functions must be provided for the function to evaluate, which may return `Promise`s.
+   * Import symbols and platform functions must be provided for the function to evaluate, which may return `Promise`s.
    * The compiled function itself returns a `Promise`.
    *
+   * @param symbols - Array of import symbol definitions the function can access
    * @param platform - Array of platform function implementations
    */
-  compile(platform: PlatformFunction[]): (...inputs: { [K in keyof Inputs]: ValueTypeOf<Inputs[K]> }) => Promise<ValueTypeOf<Output>> {
+  compile(symbol_irs: Map<string, IR>, symbol_values: Map<string, IR>, platform: PlatformFunction[] = []): (...inputs: { [K in keyof Inputs]: ValueTypeOf<Inputs[K]> }) => Promise<ValueTypeOf<Output>> {
+    // Process the symbols first
+    for (const [symbol_name, symbol_ir] of symbol_irs) {
+      if (!symbol_values.has(symbol_name)) {
+        // Compile this symbol, execute it, add the result to symbol_values
+        const analyzed_ir = analyzeIR(symbol_ir, platform);
+        const platformFns = Object.fromEntries(platform.map(fn => [fn.name, fn.fn]));
+        const asyncPlatformFns = new Set<string>();
+        const compiled_expr = compile_internal(analyzed_ir, {}, symbol_irs, symbol_values, platformFns, asyncPlatformFns, platform);
+        const value = compiled_expr({});
+        symbol_values.set(symbol_name, value);
+      }
+    }
+
     // Analyse the IR
     const analyzed_ir = analyzeIR(this.ir, platform);
 
@@ -93,7 +122,7 @@ export class AsyncEastIR<Inputs extends any[], Output extends any> {
       platform.filter(fn => fn.type === 'async').map(fn => fn.name)
     );
 
-    const compiled_expr = compile_internal(analyzed_ir, {}, platformFns, asyncPlatformFns, platform);
+    const compiled_expr = compile_internal(analyzed_ir, {}, symbol_irs, symbol_values, platformFns, asyncPlatformFns, platform);
 
     // instantiate the function (with no environment)
     const instantiated_function = compiled_expr({});

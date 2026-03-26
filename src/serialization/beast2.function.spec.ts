@@ -32,7 +32,7 @@ describe("Beast2 Function Serialization - Basic", () => {
     });
 
     // Compile and get a callable function
-    const compiled = East.compile(double, []);
+    const compiled = East.compile(double, new Map());
 
     // Encode and decode
     const encode = encodeBeast2For(FnType);
@@ -52,7 +52,7 @@ describe("Beast2 Function Serialization - Basic", () => {
       return a.add(b);
     });
 
-    const compiled = East.compile(add, []);
+    const compiled = East.compile(add, new Map());
     const encode = encodeBeast2For(FnType);
     const decode = decodeBeast2For(FnType);
 
@@ -78,7 +78,7 @@ describe("Beast2 Function Serialization - Simple Captures", () => {
       });
     });
 
-    const compiled = East.compile(makeGetter, []);
+    const compiled = East.compile(makeGetter, new Map());
     const getter = compiled(42n); // Returns a closure that captured 42
 
     // Encode and decode the closure
@@ -100,7 +100,7 @@ describe("Beast2 Function Serialization - Simple Captures", () => {
       });
     });
 
-    const compiled = East.compile(makeAdder, []);
+    const compiled = East.compile(makeAdder, new Map());
     const adder = compiled(20n, 22n);
 
     const encode = encodeBeast2For(FnType);
@@ -136,7 +136,7 @@ describe("Beast2 Function Serialization - Nested Functions with Captures", () =>
       });
     });
 
-    const compiled = East.compile(makeMapper, []);
+    const compiled = East.compile(makeMapper, new Map());
     const mapper = compiled(10n); // multiplier = 10
 
     // Encode and decode
@@ -166,7 +166,7 @@ describe("Beast2 Function Serialization - Nested Functions with Captures", () =>
       });
     });
 
-    const compiled = East.compile(makeNested, []);
+    const compiled = East.compile(makeNested, new Map());
     const outer = compiled(42n);
 
     // Encode and decode the outer closure
@@ -203,7 +203,7 @@ describe("Beast2 Function Serialization - Nested Functions with Captures", () =>
       };
     });
 
-    const compiled = East.compile(makeComponent, []);
+    const compiled = East.compile(makeComponent, new Map());
     const component = compiled("Hello");
 
     // Encode and decode
@@ -238,7 +238,7 @@ describe("Beast2 Function Serialization - Variant with Function Captures", () =>
       });
     });
 
-    const compiled = East.compile(makeReactive, []);
+    const compiled = East.compile(makeReactive, new Map());
     const reactive = compiled(42n);
 
     // Encode and decode
@@ -270,7 +270,7 @@ describe("Beast2 Function Serialization - Variant with Function Captures", () =>
       });
     });
 
-    const compiled = East.compile(makeReactive, []);
+    const compiled = East.compile(makeReactive, new Map());
     const reactive = compiled([1n, 2n, 3n]);
 
     // Encode and decode
@@ -301,7 +301,7 @@ describe("Beast2 Function Serialization - Untyped Decode", () => {
       });
     });
 
-    const compiled = East.compile(makeGetter, []);
+    const compiled = East.compile(makeGetter, new Map());
     const getter = compiled(42n);
 
     // Encode with typed encoder
@@ -331,7 +331,7 @@ describe("Beast2 Function Serialization - Untyped Decode", () => {
       });
     });
 
-    const compiled = East.compile(makeReactive, []);
+    const compiled = East.compile(makeReactive, new Map());
     const reactive = compiled([1n, 2n, 3n]);
 
     // Encode with typed encoder
@@ -369,7 +369,7 @@ describe("Beast2 Function Serialization - Recursive Types", () => {
       });
     });
 
-    const compiled = East.compile(makeReactive, []);
+    const compiled = East.compile(makeReactive, new Map());
     const reactive = compiled("Hello");
 
     // Encode and decode

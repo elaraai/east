@@ -66,7 +66,7 @@ import { TypeSymbol } from "../../src/internal.js";
     );
 
     // Compile and execute
-    const compiled = East.compile(calculateRevenue, platform);
+    const compiled = East.compile(calculateRevenue, new Map(), platform);
 
     const sales = [
         { product: "Widget", quantity: 10n, price: 50n },
@@ -101,7 +101,7 @@ import { TypeSymbol } from "../../src/internal.js";
         $.return(addResult(sum));
     });
 
-    const compiled = East.compile(myFunction, []);
+    const compiled = East.compile(myFunction, new Map(), []);
     console.log("Fluent Interface result:", compiled(5n));
     // 42n (sum [2,4,6] = 12, result = (5+10)*2 = 30, addResult(12) = 12+30 = 42)
 }
@@ -119,7 +119,7 @@ import { TypeSymbol } from "../../src/internal.js";
     const funcType = Expr.type(myFunction);
 
     // Compile the function (this attaches the IR)
-    const compiled = East.compile(myFunction, []);
+    const compiled = East.compile(myFunction, new Map(), []);
 
     // Serialize the compiled function to Beast2 (binary format)
     const encode = encodeBeast2For(funcType);

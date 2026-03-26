@@ -29,7 +29,7 @@ console.log("=== Function Serialization with Platform Functions ===\n");
     const funcType = FunctionType([IntegerType], IntegerType);
 
     // Compile the function (this attaches the IR)
-    const f_compiled = East.compile(f, doublePlatform);
+    const f_compiled = East.compile(f, new Map(), doublePlatform);
 
     // Serialize the function to Beast2
     const encoder = encodeBeast2For(funcType);
@@ -72,7 +72,7 @@ console.log("=== Function Serialization with Platform Functions ===\n");
     });
 
     // Compile the callback
-    const callback_compiled = East.compile(callback, tracePlatform);
+    const callback_compiled = East.compile(callback, new Map(), tracePlatform);
 
     // Create a struct value with the callback
     const structValue = {
@@ -111,7 +111,7 @@ console.log("=== Function Serialization with Platform Functions ===\n");
     const funcType = FunctionType([IntegerType, IntegerType], IntegerType);
 
     // Compile with empty platform
-    const f_compiled = East.compile(f, []);
+    const f_compiled = East.compile(f, new Map(), []);
 
     // Serialize
     const encoder = encodeBeast2For(funcType);

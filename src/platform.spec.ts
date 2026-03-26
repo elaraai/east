@@ -23,7 +23,7 @@ describe("platform functions", () => {
                 $.return(null);
             });
 
-            const f_compiled = East.compile(f, platform);
+            const f_compiled = East.compile(f, new Map(), platform);
             const result = f_compiled("hello");
 
             assert.strictEqual(result, null);
@@ -40,7 +40,7 @@ describe("platform functions", () => {
                 $.return(double(input));
             });
 
-            const f_compiled = East.compile(f, platform);
+            const f_compiled = East.compile(f, new Map(), platform);
             const result = f_compiled(21n);
 
             assert.strictEqual(result, 42n);
@@ -66,7 +66,7 @@ describe("platform functions", () => {
                 $.return(getTypeName([IntegerType], input));
             });
 
-            const f_compiled = East.compile(f, platform);
+            const f_compiled = East.compile(f, new Map(), platform);
             const result = f_compiled(42n);
 
             assert.strictEqual(result, "Integer");
@@ -90,14 +90,14 @@ describe("platform functions", () => {
             const f1 = East.function([IntegerType], StringType, ($, input) => {
                 $.return(genericPrint([IntegerType], input));
             });
-            const f1_compiled = East.compile(f1, platform);
+            const f1_compiled = East.compile(f1, new Map(), platform);
             assert.strictEqual(f1_compiled(42n), "42");
 
             // Test with String
             const f2 = East.function([StringType], StringType, ($, input) => {
                 $.return(genericPrint([StringType], input));
             });
-            const f2_compiled = East.compile(f2, platform);
+            const f2_compiled = East.compile(f2, new Map(), platform);
             assert.strictEqual(f2_compiled("hello"), '"hello"');
         });
 
@@ -119,7 +119,7 @@ describe("platform functions", () => {
                 $.return(wrap([IntegerType], input));
             });
 
-            const f_compiled = East.compile(f, platform);
+            const f_compiled = East.compile(f, new Map(), platform);
             const result = f_compiled(42n);
 
             assert.deepStrictEqual(result, [42n]);
@@ -147,7 +147,7 @@ describe("platform functions", () => {
                 }
             );
 
-            const f_compiled = East.compile(f, platform);
+            const f_compiled = East.compile(f, new Map(), platform);
             const result = f_compiled(42n, "hello");
 
             assert.deepStrictEqual(result, { first: 42n, second: "hello" });
@@ -176,7 +176,7 @@ describe("platform functions", () => {
                 $.return(map([IntegerType, StringType], input, intToString));
             });
 
-            const f_compiled = East.compile(f, platform);
+            const f_compiled = East.compile(f, new Map(), platform);
             const result = f_compiled(42n);
 
             assert.strictEqual(result, "42");
@@ -240,7 +240,7 @@ describe("platform functions", () => {
                 $.return(asyncFetch([IntegerType], url));
             });
 
-            const f_compiled = East.compileAsync(f, platform);
+            const f_compiled = East.compileAsync(f, new Map(), platform);
             const result = await f_compiled("http://example.com");
 
             assert.strictEqual(result, 42n);
@@ -265,7 +265,7 @@ describe("platform functions", () => {
                 $.return(asyncWrap([StringType], input));
             });
 
-            const f_compiled = East.compileAsync(f, platform);
+            const f_compiled = East.compileAsync(f, new Map(), platform);
             const result = await f_compiled("hello");
 
             assert.deepStrictEqual(result, ["hello", "hello"]);
@@ -306,21 +306,21 @@ describe("platform functions", () => {
             const f1 = East.function([IntegerType], IntegerType, ($, input) => {
                 $.return(identity([IntegerType], input));
             });
-            const f1_compiled = East.compile(f1, platform);
+            const f1_compiled = East.compile(f1, new Map(), platform);
             assert.strictEqual(f1_compiled(42n), 42n);
 
             // Use with String
             const f2 = East.function([StringType], StringType, ($, input) => {
                 $.return(identity([StringType], input));
             });
-            const f2_compiled = East.compile(f2, platform);
+            const f2_compiled = East.compile(f2, new Map(), platform);
             assert.strictEqual(f2_compiled("hello"), "hello");
 
             // Use with Float
             const f3 = East.function([FloatType], FloatType, ($, input) => {
                 $.return(identity([FloatType], input));
             });
-            const f3_compiled = East.compile(f3, platform);
+            const f3_compiled = East.compile(f3, new Map(), platform);
             assert.strictEqual(f3_compiled(3.14), 3.14);
         });
     });
@@ -336,7 +336,7 @@ describe("platform functions", () => {
 
             // Compiling without providing the platform function should throw
             assert.throws(() => {
-                East.compile(f, []);
+                East.compile(f, new Map());
             }, /Platform function 'log' not found/);
         });
 
@@ -349,7 +349,7 @@ describe("platform functions", () => {
             });
 
             // Should not throw when platform is marked as optional
-            const f_compiled = East.compile(f, []);
+            const f_compiled = East.compile(f, new Map());
             assert.ok(f_compiled !== undefined);
         });
 
@@ -361,7 +361,7 @@ describe("platform functions", () => {
                 $.return(null);
             });
 
-            const f_compiled = East.compile(f, []);
+            const f_compiled = East.compile(f, new Map());
 
             // Calling the function should throw at runtime
             assert.throws(() => {
@@ -381,7 +381,7 @@ describe("platform functions", () => {
                 $.return(input);
             });
 
-            const f_compiled = East.compile(f, []);
+            const f_compiled = East.compile(f, new Map());
 
             // Should work fine when the code path doesn't call the missing function
             const result = f_compiled(42n);
@@ -401,7 +401,7 @@ describe("platform functions", () => {
                 $.return(null);
             });
 
-            const f_compiled = East.compile(f, platform);
+            const f_compiled = East.compile(f, new Map(), platform);
             f_compiled("hello");
 
             assert.strictEqual(logged, "hello");
@@ -415,7 +415,7 @@ describe("platform functions", () => {
                 $.return(input);
             });
 
-            const f_compiled = East.compileAsync(f, []);
+            const f_compiled = East.compileAsync(f, new Map());
 
             // Calling should throw at runtime
             await assert.rejects(async () => {
@@ -437,7 +437,7 @@ describe("platform functions", () => {
                 $.return(null);
             });
 
-            const f_compiled = East.compile(f, []);
+            const f_compiled = East.compile(f, new Map());
 
             // Calling should throw at runtime
             assert.throws(() => {
@@ -459,7 +459,7 @@ describe("platform functions", () => {
                 $.return(null);
             });
 
-            const f_compiled = East.compileAsync(f, []);
+            const f_compiled = East.compileAsync(f, new Map());
 
             // Calling should throw at runtime
             await assert.rejects(async () => {
@@ -477,7 +477,7 @@ describe("platform functions", () => {
                 $(optionalPlatform(input));
                 $.return(null);
             });
-            const f1_compiled = East.compile(f1, []);
+            const f1_compiled = East.compile(f1, new Map());
             assert.ok(f1_compiled !== undefined);
 
             // Using required without implementation should fail
@@ -486,7 +486,7 @@ describe("platform functions", () => {
                 $.return(null);
             });
             assert.throws(() => {
-                East.compile(f2, []);
+                East.compile(f2, new Map());
             }, /Platform function 'required' not found/);
         });
     });

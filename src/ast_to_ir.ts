@@ -24,6 +24,8 @@ type Ctx = {
   captures: Set<VariableIR>,
   loop_ctx: Map<Label, IRLabel>,
   recursiveASTs?: Set<any>,
+  exports: Map<string, { symbol: string, type: EastType }>,
+  imports: Set<any>,
   n_vars: number,
   n_loops: number,
   inputs: EastType[],
@@ -44,7 +46,7 @@ function toLocationValues(locations: Location[]): LocationValue[] {
 /** Perform scope resolution and type checking on `AST`, produce `IR` ready for serialization, compilation or evaluation.
 * 
 * @internal */
-export function ast_to_ir(ast: AST, ctx: Ctx = { local_ctx: new Map(), parent_ctx: new Map(), captures: new Set(), loop_ctx: new Map(), n_vars: 0, n_loops: 0, inputs: [], output: NeverType, async: false }): IR {
+export function ast_to_ir(ast: AST, ctx: Ctx = { local_ctx: new Map(), parent_ctx: new Map(), captures: new Set(), loop_ctx: new Map(), exports: new Map(), imports: new Set(), n_vars: 0, n_loops: 0, inputs: [], output: NeverType, async: false }): IR {
   try {
     if (ast.ast_type === "Variable") {
       if (ctx.local_ctx.has(ast)) {
@@ -191,6 +193,31 @@ export function ast_to_ir(ast: AST, ctx: Ctx = { local_ctx: new Map(), parent_ct
           return arg_ir;
         }),
       });
+    } else if (ast.ast_type === "Symbol") {
+      // track the dependencies automatically
+      for (const module of ast.modules) {
+        ctx.imports.add(module);
+      }
+
+      return variant("Symbol", {
+        type: toEastTypeValue(ast.type),
+        location: toLocationValues(ast.location),
+        name: ast.name,
+      });
+    } else if (ast.ast_type === "ExportRef") {
+      // Convert local module reference to global symbol reference
+      const export_info = ctx.exports.get(ast.localName);
+      if (export_info === undefined) {
+        throw new Error(`Export "${ast.localName}" not found in module context at ${printLocations(ast.location)}. Did you forget to include it in East.module()?`);
+      }
+      if (!isTypeEqual(ast.type, export_info.type)) {
+        throw new Error(`Export "${ast.localName}" of type ${printType(export_info.type)} is not compatible with expected type ${printType(ast.type)} at ${printLocations(ast.location)}`);
+      }
+      return variant("Symbol", {
+        type: toEastTypeValue(ast.type),
+        location: toLocationValues(ast.location),
+        name: export_info.symbol,
+      });
     } else if (ast.ast_type === "Platform") {
       if (ctx.async === false && ast.async === true) {
         throw new Error(`Async platform call not allowed outside async function at ${printLocations(ast.location)}`);
@@ -278,7 +305,7 @@ export function ast_to_ir(ast: AST, ctx: Ctx = { local_ctx: new Map(), parent_ct
       const local_ctx = new Map(parameters.map((parameter, i) => ([ast.parameters[i]!, parameter] as const)));
       const parent_ctx = new Map([...ctx.local_ctx, ...ctx.parent_ctx]);
       const captures = new Set<VariableIR>();
-      const ctx2: Ctx = { local_ctx, parent_ctx, captures, loop_ctx: new Map(), n_vars: ctx.n_vars, n_loops: ctx.n_loops, inputs: (ast.type as FunctionType).inputs, output: (ast.type as FunctionType).output, async: false }
+      const ctx2: Ctx = { local_ctx, parent_ctx, captures, loop_ctx: new Map(), exports: ctx.exports, imports: ctx.imports, n_vars: ctx.n_vars, n_loops: ctx.n_loops, inputs: (ast.type as FunctionType).inputs, output: (ast.type as FunctionType).output, async: false }
 
       const body = ast_to_ir(ast.body, ctx2);
 
@@ -321,7 +348,7 @@ export function ast_to_ir(ast: AST, ctx: Ctx = { local_ctx: new Map(), parent_ct
       const local_ctx = new Map(parameters.map((parameter, i) => ([ast.parameters[i]!, parameter] as const)));
       const parent_ctx = new Map([...ctx.local_ctx, ...ctx.parent_ctx]);
       const captures = new Set<VariableIR>();
-      const ctx2: Ctx = { local_ctx, parent_ctx, captures, loop_ctx: new Map(), n_vars: ctx.n_vars, n_loops: ctx.n_loops, inputs: (ast.type as FunctionType).inputs, output: (ast.type as FunctionType).output, async: true }
+      const ctx2: Ctx = { local_ctx, parent_ctx, captures, loop_ctx: new Map(), exports: ctx.exports, imports: ctx.imports, n_vars: ctx.n_vars, n_loops: ctx.n_loops, inputs: (ast.type as FunctionType).inputs, output: (ast.type as FunctionType).output, async: true }
 
       const body = ast_to_ir(ast.body, ctx2);
 
@@ -520,6 +547,8 @@ export function ast_to_ir(ast: AST, ctx: Ctx = { local_ctx: new Map(), parent_ct
           parent_ctx: ctx.parent_ctx,
           captures: ctx.captures,
           loop_ctx: ctx.loop_ctx,
+          exports: ctx.exports,
+          imports: ctx.imports,
           n_vars: ctx.n_vars,
           n_loops: ctx.n_loops,
           inputs: ctx.inputs,
@@ -552,6 +581,8 @@ export function ast_to_ir(ast: AST, ctx: Ctx = { local_ctx: new Map(), parent_ct
         parent_ctx: ctx.parent_ctx,
         captures: ctx.captures,
         loop_ctx: ctx.loop_ctx,
+        exports: ctx.exports,
+        imports: ctx.imports,
         n_vars: ctx.n_vars,
         n_loops: ctx.n_loops,
         inputs: ctx.inputs,
@@ -594,6 +625,8 @@ export function ast_to_ir(ast: AST, ctx: Ctx = { local_ctx: new Map(), parent_ct
         parent_ctx: ctx.parent_ctx,
         captures: ctx.captures,
         loop_ctx: ctx.loop_ctx,
+        exports: ctx.exports,
+        imports: ctx.imports,
         n_vars: ctx.n_vars,
         n_loops: ctx.n_loops,
         inputs: ctx.inputs,
@@ -627,6 +660,8 @@ export function ast_to_ir(ast: AST, ctx: Ctx = { local_ctx: new Map(), parent_ct
         parent_ctx: ctx.parent_ctx,
         captures: ctx.captures,
         loop_ctx: ctx.loop_ctx,
+        exports: ctx.exports,
+        imports: ctx.imports,
         n_vars: ctx.n_vars,
         n_loops: ctx.n_loops,
         inputs: ctx.inputs,
@@ -645,6 +680,8 @@ export function ast_to_ir(ast: AST, ctx: Ctx = { local_ctx: new Map(), parent_ct
           parent_ctx: ctx.parent_ctx,
           captures: ctx.captures,
           loop_ctx: ctx.loop_ctx,
+          exports: ctx.exports,
+          imports: ctx.imports,
           n_vars: ctx.n_vars,
           n_loops: ctx.n_loops,
           inputs: ctx.inputs,
@@ -720,6 +757,8 @@ export function ast_to_ir(ast: AST, ctx: Ctx = { local_ctx: new Map(), parent_ct
         parent_ctx: ctx.parent_ctx,
         captures: ctx.captures,
         loop_ctx: new Map([...ctx.loop_ctx, [ast.label, label]]),
+        exports: ctx.exports,
+        imports: ctx.imports,
         n_vars: ctx.n_vars,
         n_loops: ctx.n_loops,
         inputs: ctx.inputs,
@@ -768,6 +807,8 @@ export function ast_to_ir(ast: AST, ctx: Ctx = { local_ctx: new Map(), parent_ct
         parent_ctx: ctx.parent_ctx,
         captures: ctx.captures,
         loop_ctx: new Map([...ctx.loop_ctx, [ast.label, label]]),
+        exports: ctx.exports,
+        imports: ctx.imports,
         n_vars: ctx.n_vars,
         n_loops: ctx.n_loops,
         inputs: ctx.inputs,
@@ -809,6 +850,8 @@ export function ast_to_ir(ast: AST, ctx: Ctx = { local_ctx: new Map(), parent_ct
         parent_ctx: ctx.parent_ctx,
         captures: ctx.captures,
         loop_ctx: new Map([...ctx.loop_ctx, [ast.label, label]]),
+        exports: ctx.exports,
+        imports: ctx.imports,
         n_vars: ctx.n_vars,
         n_loops: ctx.n_loops,
         inputs: ctx.inputs,
@@ -858,6 +901,8 @@ export function ast_to_ir(ast: AST, ctx: Ctx = { local_ctx: new Map(), parent_ct
         parent_ctx: ctx.parent_ctx,
         captures: ctx.captures,
         loop_ctx: new Map([...ctx.loop_ctx, [ast.label, label]]),
+        exports: ctx.exports,
+        imports: ctx.imports,
         n_vars: ctx.n_vars,
         n_loops: ctx.n_loops,
         inputs: ctx.inputs,
@@ -896,6 +941,8 @@ export function ast_to_ir(ast: AST, ctx: Ctx = { local_ctx: new Map(), parent_ct
           parent_ctx: ctx.parent_ctx,
           captures: ctx.captures,
           loop_ctx: ctx.loop_ctx,
+          exports: ctx.exports,
+          imports: ctx.imports,
           n_vars: ctx.n_vars,
           n_loops: ctx.n_loops,
           inputs: ctx.inputs,
