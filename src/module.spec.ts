@@ -49,16 +49,25 @@ describe("East.export", () => {
 
 describe("East.extern", () => {
     test("creates a symbol reference with full name", () => {
-        const readFile = East.extern("east-node-std.fs", "readFile", FunctionType([StringType], StringType));
+        const readFile = East.extern("fs", "readFile", FunctionType([StringType], StringType));
         const ast = Expr.ast(readFile);
         assert.strictEqual(ast.ast_type, "Symbol");
         if (ast.ast_type === "Symbol") {
-            assert.strictEqual(ast.name, "east-node-std.fs.readFile");
+            assert.strictEqual(ast.name, "fs.readFile");
+        }
+    });
+
+    test("quotes non-standard identifiers", () => {
+        const fn = East.extern("east-node-std", "read-file", FunctionType([StringType], StringType));
+        const ast = Expr.ast(fn);
+        assert.strictEqual(ast.ast_type, "Symbol");
+        if (ast.ast_type === "Symbol") {
+            assert.strictEqual(ast.name, "`east-node-std`.`read-file`");
         }
     });
 
     test("extern function is callable", () => {
-        const log = East.extern("east-node-std.console", "log", FunctionType([StringType], StringType));
+        const log = East.extern("console", "log", FunctionType([StringType], StringType));
         const callAst = Expr.ast(log("hello"));
         assert.strictEqual(callAst.ast_type, "Call");
     });

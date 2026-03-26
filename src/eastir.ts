@@ -28,7 +28,7 @@ export class EastIR<Inputs extends any[], Output extends any> {
    * @param symbols - Array of import symbol definitions the function can access
    * @param platform - Array of platform function implementations
    */
-  compile(symbol_irs: Map<string, IR>, symbol_values: Map<string, IR>, platform: PlatformFunction[] = []): (...inputs: { [K in keyof Inputs]: ValueTypeOf<Inputs[K]> }) => ValueTypeOf<Output> {
+  compile(symbol_irs: Map<string, IR>, symbol_values: Map<string, any>, platform: PlatformFunction[] = []): (...inputs: { [K in keyof Inputs]: ValueTypeOf<Inputs[K]> }) => ValueTypeOf<Output> {
     // Process the symbols first
     for (const [symbol_name, symbol_ir] of symbol_irs) {
       if (!symbol_values.has(symbol_name)) {
@@ -99,7 +99,7 @@ export class AsyncEastIR<Inputs extends any[], Output extends any> {
    * @param symbols - Array of import symbol definitions the function can access
    * @param platform - Array of platform function implementations
    */
-  compile(symbol_irs: Map<string, IR>, symbol_values: Map<string, IR>, platform: PlatformFunction[] = []): (...inputs: { [K in keyof Inputs]: ValueTypeOf<Inputs[K]> }) => Promise<ValueTypeOf<Output>> {
+  compile(symbol_irs: Map<string, IR>, symbol_values: Map<string, any>, platform: PlatformFunction[] = []): (...inputs: { [K in keyof Inputs]: ValueTypeOf<Inputs[K]> }) => Promise<ValueTypeOf<Output>> {
     // Process the symbols first
     for (const [symbol_name, symbol_ir] of symbol_irs) {
       if (!symbol_values.has(symbol_name)) {

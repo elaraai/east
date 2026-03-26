@@ -611,7 +611,7 @@ export function exportValue(name: string, value: any, type?: EastType): Expr {
  * ```
  */
 export function extern(moduleName: string, symbolName: string, type: EastType): any {
-  const fullName = `${moduleName}.${symbolName}`;
+  const fullName = `${printIdentifier(moduleName)}.${printIdentifier(symbolName)}`;
   return fromAst({
     ast_type: "Symbol",
     type,
