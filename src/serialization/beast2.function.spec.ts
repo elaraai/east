@@ -5,7 +5,9 @@
 
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { encodeBeast2For, decodeBeast2For, decodeBeast2 } from "./beast2.js";
+import { encodeBeast2For, decodeBeast2For, decodeBeast2, decodeBeast2WithHandles, encodeBeast2ValueToBufferFor, MAGIC_BYTES } from "./beast2.js";
+import type { FunctionHandleResolver } from "./beast2.js";
+import type { EastTypeValue } from "../type_of_type.js";
 import {
   IntegerType,
   StringType,
@@ -16,7 +18,8 @@ import {
   RecursiveType,
 } from "../types.js";
 import { East, variant } from "../index.js";
-import { toEastTypeValue } from "../type_of_type.js";
+import { toEastTypeValue, EastTypeValueType } from "../type_of_type.js";
+import { BufferWriter } from "./binary-utils.js";
 
 // =============================================================================
 // Basic Function Serialization (no captures)
@@ -383,5 +386,197 @@ describe("Beast2 Function Serialization - Recursive Types", () => {
     const rendered = decoded.value.render();
     assert.equal(rendered.type, "Text");
     assert.equal(rendered.value, "Hello");
+  });
+});
+
+// =============================================================================
+// decodeBeast2WithHandles — handle-aware function decoding
+// =============================================================================
+
+// Helper: build beast2-full bytes with handle IDs at function positions.
+// Writes magic + type schema + value bytes. The caller provides a writeValue
+// callback that writes the value portion (with varint handle IDs for functions).
+const typeSchemaEncoder = encodeBeast2ValueToBufferFor(EastTypeValueType);
+
+function buildHandleModeBytes(type: any, writeValue: (writer: BufferWriter) => void): Uint8Array {
+  const writer = new BufferWriter();
+  writer.writeBytes(MAGIC_BYTES);
+  typeSchemaEncoder(toEastTypeValue(type), writer, { refs: new Map() });
+  writer.writeVarint(0); // empty global type table
+  writeValue(writer);
+  return writer.toUint8Array();
+}
+
+// Helper: encode a non-function value into a BufferWriter using the standard encoder
+function writeEncodedValue(writer: BufferWriter, type: any, value: any): void {
+  const encoder = encodeBeast2ValueToBufferFor(toEastTypeValue(type));
+  encoder(value, writer, { refs: new Map() });
+}
+
+describe("Beast2 decodeBeast2WithHandles", () => {
+
+  test("value with no functions decodes identically", () => {
+    const type = StructType({ x: IntegerType, y: StringType });
+    const value = { x: 42n, y: "hello" };
+    const bytes = encodeBeast2For(type)(value);
+
+    const resolver: FunctionHandleResolver = () => {
+      throw new Error("should not be called");
+    };
+
+    const result = decodeBeast2WithHandles(bytes, resolver);
+    assert.equal(result.value.x, 42n);
+    assert.equal(result.value.y, "hello");
+    assert.equal(result.handles.length, 0);
+    assert.deepEqual(result.type, toEastTypeValue(type));
+  });
+
+  test("correctly extracts type from beast2-full header", () => {
+    const type = ArrayType(IntegerType);
+    const value = [1n, 2n, 3n];
+    const bytes = encodeBeast2For(type)(value);
+
+    const result = decodeBeast2WithHandles(bytes, () => {
+      throw new Error("should not be called");
+    });
+
+    assert.deepEqual(result.type, toEastTypeValue(type));
+    assert.deepEqual(result.value, [1n, 2n, 3n]);
+  });
+
+  test("struct with function field: resolver called with handle ID", () => {
+    const fnType = FunctionType([IntegerType], IntegerType);
+    const structType = StructType({ name: StringType, transform: fnType });
+
+    // Build handle-mode bytes: struct { name: "test", transform: handle(42) }
+    const bytes = buildHandleModeBytes(structType, (writer) => {
+      writeEncodedValue(writer, StringType, "test");
+      writer.writeVarint(42); // handle ID at function position
+    });
+
+    const calledWith: { handleId: number; fnType: EastTypeValue }[] = [];
+    const resolver: FunctionHandleResolver = (handleId, fnType) => {
+      calledWith.push({ handleId, fnType });
+      return (x: bigint) => x * 2n;
+    };
+
+    const result = decodeBeast2WithHandles(bytes, resolver);
+    assert.equal(result.value.name, "test");
+    assert.equal(result.handles.length, 1);
+    assert.equal(result.handles[0], 42);
+    assert.equal(calledWith.length, 1);
+    assert.equal(calledWith[0]!.handleId, 42);
+
+    // The returned wrapper should be callable
+    assert.equal(result.value.transform(21n), 42n);
+  });
+
+  test("multiple functions in array each get separate handles", () => {
+    const fnType = FunctionType([IntegerType], IntegerType);
+    const arrType = ArrayType(fnType);
+
+    // Build handle-mode bytes: [handle(10), handle(20), handle(30)]
+    const bytes = buildHandleModeBytes(arrType, (writer) => {
+      writer.writeVarint(0); // inline marker (mutable container)
+      writer.writeVarint(3); // array length
+      writer.writeVarint(10);
+      writer.writeVarint(20);
+      writer.writeVarint(30);
+    });
+
+    const handles: number[] = [];
+    const resolver: FunctionHandleResolver = (handleId) => {
+      handles.push(handleId);
+      return (x: bigint) => x + BigInt(handleId);
+    };
+
+    const result = decodeBeast2WithHandles(bytes, resolver);
+    assert.equal(result.handles.length, 3);
+    assert.deepEqual(result.handles, [10, 20, 30]);
+    assert.equal(result.value.length, 3);
+
+    // Each wrapper should use its handle ID
+    assert.equal(result.value[0](0n), 10n);
+    assert.equal(result.value[1](0n), 20n);
+    assert.equal(result.value[2](0n), 30n);
+  });
+
+  test("variant with function handle decodes correctly", () => {
+    const fnType = FunctionType([], IntegerType);
+    const uiType = VariantType({
+      Static: IntegerType,
+      Reactive: StructType({ render: fnType }),
+    });
+
+    // Build handle-mode bytes: .Reactive { render: handle(99) }
+    // Variant cases sorted alphabetically: Reactive=0, Static=1
+    const bytes = buildHandleModeBytes(uiType, (writer) => {
+      writer.writeVarint(0); // case index for "Reactive"
+      writer.writeVarint(99); // handle ID for render function
+    });
+
+    const resolver: FunctionHandleResolver = (handleId) => {
+      return () => BigInt(handleId);
+    };
+
+    const result = decodeBeast2WithHandles(bytes, resolver);
+    assert.equal(result.value.type, "Reactive");
+    assert.equal(result.handles.length, 1);
+    assert.equal(result.handles[0], 99);
+    assert.equal(result.value.value.render(), 99n);
+  });
+
+  test("struct with mixed function and non-function fields", () => {
+    const fnType = FunctionType([StringType], StringType);
+    const type = StructType({
+      count: IntegerType,
+      label: StringType,
+      formatter: fnType,
+    });
+
+    // Build handle-mode bytes: { count: 7, label: "hi", formatter: handle(5) }
+    // Struct fields are ordered: count, label, formatter (insertion order)
+    const bytes = buildHandleModeBytes(type, (writer) => {
+      writeEncodedValue(writer, IntegerType, 7n);     // count
+      writeEncodedValue(writer, StringType, "hi");     // label
+      writer.writeVarint(5);                            // formatter handle
+    });
+
+    const resolver: FunctionHandleResolver = (handleId) => {
+      return (s: string) => `[${handleId}] ${s}`;
+    };
+
+    const result = decodeBeast2WithHandles(bytes, resolver);
+    assert.equal(result.value.count, 7n);
+    assert.equal(result.value.label, "hi");
+    assert.equal(result.handles.length, 1);
+    assert.equal(result.handles[0], 5);
+    assert.equal(result.value.formatter("world"), "[5] world");
+  });
+
+  test("resolver receives correct function type info", () => {
+    const fnType1 = FunctionType([IntegerType], StringType);
+    const fnType2 = FunctionType([StringType, IntegerType], IntegerType);
+    const type = StructType({ a: fnType1, b: fnType2 });
+
+    const bytes = buildHandleModeBytes(type, (writer) => {
+      writer.writeVarint(1); // handle for a
+      writer.writeVarint(2); // handle for b
+    });
+
+    const receivedTypes: EastTypeValue[] = [];
+    const resolver: FunctionHandleResolver = (handleId, fnType) => {
+      receivedTypes.push(fnType);
+      return () => null;
+    };
+
+    const result = decodeBeast2WithHandles(bytes, resolver);
+    assert.equal(receivedTypes.length, 2);
+    // First function: (Integer) -> String
+    assert.equal(receivedTypes[0]!.type, "Function");
+    // Second function: (String, Integer) -> Integer
+    assert.equal(receivedTypes[1]!.type, "Function");
+    assert.equal(result.handles.length, 2);
+    assert.deepEqual(result.handles, [1, 2]);
   });
 });
