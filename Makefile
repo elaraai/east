@@ -18,10 +18,14 @@ example:
 clean:
 	rm -rf ./dist
 
+# Export test IR from packages that support it
+test-export:
+	npm run test:export
+
 # Register @elaraai/east globally so sibling repos can npm link it
 link:
-	npm link
+	npm link @elaraai/east
 
 # Unregister
 unlink:
-	npm unlink
+	npm unlink @elaraai/east
