@@ -494,3 +494,40 @@ Runners that don't support symbols yet can ignore the `symbols` field — the le
 - [x] Symbol resolution (constants, functions, multiple symbols)
 - [x] Nested function bodies referencing symbols
 - [x] Missing symbol runtime error
+
+## Ecosystem Integration
+
+### CLI runners (east-node, east-py)
+
+Both CLIs support `-l, --link <file>` to load `.beast2` module files at execution time. Module files contain serialized `EastModuleType` (a flat symbol table). The runner decodes modules, compiles symbol IRs, and passes `symbol_values` to the compiler.
+
+### e3 (East Execution Engine)
+
+Tasks automatically collect module dependencies via `fn.toIR(symbols)`. Module symbols are stored as a dataset at `.tasks.${name}.module` (typed as `EastModuleType`), and the command IR generates `-l` flags for the runner.
+
+### east-ui (UI Dashboards)
+
+`UIPageType` wraps a `UIComponentType` component tree with a `modules: Dict<String, IR>` field. The client uses **late-binding symbol resolution**:
+
+1. Create empty `symbolValues` map
+2. Decode `UIPageType` with `{ symbols: symbolValues }` — functions compile with reference to the map
+3. Compile module IRs → populate `symbolValues`
+4. All embedded functions (onClick, Reactive.Root) resolve symbols when called
+
+This works because `SymbolIR` does runtime lookup (`symbol_values.get(name)`), not compile-time resolution. Module exports should be treated as constants or pure functions — mutable state mutations don't cross the server-client serialization boundary.
+
+## Future: Beast2 Symbol Embedding
+
+The current approach stores modules at the **type level** (wrapper types like `UIPageType`). An alternative for the future: embed the symbol table directly in the Beast2 binary format:
+
+```
+[magic] [type schema] [symbol table: Dict<String, IR>] [value]
+```
+
+This would make **any** Beast2 file containing functions with module dependencies self-contained, without requiring a wrapper type. The decoder would read the symbol table before the value, compile symbols eagerly, then decode the value with symbols available.
+
+**Advantages**: No wrapper types needed. Any type with embedded functions automatically carries module dependencies. CLI runners could accept a single `.beast2` file instead of separate IR + module files.
+
+**Trade-offs**: Requires a Beast2 format version bump and updates to encoders/decoders in all runtimes (TypeScript, Python, future Julia).
+
+**When to consider**: If module-dependent functions appear in many different types beyond UI pages, or if the two-phase type-level pattern proves cumbersome. The late-binding approach used today avoids the two-phase problem, but format-level embedding would be even cleaner.
