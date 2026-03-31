@@ -30,7 +30,10 @@ export type EastModule = ValueTypeOf<EastModuleType>;
 
 /** The type of a linked program */
 export const EastProgramType = StructType({
+    // The main entry point of the program
     main: IRType,
+    // Symbols bundled with the program as IR
     symbols: DictType(StringType, IRType),
+    // Symbols expected to be provided by the environment at runtime (e.g. built-in, native, or "platform" functions)
     imports: DictType(StringType, EastTypeType),
 })

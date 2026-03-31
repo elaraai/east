@@ -207,6 +207,17 @@ SpecializeIR = variant<"Specialize", {
 }>
 ```
 
+### SDK: Type parameter scoping
+
+Specializing one generic function can result in specializing a generic function that it calls.
+Sometimes, that second generic function is a closure defined inside the first generic function, and implicitly "inherits" the same type parameter because it captures a variable relying on that type parameter.
+In some cases, the closure may even be a return value which is specialized elsewhere in the program.
+This process is equivalent to variable capture in closures, except applied to type parameters, and will need special handling in `ast_to_ir` much like variables.
+
+Just as a whole program (the `main` function) has no captures, a whole program will have no "free" type parameters.
+After linking is complete, the concrete type of any remaining type parameters can be filled in recursively (e.g. by abstract interpretation).
+At this point we do so via monomorphization.
+
 ### Compilation: Monomorphization
 
 `SpecializeIR` performs **compile-time monomorphization**:
@@ -216,7 +227,10 @@ SpecializeIR = variant<"Specialize", {
 3. Compile the specialized body → concrete callable
 4. Cache by (function identity, type arguments) to avoid recompilation
 
-This is the same strategy as C++ templates and Rust generics. Each unique combination of type arguments produces a separate compiled function.
+This is the same strategy as C++ templates and Rust generics.
+Each unique combination of type arguments produces a separate compiled function.
+Note that for higher-order functions, the "identity" of any input or output functions will need to be tracked by the final stage of the compiler and specialized separately for this to work correctly.
+(An alternative approach is to lazily specialize functions and perform run-time dispatch).
 
 For **native modules**, the runtime provides a factory function instead of a value:
 
