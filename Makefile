@@ -1,4 +1,4 @@
-.PHONY: install build test example lint clean 
+.PHONY: install build test test-export example lint clean
 
 build:
 	. ${NVM_DIR}/nvm.sh && nvm use && npm run build
@@ -8,6 +8,9 @@ install:
 
 test:
 	. ${NVM_DIR}/nvm.sh && nvm use && npm run build && npm test
+
+test-export:
+	. ${NVM_DIR}/nvm.sh && nvm use && npm run test:export
 
 lint:
 	. ${NVM_DIR}/nvm.sh && nvm use && npm run build && npm run lint

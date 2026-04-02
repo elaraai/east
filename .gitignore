@@ -6,3 +6,5 @@ coverage
 *.avro
 *.json
 *.csv
+# Local registry (Verdaccio)
+.npmrc
