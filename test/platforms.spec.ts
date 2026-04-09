@@ -8,6 +8,7 @@ import { test as testNode, describe as describeNode } from "node:test";
 import { writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { AsyncFunctionType, East, Expr, get_location, printLocations, IRType, NullType, StringType, toJSONFor, type SubtypeExprOrValue } from "../src/index.js";
+import type { IR } from "../src/ir.js";
 import { valueOrExprToAstTyped } from "../src/expr/ast.js";
 import type { TypeSymbol } from "../src/expr/expr.js";
 import type { BlockBuilder } from "../src/expr/block.js";
@@ -113,7 +114,8 @@ const IRToJSON = toJSONFor(IRType);
  */
 export function describeEast(
     suiteName: string,
-    builder: (test: (name: string, body: ($: BlockBuilder<NullType>) => void) => void) => void
+    builder: (test: (name: string, body: ($: BlockBuilder<NullType>) => void) => void) => void,
+    symbolIRs: Map<string, IR> = new Map(),
 ) {
     const tests: Array<{ name: string, body: ($: BlockBuilder<NullType>) => void }> = [];
 
@@ -131,18 +133,25 @@ export function describeEast(
         })));
     });
 
-    // Auto-export test IR if EXPORT_TEST_IR environment variable is set to a path
+    // Auto-export test IR + symbols if EXPORT_TEST_IR environment variable is set to a path
     if (process.env.EXPORT_TEST_IR) {
         const outputDir = process.env.EXPORT_TEST_IR;
 
         try {
             mkdirSync(outputDir, { recursive: true });
-
-            const ir = suiteFunction.toIR();
+            const collectedSymbols = new Map(symbolIRs);
+            const ir = suiteFunction.toIR(collectedSymbols);
             const irJSON = IRToJSON(ir.ir);
 
+            // Export as { ir, symbols: { name → IR } }
+            const symbolsJSON: Record<string, any> = {};
+            for (const [name, symIR] of collectedSymbols) {
+                symbolsJSON[name] = IRToJSON(symIR);
+            }
+            const suiteData = { ir: irJSON, symbols: symbolsJSON };
+
             const filename = join(outputDir, `${suiteName.replace(/[^a-zA-Z0-9]/g, '_')}.json`);
-            writeFileSync(filename, JSON.stringify(irJSON, null, 2));
+            writeFileSync(filename, JSON.stringify(suiteData, null, 2));
             console.log(`✓ Exported test IR: ${filename}`);
         } catch (err) {
             console.error(`✗ Failed to export test IR for "${suiteName}":`, err);
@@ -151,7 +160,8 @@ export function describeEast(
 
     // Run the test suite using the Node.js platform implementation
     const platform = createTestPlatform();
-    const compiled = suiteFunction.toIR().compile(platform);
+    const symbolValues = new Map<string, any>();
+    const compiled = suiteFunction.toIR(new Map(symbolIRs)).compile(symbolIRs, symbolValues, platform);
     return compiled();
 }
 

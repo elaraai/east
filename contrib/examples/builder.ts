@@ -35,7 +35,7 @@ class FunctionFinalizer<Is extends EastType[], O extends EastType> {
     constructor(public name: string, public inputs: Is, public output: O, private ir: EastIR<Is, O>) {}
 
     compile(): any {
-        return this.ir.compile([]);
+        return this.ir.compile(new Map(), new Map());
     }
 }
 

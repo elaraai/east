@@ -330,4 +330,24 @@ export type NewMatrixAST = {
 };
 
 /** @internal */
-export type AST = ErrorAST | TryCatchAST | ValueAST | AsAST | VariableAST | LetAST | AssignAST | FunctionAST | AsyncFunctionAST | CallAST | CallAsyncAST | NewRefAST | NewArrayAST | NewSetAST | NewDictAST | NewVectorAST | NewMatrixAST | StructAST | GetFieldAST | VariantAST | BlockAST | IfElseAST | MatchAST | UnwrapRecursiveAST | WrapRecursiveAST | WhileAST | ForArrayAST | ForSetAST | ForDictAST | ReturnAST | ContinueAST | BreakAST | BuiltinAST | PlatformAST;
+export type SymbolAST = {
+  ast_type: "Symbol",
+  type: EastType,
+  location: Location[],
+  name: string,
+  modules: Set<any>, // containing module and it's dependencies, used for automatic dependency tracking in the SDK
+};
+
+/** A reference to a named export. AST-only — resolved to SymbolIR during ast_to_ir
+ * (inside a module context) or inlined (outside a module context).
+ * @internal */
+export type ExportRefAST = {
+  ast_type: "ExportRef",
+  type: EastType,
+  location: Location[],
+  localName: string,
+  innerAst: AST,
+};
+
+/** @internal */
+export type AST = ErrorAST | TryCatchAST | ValueAST | AsAST | VariableAST | LetAST | AssignAST | FunctionAST | AsyncFunctionAST | CallAST | CallAsyncAST | NewRefAST | NewArrayAST | NewSetAST | NewDictAST | NewVectorAST | NewMatrixAST | StructAST | GetFieldAST | VariantAST | BlockAST | IfElseAST | MatchAST | UnwrapRecursiveAST | WrapRecursiveAST | WhileAST | ForArrayAST | ForSetAST | ForDictAST | ReturnAST | ContinueAST | BreakAST | BuiltinAST | PlatformAST | SymbolAST | ExportRefAST;

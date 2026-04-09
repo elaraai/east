@@ -25,6 +25,9 @@ export type AstSymbol = typeof AstSymbol;
 export const FactorySymbol = Symbol("factory");
 export type FactorySymbol = typeof FactorySymbol;
 
+export const ModuleSymbol = Symbol("module");
+export type ModuleSymbol = typeof ModuleSymbol;
+
 /**
  * Abstract base class for all East expressions
  * Contains core functionality that doesn't create new expressions

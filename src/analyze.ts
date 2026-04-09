@@ -54,7 +54,6 @@ export type PlatformDefinition = {
 
 export type AnalyzedIR<T extends IR = IR> = T & { value: { isAsync: boolean } };
 
-
 /**
  * Variable metadata tracked during analysis.
  *
@@ -121,7 +120,8 @@ export type VariableContext = Record<string, VariableMetadata>;
  */
 export function analyzeIR<T extends IR>(
   ir: T,
-  platformDef: PlatformDefinition[],
+  // symbol_types: Record<string, EastTypeValue> = {},
+  platformDef: PlatformDefinition[] = [],
   ctx: VariableContext = {},
 ): AnalyzedIR<T> {
   // Working data for tracking during analysis
@@ -186,6 +186,21 @@ export function analyzeIR<T extends IR>(
           isAsync: false,
         }
       } as AnalyzedIR;
+    }
+
+    else if (node.type === "Symbol") {
+      // TODO - we should check the types of symbols are as expected
+
+      // const name = node.value.name;
+      // const symType = symbol_types[name];
+      // // If the symbol is provided, type-check it. If not provided, skip —
+      // // unresolved symbols are deferred to runtime (like optional platform functions).
+      // if (symType !== undefined && !isTypeValueEqual(symType, node.value.type)) {
+      //   throw new Error(
+      //     `Import with symbol ${name} has type ${printTypeValue(symType)} ` +
+      //     `but expected ${printTypeValue(node.value.type)} at ${printLocationValue(node.value.location)}`
+      //   );
+      // }
     }
 
     else if (node.type === "Variable") {

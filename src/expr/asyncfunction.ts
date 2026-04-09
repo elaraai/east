@@ -5,10 +5,11 @@
 import type { AST } from "../ast.js";
 import { ast_to_ir } from "../ast_to_ir.js";
 import { AsyncEastIR } from "../eastir.js";
-import type { AsyncFunctionIR } from "../ir.js";
+import type { AsyncFunctionIR, IR } from "../ir.js";
 import { get_location } from "../location.js";
-import { AsyncFunctionType, type EastType } from "../types.js";
+import { AsyncFunctionType, NeverType, type EastType } from "../types.js";
 import { valueOrExprToAstTyped } from "./ast.js";
+import { Module } from "./block.js";
 import { AstSymbol, Expr, FactorySymbol, type ToExpr } from "./expr.js";
 import type { ExprType, SubtypeExprOrValue } from "./types.js";
 
@@ -46,8 +47,35 @@ export class AsyncFunctionExpr<I extends any[], O extends any> extends Expr<Asyn
   * 
   * Note that the function must be a "free" function, with no captures.
   */
-  toIR(): AsyncEastIR<I, O> {
-    const ir = ast_to_ir(this[AstSymbol]) as AsyncFunctionIR;
+  toIR(symbols?: Map<string, IR>): AsyncEastIR<I, O> {
+    const imports = new Set<Module>();
+    const ir = ast_to_ir(this[AstSymbol], {
+      local_ctx: new Map(),
+      parent_ctx: new Map(),
+      captures: new Set(),
+      loop_ctx: new Map(),
+      exports: new Map(),
+      imports,
+      n_vars: 0,
+      n_loops: 0,
+      inputs: [],
+      output: NeverType,
+      async: false,
+    }) as AsyncFunctionIR;
+
+    if (symbols) {
+      // Currently we don't support tree shaking
+      // We just include all the symbols of all the modules that are transitively imported by this function
+      for (const module of imports) {
+        for (const [symbol_name, symbol_ir] of Object.entries(Module.symbols(module))) {
+          if (symbols.has(symbol_name)) {
+            throw new Error(`Duplicate symbol name ${symbol_name} in module ${module.name}`);
+          }
+          symbols.set(symbol_name, symbol_ir);
+        }
+      }
+    }
+
     return new AsyncEastIR(ir);
   }
 }

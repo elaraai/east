@@ -3,9 +3,9 @@
  * Dual-licensed under AGPL-3.0 and commercial license. See LICENSE for details.
  */
 
-import { type AST, type IfElseAST, type Label, type TryCatchAST, type VariableAST } from "../ast.js";
+import { type AST, type ExportRefAST, type IfElseAST, type Label, type TryCatchAST, type VariableAST } from "../ast.js";
 import { get_location, printLocations, type Location } from "../location.js";
-import { type EastType, FunctionType, isSubtype, NullType, printType, isTypeEqual, StringType, NeverType, VariantType, BooleanType, TypeUnion, IntegerType, StructType, ArrayType, type ValueTypeOf, AsyncFunctionType, type RefType, type SetType, type DictType, type RecursiveType, type RecursiveTypeMarker } from "../types.js";
+import { type EastType, FunctionType, isSubtype, NullType, printType, isTypeEqual, StringType, NeverType, VariantType, BooleanType, TypeUnion, IntegerType, StructType, ArrayType, type ValueTypeOf, AsyncFunctionType, type RefType, type SetType, type DictType, type RecursiveType, type RecursiveTypeMarker, printIdentifier } from "../types.js";
 
 import type { ExprType, SubtypeExprOrValue, TypeOf } from "./types.js";
 import { AstSymbol, Expr, TypeSymbol } from "./expr.js";
@@ -26,6 +26,7 @@ import { RecursiveExpr } from "./recursive.js";
 import { type CallableFunctionExpr, createFunctionExpr, FunctionExpr } from "./function.js";
 import { valueOrExprToAst, valueOrExprToAstTyped } from "./ast.js";
 import type { PlatformFunction } from "../platform.js";
+import { ast_to_ir } from "../ast_to_ir.js";
 import { toEastTypeValue, type EastTypeValue } from "../type_of_type.js";
 import { isVariant } from "../containers/variant.js";
 import { RefExpr } from "./ref.js";
@@ -33,6 +34,7 @@ import { AsyncFunctionExpr, createAsyncFunctionExpr, type CallableAsyncFunctionE
 import { PatchType, type PatchTypeOf } from "../patch/index.js";
 import { VectorExpr } from "./vector.js";
 import { MatrixExpr } from "./matrix.js";
+import type { IR } from "../ir.js";
 
 /** A factory function to help build `Expr` from AST.
  * We inject this into each concrete `Expr` type so they can create new expressions recursively, without having circular dependencies between JavaScript modules.
@@ -91,8 +93,9 @@ export function fromAst<T extends AST>(ast: T): Expr<T["type"]> {
  * @param platform the platform functions available during compilation
  * @returns the compiled function
  */
-export function compile<I extends any[], O>(f: FunctionExpr<I, O>, platform: PlatformFunction[]): (...inputs: { [K in keyof I]: ValueTypeOf<I[K]> }) => ValueTypeOf<O>  {
-  return f.toIR().compile(platform);
+export function compile<I extends any[], O>(f: FunctionExpr<I, O>, symbol_values: Map<string, any>, platform: PlatformFunction[] = []): (...inputs: { [K in keyof I]: ValueTypeOf<I[K]> }) => ValueTypeOf<O>  {
+  const symbol_irs = new Map<string, IR>();
+  return f.toIR(symbol_irs).compile(symbol_irs, symbol_values, platform);
 }
 
 /**
@@ -100,10 +103,12 @@ export function compile<I extends any[], O>(f: FunctionExpr<I, O>, platform: Pla
  *
  * @param f the async function expression to compile
  * @param platform the platform functions available during compilation
+ * @param symbols the import symbol definitions available during compilation
  * @returns the compiled async function
  */
-export function compileAsync<I extends any[], O>(f: AsyncFunctionExpr<I, O>, platform: PlatformFunction[]): (...inputs: { [K in keyof I]: ValueTypeOf<I[K]> }) => Promise<ValueTypeOf<O>>  {
-  return f.toIR().compile(platform);
+export function compileAsync<I extends any[], O>(f: AsyncFunctionExpr<I, O>, symbol_values: Map<string, any>, platform: PlatformFunction[] = []): (...inputs: { [K in keyof I]: ValueTypeOf<I[K]> }) => Promise<ValueTypeOf<O>>  {
+  const symbol_irs = new Map<string, IR>();
+  return f.toIR(symbol_irs).compile(symbol_irs, symbol_values, platform);
 }
 
 /**
@@ -484,8 +489,272 @@ export function asyncFunction(input_types: EastType[], output_type: EastType | u
   }
 }
 
-/** Template string literal to create an East string dynamically from components
+/** Return the first non-exportable AST node found, or undefined if all are exportable */
+function findNonExportableAst(ast: AST): AST | undefined {
+  // We allow any AST that is a value or a function definition
+  if (ast.ast_type === "Value") {
+    return undefined;
+  } else if (ast.ast_type === "Function" || ast.ast_type === "AsyncFunction") {
+    // note if there are captures, they will be found to be out-of-scope later when we convert to IR and resolve variables
+    // any logic inside the function is fine
+    return undefined;
+  } if (ast.ast_type === "Struct") {
+    for (const field of Object.values(ast.fields)) {
+      const nonExportable = findNonExportableAst(field);
+      if (nonExportable !== undefined) {
+        return nonExportable;
+      }
+    }
+    return undefined;
+  } else if (ast.ast_type === "Variant" || ast.ast_type === "NewRef") {
+    return findNonExportableAst(ast.value);
+  } else if (ast.ast_type === "NewArray" || ast.ast_type === "NewSet" || ast.ast_type === "NewVector" || ast.ast_type === "NewMatrix") {
+    for (const value of ast.values) {
+      const nonExportable = findNonExportableAst(value);
+      if (nonExportable !== undefined) {
+        return nonExportable;
+      }
+    }
+    return undefined;
+  } else if (ast.ast_type === "NewDict") {
+    for (const [key, value] of ast.values) {
+      const nonExportableKey = findNonExportableAst(key);
+      if (nonExportableKey !== undefined) {
+        return nonExportableKey;
+      }
+      const nonExportableValue = findNonExportableAst(value);
+      if (nonExportableValue !== undefined) {
+        return nonExportableValue;
+      }
+    }
+    return undefined;
+  } else {
+    // All other AST nodes are forbidden in exports since they represent logic or control flow
+    return ast;
+  }
+}
+
+/**
+ * Create a named export as part of a module.
+ *
+ * The returned value is fully transparent — callable if the value is a function,
+ * has field access if it's a struct, etc. When used inside another export's function
+ * body and bundled into a module, the SDK emits `SymbolIR` references instead of
+ * inlining the value.
  * 
+ * Only values and functions can be exported - control flow, logic and re-exporting existing
+ * exports from this or other modules are not allowed. Function bodies may refer to any
+ * export from this or another module. Exported values may be mutable and have the semantics
+ * of a "global" variable (their identity is shared across the entire program).
+ * 
+ * The combined name of the export and its module (called the "symbol") must be unique
+ * across the entire program.
+ *
+ * @param name - Export name (e.g. "add", "pi")
+ * @param value - The value to export (East expression or value)
+ * @param type - Optional explicit type (inferred from value if omitted)
+ *
+ * @example
+ * ```ts
+ * const add = East.export("add",
+ *     East.function([IntegerType, IntegerType], IntegerType, ($, a, b) => a.add(b)));
+ * const pi = East.export("pi", 3.14159);
+ * ```
+ */
+export function exportValue<Name extends string, T>(name: Name, value: T): ExprType<TypeOf<T>> & { [AstSymbol]: { localName: Name } }
+export function exportValue<Name extends string, T extends EastType>(name: Name, value: SubtypeExprOrValue<NoInfer<T>>, type: T): ExprType<T> & { [AstSymbol]: { localName: Name } }
+export function exportValue(name: string, value: any, type?: EastType): Expr {
+  const innerExpr: Expr = (value instanceof Expr) ? value : from(value as any, type);
+  const innerAst = Expr.ast(innerExpr);
+
+  // Check that the export is a valid "toplevel" expression (that represents a value, not logic or control flow)
+  const nonExportableAst = findNonExportableAst(innerAst);
+  if (nonExportableAst !== undefined) {
+    // Note: supporting direct references to other symbols complicates the linking and compilation process
+    if (nonExportableAst.ast_type === "ExportRef") {
+      throw new Error(`Encountered recursive definition of module exports where ${name} references ${nonExportableAst.localName} - each export must be an individual value or function`);
+    } else if (nonExportableAst.ast_type === "Symbol") {
+      throw new Error(`East modules do not support "re-exporting" symbols from other modules, so "${name}" cannot export a reference to "${nonExportableAst.name}"`);
+    } else {
+      throw new Error(`Only values and free functions can be exported, but "${name}" contains a ${nonExportableAst.ast_type} expression`);
+    }
+  }
+
+  const exportRefAst: ExportRefAST = {
+    ast_type: "ExportRef",
+    type: innerAst.type,
+    location: get_location(),
+    localName: name,
+    innerAst,
+  };
+  return fromAst(exportRefAst);
+}
+
+/**
+ * Create a reference to an external (runtime-provided) symbol.
+ * 
+ * Note that this function is intended for advanced users creating platform-defined modules.
+ * For user-defined modules, use `East.export()` and `East.module()`, which handle symbol
+ * references and dependencies automatically.
+ *
+ * The returned Expr wraps a `SymbolAST` with the fully-qualified name.
+ * If the type is `StructType`, field access works naturally (returns `GetField` on the symbol).
+ * If the type is `FunctionType`, the result is callable.
+ *
+ * @param moduleName - Module name (e.g. "east-node-std.fs")
+ * @param symbolName - Symbol name (e.g. "readFile")
+ * @param type - The expected type of the symbol
+ *
+ * @example
+ * ```ts
+ * const readFile = East.extern("east-node-std.fs", "readFile", FunctionType([StringType], StringType));
+ * ```
+ */
+export function extern(moduleName: string, symbolName: string, type: EastType): any {
+  const fullName = `${printIdentifier(moduleName)}.${printIdentifier(symbolName)}`;
+  return fromAst({
+    ast_type: "Symbol",
+    type,
+    location: get_location(),
+    name: fullName,
+    modules: new Set(), // empty - the symbol and its dependencies are separate
+  });
+}
+
+// High-level SDK representation of modules.
+// This includes the module and all dependencies that can be directly bundled together.
+
+const ModuleNameSymbol = Symbol("ModuleName");
+const ModuleSymbolsSymbol = Symbol("ModuleSymbols");
+const ModuleDependenciesSymbol = Symbol("ModuleDependencies");
+
+class _Module<Exports extends Record<string, EastType>> {
+  [ModuleNameSymbol]: string
+  [ModuleSymbolsSymbol]: Record<string, IR>
+  [ModuleDependenciesSymbol]: Set<Module>
+  
+  constructor(name: string, exports: { [K in keyof Exports]: Expr }) {
+    this[ModuleNameSymbol] = name;
+    const symbols: Record<string, IR> = {};
+    this[ModuleSymbolsSymbol] = symbols;
+    const imported_modules = new Set<any>();
+    imported_modules.add(this);
+    this[ModuleDependenciesSymbol] = imported_modules;
+
+    // First pass: create the list of expected symbols and their types, so we can check intra-module references in the second pass
+    const export_to_symbol = new Map<string, { symbol: string, type: EastType }>();
+    for (const [export_name, export_expr] of Object.entries(exports)) {
+      const symbol_name = `${printIdentifier(this[ModuleNameSymbol])}.${printIdentifier(export_name)}`;
+      const symbol_type = Expr.type(export_expr);
+      export_to_symbol.set(export_name, { symbol: symbol_name, type: symbol_type });
+
+      // Create a custom property on this class instance, for external modules to access
+      Object.defineProperty(this, export_name, {
+        get: () => {
+          return fromAst({
+            ast_type: "Symbol",
+            name: symbol_name,
+            type: symbol_type,
+            location: Expr.ast(export_expr).location,
+            modules: imported_modules,
+          });
+        },
+        enumerable: true,
+      });
+    }
+
+    // Second pass: process each export, now that we have the full list of symbols and types for intra-module references
+    for (const [export_name, export_expr] of Object.entries(exports)) {
+      // Unwrap the ExportRefAST to get the actual value AST
+      const export_ast = Expr.ast(export_expr);
+      const inner_ast = export_ast.ast_type === "ExportRef" ? export_ast.innerAst : export_ast;
+      const symbol_info = export_to_symbol.get(export_name)!;
+
+      // Store the IR for this symbol, keyed by fully-qualified name
+      try {
+        symbols[symbol_info.symbol] = ast_to_ir(inner_ast, {
+          local_ctx: new Map(),
+          parent_ctx: new Map(),
+          captures: new Set(),
+          loop_ctx: new Map(),
+          exports: export_to_symbol,
+          imports: imported_modules,
+          n_vars: 0,
+          n_loops: 0,
+          inputs: [],
+          output: NeverType,
+          async: false
+        });
+      } catch (e) {
+
+        if (e instanceof Error) {
+          e.message = `Error processing export "${export_name}": ${e.message}`;
+        }
+        throw e;
+      }
+    }
+  }
+
+  static name(module: _Module<any>): string {
+    return module[ModuleNameSymbol];
+  }
+
+  static symbols(module: _Module<any>): Record<string, IR> {
+    return module[ModuleSymbolsSymbol];
+  }
+
+  static dependencies(module: _Module<any>): Set<Module> {
+    return module[ModuleDependenciesSymbol];
+  }
+}
+
+export const Module = _Module;
+export type Module<Symbols extends Record<string, any> = Record<string, any>> = _Module<Symbols> & { [K in keyof Symbols]: ExprType<Symbols[K]> }
+
+/** Merge named exports into a single record of names and types */
+export type MergeExports<Exports extends (Expr & { [AstSymbol]: { localName: string } })[]> =
+  Exports extends [infer First extends (Expr & { [AstSymbol]: { localName: string } }), ...infer Rest extends (Expr & { [AstSymbol]: { localName: string } })[]] ? { [K in First[AstSymbol]["localName"]]: First[TypeSymbol] } & MergeExports<Rest> : object;
+
+/**
+ * Define an East module — a named collection of symbols.
+ *
+ * Each argument must be created with `East.export()`. The module assigns
+ * fully-qualified symbol names (`{module}.{symbol}`) and tracks dependencies automatically.
+ *
+ * @param name - Module name (e.g. "myapp.math")
+ * @param exports - Symbols to include (varargs, created with `East.export()`)
+ * @returns A ModuleDef with field getters for cross-module references
+ *
+ * @example
+ * ```ts
+ * const add = East.export("add",
+ *     East.function([IntegerType, IntegerType], IntegerType, ($, a, b) => a.add(b)));
+ * const pi = East.export("pi", 3.14159);
+ * const mathModule = East.module("myapp.math", add, pi);
+ *
+ * // Cross-module reference:
+ * mathModule.add(x, 1n)  // generates Call(Symbol("myapp.math.add"), [x, Value(1)])
+ * ```
+ */
+export function module<const Exports extends (Expr & { [AstSymbol]: { localName: string } })[]>(name: string, ...exports: Exports): Module<MergeExports<Exports>> {
+  // Build the distinct list of exports
+  const export_exprs: Record<string, Expr> = {};
+  for (const exp of exports) {
+    const ast = Expr.ast(exp);
+    if (ast.ast_type !== "ExportRef") {
+      throw new Error(`East.module() arguments must be created with East.export(), got AST of type="${ast.ast_type}"`);
+    }
+    if (export_exprs[ast.localName] !== undefined) {
+      throw new Error(`Duplicate export name "${ast.localName}" in module "${name}"`);
+    }
+    export_exprs[ast.localName] = exp;
+  }
+
+  return new Module(name, export_exprs) as any;
+}
+
+/** Template string literal to create an East string dynamically from components
+ *
  * @example
  * ```ts
  * str`My name is ${name}`
@@ -2453,6 +2722,7 @@ export const BlockBuilder = <Ret>(return_type: Ret): BlockBuilder<Ret> => {
 
     return new TryCatchExpr<Ret>(try_catch_ast, message_variable, stack_variable, return_type);
   }
+
 
   return $;
 }

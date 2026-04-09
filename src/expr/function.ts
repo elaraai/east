@@ -5,10 +5,11 @@
 import type { AST } from "../ast.js";
 import { ast_to_ir } from "../ast_to_ir.js";
 import { EastIR } from "../eastir.js";
-import type { FunctionIR } from "../ir.js";
+import type { FunctionIR, IR } from "../ir.js";
 import { get_location } from "../location.js";
-import { FunctionType, type EastType } from "../types.js";
+import { FunctionType, NeverType, type EastType } from "../types.js";
 import { valueOrExprToAstTyped } from "./ast.js";
+import { Module } from "./block.js";
 import { AstSymbol, Expr, FactorySymbol, type ToExpr } from "./expr.js";
 import type { ExprType, SubtypeExprOrValue } from "./types.js";
 
@@ -49,8 +50,35 @@ export class FunctionExpr<I extends any[], O extends any> extends Expr<FunctionT
   * 
   * Note that the function must be a "free" function, with no captures.
   */
-  toIR(): EastIR<I, O> {
-    const ir = ast_to_ir(this[AstSymbol]) as FunctionIR;
+  toIR(symbols?: Map<string, IR>): EastIR<I, O> {
+    const imports = new Set<Module>();
+    const ir = ast_to_ir(this[AstSymbol], {
+      local_ctx: new Map(),
+      parent_ctx: new Map(),
+      captures: new Set(),
+      loop_ctx: new Map(),
+      exports: new Map(),
+      imports,
+      n_vars: 0,
+      n_loops: 0,
+      inputs: [],
+      output: NeverType,
+      async: false,
+    }) as FunctionIR;
+
+    if (symbols) {
+      // Currently we don't support tree shaking
+      // We just include all the symbols of all the modules that are transitively imported by this function
+      for (const module of imports) {
+        for (const [symbol_name, symbol_ir] of Object.entries(Module.symbols(module))) {
+          if (symbols.has(symbol_name)) {
+            throw new Error(`Duplicate symbol name ${symbol_name} in module ${module.name}`);
+          }
+          symbols.set(symbol_name, symbol_ir);
+        }
+      }
+    }
+
     return new EastIR(ir);
   }
 }

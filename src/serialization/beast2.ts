@@ -69,6 +69,7 @@ type CursorTypeContext = CursorDecoder[];
  */
 export type Beast2DecodeOptions = {
   platform?: PlatformFunction[];
+  symbols?: Map<string, any>;
   /**
    * When true, skip decoding and verifying the type header on each call.
    * The type header is still used to determine the value data offset on the
@@ -504,6 +505,7 @@ function _decodeCursorFor(type: EastTypeValue | EastType, typeCtx: CursorTypeCon
     }
     return ret;
   } else if (type.type === "Function") {
+    const symbol_values = options?.symbols ?? new Map();
     const platform = options?.platform ?? [];
     const platformFns = Object.fromEntries(platform.map(fn => [fn.name, fn.fn]));
     const asyncPlatformFns = new Set(platform.filter(fn => fn.type === 'async').map(fn => fn.name));
@@ -544,7 +546,7 @@ function _decodeCursorFor(type: EastTypeValue | EastType, typeCtx: CursorTypeCon
       let rawFn: any;
       try {
         const analyzedIR = { ...ir, value: { ...ir.value, isAsync: false } } as AnalyzedIR;
-        const compiled = compile_internal(analyzedIR, typeContext, platformFns, asyncPlatformFns, platform, true, new Set());
+        const compiled = compile_internal(analyzedIR, typeContext, new Map(), symbol_values, platformFns, asyncPlatformFns, platform, true, new Set());
         rawFn = compiled(captureContext);
       } catch (e: unknown) {
         throw new Error(`Failed to compile decoded function: ${(e as Error).message}`);
@@ -572,6 +574,7 @@ function _decodeCursorFor(type: EastTypeValue | EastType, typeCtx: CursorTypeCon
       return fn;
     };
   } else if (type.type === "AsyncFunction") {
+    const symbol_values = options?.symbols ?? new Map();
     const platform = options?.platform ?? [];
     const platformFns = Object.fromEntries(platform.map(fn => [fn.name, fn.fn]));
     const asyncPlatformFns = new Set(platform.filter(fn => fn.type === 'async').map(fn => fn.name));
@@ -612,7 +615,7 @@ function _decodeCursorFor(type: EastTypeValue | EastType, typeCtx: CursorTypeCon
       let rawFn: any;
       try {
         const analyzedIR = { ...ir, value: { ...ir.value, isAsync: true } } as AnalyzedIR;
-        const compiled = compile_internal(analyzedIR, typeContext, platformFns, asyncPlatformFns, platform, true, new Set());
+        const compiled = compile_internal(analyzedIR, typeContext, new Map(), symbol_values, platformFns, asyncPlatformFns, platform, true, new Set());
         rawFn = compiled(captureContext);
       } catch (e: unknown) {
         throw new Error(`Failed to compile decoded async function: ${(e as Error).message}`);
@@ -854,9 +857,10 @@ import { EastIR, AsyncEastIR } from "../eastir.js";
  */
 export function compileFunctionIR<I extends any[], O>(
   ir: FunctionIR,
-  platform: PlatformFunction[]
+  symbols: Map<string, any>,
+  platform: PlatformFunction[] = [],
 ): (...args: I) => O {
-  return new EastIR(ir).compile(platform) as (...args: I) => O;
+  return new EastIR(ir).compile(new Map(), symbols, platform) as (...args: I) => O;
 }
 
 /**
@@ -864,11 +868,13 @@ export function compileFunctionIR<I extends any[], O>(
  *
  * @param ir - The AsyncFunctionIR returned from BEAST2 deserialization
  * @param platform - Platform functions required for execution
+ * @param symbols - Import symbol definitions for linking
  * @returns Compiled JavaScript async function
  */
 export function compileAsyncFunctionIR<I extends any[], O>(
   ir: AsyncFunctionIR,
-  platform: PlatformFunction[]
+  symbols: Map<string, any>,
+  platform: PlatformFunction[] = [],
 ): (...args: I) => Promise<O> {
-  return new AsyncEastIR(ir).compile(platform) as (...args: I) => Promise<O>;
+  return new AsyncEastIR(ir).compile(new Map(), symbols, platform) as (...args: I) => Promise<O>;
 }

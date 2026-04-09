@@ -81,7 +81,7 @@ describe("analyzeIR - isAsync propagation", () => {
 
         // Execute the compiled function and verify it works
         // Async functions return a Promise when compiled
-        const compiled = fn.toIR().compile(platform);
+        const compiled = fn.toIR().compile(new Map(), new Map(), platform);
         const result = await compiled();
         assert.strictEqual(result, "url", "Compiled function should return the correct result");
     });
@@ -109,7 +109,7 @@ describe("analyzeIR - isAsync propagation", () => {
 
         // Execute the compiled function and verify it works
         // Use compile for sync platform functions
-        const compiled = fn.toIR().compile(platform);
+        const compiled = fn.toIR().compile(new Map(), new Map(), platform);
         const result = compiled();
         assert.strictEqual(result, null, "Compiled function should return null");
     });
@@ -150,7 +150,7 @@ describe("analyzeIR - isAsync propagation", () => {
         assert.strictEqual(asyncFetchCall.value.isAsync, true, "asyncFetch should be async");
 
         // Execute and verify
-        const compiled = fn.toIR().compile(platform);
+        const compiled = fn.toIR().compile(new Map(), new Map(), platform);
         const result = await compiled();
         assert.strictEqual(result, null);
     });
@@ -181,7 +181,7 @@ describe("analyzeIR - isAsync propagation", () => {
         assert.strictEqual(letStmt.value.isAsync, true, "Let should be async");
 
         // Execute and verify
-        const compiled = fn.toIR().compile(platform);
+        const compiled = fn.toIR().compile(new Map(), new Map(), platform);
         const result = await compiled();
         assert.strictEqual(result, "url");
     });
@@ -206,7 +206,7 @@ describe("analyzeIR - isAsync propagation", () => {
         assert.strictEqual(body.value.isAsync, true, "Block should be async");
 
         // Execute and verify
-        const compiled = fn.toIR().compile(platform);
+        const compiled = fn.toIR().compile(new Map(), new Map(), platform);
         const result = await compiled();
         assert.strictEqual(result, "url");
     });
@@ -254,7 +254,7 @@ describe("analyzeIR - isAsync propagation", () => {
         assert.strictEqual(ifElse.value.isAsync, true, "IfElse with async predicate should be async");
 
         // Execute and verify
-        const compiled = fn.toIR().compile(platform);
+        const compiled = fn.toIR().compile(new Map(), new Map(), platform);
         const result = await compiled();
         assert.strictEqual(result, 1n);
     });
@@ -287,7 +287,7 @@ describe("analyzeIR - isAsync propagation", () => {
         assert.strictEqual(returnStmt.value.isAsync, true, "Return with async call should be async");
 
         // Execute and verify
-        const compiled = fn.toIR().compile(platform);
+        const compiled = fn.toIR().compile(new Map(), new Map(), platform);
         const result = await compiled();
         assert.strictEqual(result, "url");
     });
@@ -320,7 +320,7 @@ describe("analyzeIR - isAsync propagation", () => {
         assert.strictEqual(elseReturnStmt.value.isAsync, true, "Return with async call should be async");
 
         // Execute and verify (predicate is true so takes if-branch, returns "sync")
-        const compiled = fn.toIR().compile(platform);
+        const compiled = fn.toIR().compile(new Map(), new Map(), platform);
         const result = await compiled();
         assert.strictEqual(result, "sync");
     });
@@ -372,7 +372,7 @@ describe("analyzeIR - isAsync propagation", () => {
         assert.strictEqual(whileStmt.value.isAsync, true, "While with async predicate should be async");
 
         // Execute and verify
-        const compiled = fn.toIR().compile(platform);
+        const compiled = fn.toIR().compile(new Map(), new Map(), platform);
         const result = await compiled();
         assert.strictEqual(result, null);
     });
@@ -400,7 +400,7 @@ describe("analyzeIR - isAsync propagation", () => {
         assert.strictEqual(body.value.isAsync, true, "Block should be async");
 
         // Execute and verify
-        const compiled = fn.toIR().compile(platform);
+        const compiled = fn.toIR().compile(new Map(), new Map(), platform);
         const result = await compiled();
         assert.strictEqual(result, null);
     });
@@ -432,7 +432,7 @@ describe("analyzeIR - isAsync propagation", () => {
         assert.strictEqual(callNode.value.isAsync, true, "CallAsync should be async");
 
         // Execute the compiled function and verify it works
-        const compiled = outerFn.toIR().compile(platform);
+        const compiled = outerFn.toIR().compile(new Map(), new Map(), platform);
         const result = await compiled();
         assert.strictEqual(result, null, "Compiled function should return null");
     });
@@ -467,7 +467,7 @@ describe("analyzeIR - isAsync propagation", () => {
         assert.strictEqual(functionNode.value.type.type, "AsyncFunction");
 
         // Execute and verify
-        const compiled = outerFn.toIR().compile(platform);
+        const compiled = outerFn.toIR().compile(new Map(), new Map(), platform);
         const result = await compiled();
         assert.strictEqual(result, null);
     });
@@ -492,7 +492,7 @@ describe("analyzeIR - isAsync propagation", () => {
         assert.strictEqual(body.value.isAsync, true, "Async should propagate");
 
         // Execute and verify
-        const compiled = fn.toIR().compile(platform);
+        const compiled = fn.toIR().compile(new Map(), new Map(), platform);
         const result = await compiled();
         assert.strictEqual(result, "url");
     });
@@ -524,7 +524,7 @@ describe("compile - sync and async functions", () => {
             $.return(East.value(null));
         });
 
-        const compiled = fn.toIR().compile(platform);
+        const compiled = fn.toIR().compile(new Map(), new Map(), platform);
         const result = compiled();
         assert.strictEqual(result, null);
     });
@@ -537,7 +537,7 @@ describe("compile - sync and async functions", () => {
             $.return(asyncFetch(East.value("test")));
         });
 
-        const compiled = fn.toIR().compile(platform);
+        const compiled = fn.toIR().compile(new Map(), new Map(), platform);
         const result = await compiled();
         assert.strictEqual(result, "test");
     });
@@ -550,7 +550,7 @@ describe("compile - sync and async functions", () => {
         });
 
         assert.throws(() => {
-            fn.toIR().compile([]);
+            fn.toIR().compile(new Map(), new Map());
         }, {
             message: /Platform function 'asyncFetch' not found/,
         });
@@ -565,7 +565,7 @@ describe("compile - sync and async functions", () => {
         });
 
         assert.throws(() => {
-            fn.toIR().compile([]);
+            fn.toIR().compile(new Map(), new Map());
         }, {
             message: /Platform function 'log' not found/,
         });

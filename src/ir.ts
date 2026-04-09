@@ -287,12 +287,24 @@ export type PlatformIR = variant<"Platform", {
   optional: boolean,
 }>;
 
-/** The common intermediate representation (IR) for East code.
+/** A named reference to an external value, resolved by the linker before execution.
  *
- * East IR is an expression-based tree of nodes.
- * It has been processed from AST and checked for type safety and variable resolution.
- * The code is ready to be serialized, evaluated or compiled.
+ * SymbolIR is analogous to an unresolved symbol in a C object file.
+ * It evaluates to a value provided by the module's symbol registry.
+ *
+ * Used by the module system: exports within a module reference each other
+ * via SymbolIR, and cross-module references use SymbolIR to name values
+ * from other modules. The linker resolves all SymbolIR nodes before execution.
+ *
+ * See devdocs/MODULES.md for the full module system design.
  */
+export type SymbolIR = variant<"Symbol", {
+  type: EastTypeValue,
+  location: LocationValue[],
+  /** Opaque symbol name, e.g. "myapp.math.add". Resolved by the linker. */
+  name: string,
+}>;
+
 export type NewVectorIR = variant<"NewVector", {
   type: EastTypeValue,
   location: LocationValue[],
@@ -307,7 +319,13 @@ export type NewMatrixIR = variant<"NewMatrix", {
   cols: bigint,
 }>;
 
-export type IR = ErrorIR | TryCatchIR |ValueIR | VariableIR | LetIR | AssignIR | AsIR | FunctionIR | AsyncFunctionIR | CallIR | CallAsyncIR | NewRefIR | NewArrayIR | NewSetIR | NewDictIR | NewVectorIR | NewMatrixIR | StructIR | GetFieldIR | VariantIR | BlockIR | IfElseIR | MatchIR | UnwrapRecursiveIR | WrapRecursiveIR | WhileIR | ForArrayIR | ForSetIR | ForDictIR | ReturnIR | ContinueIR | BreakIR | BuiltinIR | PlatformIR;
+/** The common intermediate representation (IR) for East code.
+ *
+ * East IR is an expression-based tree of nodes.
+ * It has been processed from AST and checked for type safety and variable resolution.
+ * The code is ready to be serialized, evaluated or compiled.
+ */
+export type IR = ErrorIR | TryCatchIR |ValueIR | VariableIR | LetIR | AssignIR | AsIR | FunctionIR | AsyncFunctionIR | CallIR | CallAsyncIR | NewRefIR | NewArrayIR | NewSetIR | NewDictIR | NewVectorIR | NewMatrixIR | StructIR | GetFieldIR | VariantIR | BlockIR | IfElseIR | MatchIR | UnwrapRecursiveIR | WrapRecursiveIR | WhileIR | ForArrayIR | ForSetIR | ForDictIR | ReturnIR | ContinueIR | BreakIR | BuiltinIR | PlatformIR | SymbolIR;
 
 ////////////////////////////////////////////////////////////////////////////////////////////
 // Homoiconic IR EastTypes
@@ -323,7 +341,7 @@ export const IRLabelType = StructType({
   location: ArrayType(LocationType),
 });
 
-export const VariableType = StructType({
+export const VariableIRType = StructType({
   type: EastTypeType,
   location: ArrayType(LocationType),
   name: StringType,
@@ -335,7 +353,7 @@ export const IRType = RecursiveType(ir => VariantType({
   Error: StructType({ type: EastTypeType, location: ArrayType(LocationType), message: ir }),
   TryCatch: StructType({ type: EastTypeType, location: ArrayType(LocationType), try_body: ir, catch_body: ir, message: ir, stack: ir, finally_body: ir }),
   Value: StructType({ type: EastTypeType, location: ArrayType(LocationType), value: LiteralValueType }),
-  Variable: VariableType,
+  Variable: VariableIRType,
   Let: StructType({ type: EastTypeType, location: ArrayType(LocationType), variable: ir, value: ir }),
   Assign: StructType({ type: EastTypeType, location: ArrayType(LocationType), variable: ir, value: ir }),
   As: StructType({ type: EastTypeType, location: ArrayType(LocationType), value: ir }),
@@ -366,4 +384,5 @@ export const IRType = RecursiveType(ir => VariantType({
   Break: StructType({ type: EastTypeType, location: ArrayType(LocationType), label: IRLabelType }),
   Builtin: StructType({ type: EastTypeType, location: ArrayType(LocationType), builtin: StringType, type_parameters: ArrayType(EastTypeType), arguments: ArrayType(ir) }),
   Platform: StructType({ type: EastTypeType, location: ArrayType(LocationType), name: StringType, type_parameters: ArrayType(EastTypeType), arguments: ArrayType(ir), async: BooleanType, optional: BooleanType }),
+  Symbol: StructType({ type: EastTypeType, location: ArrayType(LocationType), name: StringType }),
 }));

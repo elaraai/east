@@ -31,7 +31,7 @@ export { type CallableFunctionExpr, FunctionExpr } from './function.js';
 export { type CallableAsyncFunctionExpr, AsyncFunctionExpr } from './asyncfunction.js';
 
 // Import factory implementation
-import { from, equal, notEqual, less, lessEqual, print, is, greaterEqual, greater, func, str, platform, asyncFunction, asyncPlatform, genericPlatform, asyncGenericPlatform, compile, compileAsync, equals, eq, notEquals, ne, lessThan, lt, lessThanOrEqual, lte, le, greaterThan, gt, greaterThanOrEqual, gte, ge, diff, applyPatch, composePatch, invertPatch } from './block.js';
+import { from, equal, notEqual, less, lessEqual, print, is, greaterEqual, greater, func, str, platform, asyncFunction, asyncPlatform, genericPlatform, asyncGenericPlatform, compile, compileAsync, equals, eq, notEquals, ne, lessThan, lt, lessThanOrEqual, lte, le, greaterThan, gt, greaterThanOrEqual, gte, ge, diff, applyPatch, composePatch, invertPatch, module, exportValue, extern } from './block.js';
 export { BlockBuilder, type AsyncPlatformDefinition, type PlatformDefinition, type GenericPlatformDefinition, type AsyncGenericPlatformDefinition, equals, eq, notEquals, ne, lessThan, lt, lessThanOrEqual, lte, le, greaterThan, gt, greaterThanOrEqual, gte, ge, diff, applyPatch, composePatch, invertPatch } from './block.js';
 
 // Import standard libraries
@@ -49,6 +49,7 @@ import DictLib from './libs/dict.js';
 // Set up the factory in concrete classes so they can create expressions
 // This allows methods like str.length() to work without passing factory manually
 export type { ToExpr as ExprFactory } from './expr.js';
+export { ModuleSymbol } from './expr.js';
 
 // /** Compile an East function to executable JavaScript.
 //  *
@@ -353,6 +354,43 @@ export const East = {
    * ```
    */
   asyncGenericPlatform,
+
+  /**
+   * Create a named symbol (export) for use in a module.
+   * The returned value is fully transparent — callable if function, field access if struct.
+   *
+   * @example
+   * ```ts
+   * const add = East.export("add",
+   *     East.function([IntegerType, IntegerType], IntegerType, ($, a, b) => a.add(b)));
+   * const pi = East.export("pi", 3.14159);
+   * ```
+   */
+  export: exportValue,
+
+  /**
+   * Create a reference to an external (runtime-provided) symbol.
+   *
+   * @example
+   * ```ts
+   * const readFile = East.extern("east-node-std.fs", "readFile", FunctionType([StringType], StringType));
+   * ```
+   */
+  extern,
+
+  /**
+   * Define an East module — a named collection of symbols.
+   * Each argument must be created with `East.export()`.
+   *
+   * @example
+   * ```ts
+   * const add = East.export("add",
+   *     East.function([IntegerType, IntegerType], IntegerType, ($, a, b) => a.add(b)));
+   * const pi = East.export("pi", 3.14159);
+   * const mathModule = East.module("myapp.math", add, pi);
+   * ```
+   */
+  module,
 
   /**
    * Converts any East expression to its string representation.
